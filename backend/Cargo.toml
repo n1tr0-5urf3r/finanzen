@@ -1,0 +1,47 @@
+[package]
+name = "finanzen"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "finanzen"
+path = "src/main.rs"
+
+[[bin]]
+name = "openapi-export"
+path = "src/bin/openapi-export.rs"
+
+[[bin]]
+name = "extract-fixtures"
+path = "src/bin/extract-fixtures.rs"
+
+[dependencies]
+anyhow = "1"
+argon2 = "0.5"
+axum = { version = "0.8", features = ["macros", "multipart"] }
+calamine = "0.26"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+csv = "1"
+hex = "0.4"
+printpdf = "0.7"
+quick-xml = "0.37"
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid", "migrate", "json"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "sync"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "limit"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

@@ -1,0 +1,30 @@
+# secrets
+.env
+
+# rust
+backend/target/
+**/*.rs.bk
+
+# node
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# data
+data/
+*.db
+*.db-*
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+
+# source spreadsheets — personal financial data, never commit
+*.xlsx
+*.ods
+
+# extracted golden fixtures — derived from the source spreadsheets, so they carry
+# the same personal financial data. Regenerate with:
+#   cargo run --bin extract-fixtures -- ../konten_2026_auswertung.xlsx ../konten.ods tests/fixtures
+backend/tests/fixtures/*.json
