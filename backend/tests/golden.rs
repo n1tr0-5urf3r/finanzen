@@ -832,3 +832,70 @@ fn suggester_coverage_on_the_real_unknown_comments() {
         }
     }
 }
+
+/// The running balance must exist only where there is data.
+///
+/// `cumulativeCents` is documented as null for a month with no bookings, and the
+/// spreadsheet writes NA() there. Carrying September's figure into October,
+/// November and December asserts a balance for three months that have not happened
+/// — and a chart drawn from it shows a flat line into the future.
+#[test]
+fn the_cumulative_balance_stops_where_the_data_stops() {
+    require_fixtures!();
+    let months = calc::by_month(&ledger_2026());
+
+    // Jan–Sep carry data and therefore a running balance, ending at the year's own
+    // closing figure.
+    for (index, month) in months.iter().take(9).enumerate() {
+        assert!(
+            month.cumulative_cents.is_some(),
+            "Monat {} hat Buchungen und braucht einen Wert",
+            index + 1
+        );
+    }
+    assert_eq!(months[8].cumulative_cents, Some(900_000));
+
+    // Oktober, November, Dezember have none.
+    for (index, month) in months.iter().enumerate().skip(9) {
+        assert_eq!(
+            month.cumulative_cents,
+            None,
+            "Monat {} hat keine Buchungen und darf keinen Saldo behaupten",
+            index + 1
+        );
+    }
+}
+
+/// A month with no bookings *between* two that have them is not the same case: the
+/// balance is continuous across it, so the line carries forward rather than breaking.
+#[test]
+fn a_gap_inside_the_data_keeps_the_running_balance() {
+    let row = |month: u8, cents: i64| LedgerRow {
+        period_year: 2026,
+        period_month: month,
+        kind: Kind::Expense,
+        amount_cents: cents,
+        category_id: None,
+        category_name: None,
+        type_code: None,
+        type_label: None,
+        is_income: false,
+        is_savings: false,
+        in_consumption: true,
+        tax_relevant: false,
+    };
+    // Januar and März, nothing in Februar.
+    let months = calc::by_month(&[row(1, 1_000), row(3, 2_000)]);
+
+    assert_eq!(months[0].cumulative_cents, Some(-1_000));
+    assert_eq!(
+        months[1].cumulative_cents,
+        Some(-1_000),
+        "die Lücke trägt den Saldo weiter"
+    );
+    assert_eq!(months[2].cumulative_cents, Some(-3_000));
+    assert_eq!(
+        months[3].cumulative_cents, None,
+        "nach den Daten endet der Saldo"
+    );
+}

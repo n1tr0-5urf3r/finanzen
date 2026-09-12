@@ -255,20 +255,29 @@ pub fn by_month(rows: &[LedgerRow]) -> Vec<MonthRow> {
         }
     }
 
+    // The running balance exists only between the first and last month that carry
+    // bookings. Before the first there is nothing to accumulate; after the last
+    // there is nothing to say, and repeating September's figure for October,
+    // November and December would assert a balance for three months that have not
+    // happened — the sheet writes NA() there for exactly that reason.
+    //
+    // A gap *inside* the range is different: January and March with an empty
+    // February is still one continuous balance, so the gap carries the running
+    // value forward rather than breaking the line.
+    let last_with_data = months.iter().rposition(|m| m.booking_count > 0);
+
     let mut running = 0i64;
     let mut seen_any = false;
-    for m in &mut months {
+    for (index, m) in months.iter_mut().enumerate() {
         m.saldo_cents = m.income_cents - m.expense_cents;
         if m.booking_count > 0 {
             seen_any = true;
-        }
-        if seen_any && m.booking_count > 0 {
             running += m.saldo_cents;
-            m.cumulative_cents = Some(running);
-        } else if seen_any {
-            // A gap month inside the data keeps the running value visible.
-            m.cumulative_cents = Some(running);
         }
+        m.cumulative_cents = match last_with_data {
+            Some(last) if seen_any && index <= last => Some(running),
+            _ => None,
+        };
     }
     months
 }
