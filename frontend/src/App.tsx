@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage, SetupPage } from './features/auth/AuthPages';
 import { AnalysisPage } from './features/analysis/AnalysisPage';
 import { BookingsPage } from './features/bookings/BookingsPage';
+import { CategoriesPage } from './features/categories/CategoriesPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
 import { MonthsPage } from './features/months/MonthsPage';
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/buchungen" element={<BookingsPage />} />
           <Route path="/monate" element={<MonthsPage />} />
           <Route path="/auswertung" element={<AnalysisPage />} />
+          <Route path="/kategorien" element={<CategoriesPage />} />
           <Route path="/vorlagen" element={<RecurringPage />} />
           {/* A proper name, so the slug stays the proper name in both languages. */}
           <Route path="/kitchenowl" element={<KitchenOwlPage />} />
