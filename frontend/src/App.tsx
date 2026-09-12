@@ -7,6 +7,7 @@ import { AnalysisPage } from './features/analysis/AnalysisPage';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { ImportPage } from './features/import/ImportPage';
 import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
 import { MonthsPage } from './features/months/MonthsPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/monate" element={<MonthsPage />} />
           <Route path="/auswertung" element={<AnalysisPage />} />
           <Route path="/kategorien" element={<CategoriesPage />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/vorlagen" element={<RecurringPage />} />
           {/* A proper name, so the slug stays the proper name in both languages. */}
           <Route path="/kitchenowl" element={<KitchenOwlPage />} />
