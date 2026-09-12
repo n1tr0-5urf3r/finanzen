@@ -14,13 +14,13 @@ import {
   PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { api, downloadFile } from '../../lib/api';
+import { api, asList, downloadFile } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { YearPicker } from '../../components/YearPicker';
 import { qk } from '../../lib/queryKeys';
 import { BookingEditor } from './BookingEditor';
-import type { Booking, BookingPage, KoStatus } from '../../lib/types';
+import type { Booking, BookingPage, Category, KoStatus } from '../../lib/types';
 
 import { PushDialog } from '../kitchenowl/PushDialog';
 
@@ -49,6 +49,7 @@ export function BookingsPage() {
     onSuccess: setDownloaded,
   });
 
+  const categoryId = params.get('kategorie') ?? '';
   const page = Number(params.get('seite')) || 0;
   const direction = params.get('richtung') === 'asc' ? 'asc' : 'desc';
   const [editing, setEditing] = useState<Booking | null>(null);
@@ -56,7 +57,13 @@ export function BookingsPage() {
   // the year at August; a hundred at a time with an explicit pager is honest.
   const PAGE_SIZE = 100;
 
-  const filters = { year, search, uncategorized: uncategorizedOnly, page, direction };
+  const filters = { year, search, uncategorized: uncategorizedOnly, categoryId, page, direction };
+  const categories = useQuery({
+    queryKey: qk.taxonomy.categories(),
+    queryFn: () => api<Category[]>('/categories'),
+    staleTime: 30 * 60_000,
+  });
+
   const query = useQuery({
     queryKey: qk.bookings.list(filters),
     queryFn: () => {
@@ -67,6 +74,7 @@ export function BookingsPage() {
         direction,
       });
       if (search) qs.set('search', search);
+      if (categoryId) qs.set('categoryId', categoryId);
       if (uncategorizedOnly) qs.set('uncategorized', 'true');
       return api<BookingPage>(`/bookings?${qs}`);
     },
@@ -129,6 +137,23 @@ export function BookingsPage() {
             onChange={(e) => update('suche', e.target.value)}
           />
         </div>
+        <div className="field" style={{ minWidth: '11rem' }}>
+          <label htmlFor="f-category">{t('bookings.category')}</label>
+          <select
+            id="f-category"
+            className="select"
+            value={categoryId}
+            onChange={(e) => update('kategorie', e.target.value || null)}
+          >
+            <option value="">{t('bookings.filterAll')}</option>
+            {asList<Category>(categories.data).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <label className="chip" style={{ cursor: 'pointer', minHeight: 'var(--tap)' }}>
           <input
             type="checkbox" checked={uncategorizedOnly}

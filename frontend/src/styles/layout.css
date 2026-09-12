@@ -82,7 +82,14 @@
        adrift after the URL bar animates. Translating by zero promotes the bar to
        its own compositor layer, which makes the browser reposition it as one
        unit rather than re-laying it out. */
-    transform: translateZ(0);
+    /* `--vv-bottom` is the gap between the layout viewport's bottom edge and the
+       bottom of what is on screen, measured from `visualViewport` (see
+       lib/viewport.ts). It is 0 at rest and non-zero exactly while the URL bar or
+       the keyboard has the two viewports out of step — which is when a plain
+       `bottom: 0` bar drifts upward and stays there. Translating by it puts the
+       bar back on the visible edge; the translate also promotes the bar to its own
+       compositor layer, so the browser moves it as one unit. */
+    transform: translate3d(0, calc(-1 * var(--vv-bottom, 0px)), 0);
     will-change: transform;
     /* Only iOS reports a non-zero inset here; Android already reserves its
        gesture area outside the viewport, so adding the inset unconditionally
@@ -129,6 +136,8 @@
 .mobile-more {
   position: fixed; z-index: 36;
   inset: auto .5rem calc(74px + env(safe-area-inset-bottom, 0px)) .5rem;
+  /* Sits directly on top of the bar, so it has to ride with it. */
+  transform: translate3d(0, calc(-1 * var(--vv-bottom, 0px)), 0);
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); box-shadow: var(--shadow-3);
   display: grid; padding: .35rem;

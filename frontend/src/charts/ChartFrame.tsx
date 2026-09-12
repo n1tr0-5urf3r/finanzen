@@ -42,14 +42,18 @@ export function ChartFrame({
       <figcaption className="chart__title" id={`${id}-title`}>
         {title}
       </figcaption>
-      <svg
-        className="chart__svg"
-        viewBox={`0 0 720 ${height}`}
-        role="img"
-        aria-labelledby={`${id}-title`}
-      >
-        {children}
-      </svg>
+      {/* The wrapper is what scrolls on a narrow screen, so the chart keeps a
+          legible minimum width instead of shrinking its labels to nothing. */}
+      <div className="chart__canvas">
+        <svg
+          className="chart__svg"
+          viewBox={`0 0 720 ${height}`}
+          role="img"
+          aria-labelledby={`${id}-title`}
+        >
+          {children}
+        </svg>
+      </div>
       <div className="chart__data">
         <table className="data-table">
           <caption>{t('chart.dataTable')}</caption>

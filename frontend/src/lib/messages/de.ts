@@ -137,6 +137,11 @@ export const de = {
   'months.balance': 'Saldo',
   'months.savingsRate': 'Sparquote',
 
+  'analysis.seriesOrientation': 'Balken nach unten: Geld ging hinaus. Nach oben: Geld kam herein.',
+  'analysis.hideBookings': 'Buchungen ausblenden',
+  'analysis.openInBookings': 'In Buchungen öffnen',
+  'analysis.moreBookings': '{shown} von {total} Buchungen — alle ansehen',
+  'analysis.showBookings': '{count} Buchungen ansehen',
   'analysis.seriesTitle': 'Verlauf je Monat',
   'analysis.seriesHint': 'Ein Kommentar oder eine Kategorie über zwölf Monate — etwa tanken, um zu sehen, ob es teurer wird.',
   'analysis.byComment': 'Nach Kommentar',

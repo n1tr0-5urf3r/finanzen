@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../lib/i18n';
@@ -47,9 +48,22 @@ const SERIES = {
   monthsWithData: 3,
 };
 
+const BOOKING_PAGE = {
+  items: [
+    { id: 'b1', year: 2026, month: 1, monthName: 'Januar', bookedOn: null, kind: 'expense',
+      amountCents: 6_500, netCents: 6_500, comment: 'tanken', taxRelevant: false,
+      categoryId: 'c1', categoryName: 'Auto & Parken', categoryType: 'Variable Kosten',
+      categorySource: 'rule', shared: false, externalSource: null, externalId: null,
+      hasReceipt: false, status: 'confirmed', origin: 'manual' },
+  ],
+  total: 3, page: 0, pageSize: 50,
+  sumIncomeCents: 0, sumExpenseCents: 21_800, sumNetCents: 21_800, uncategorizedCount: 0,
+};
+
 function route(path: string) {
   if (path.includes('/series/subjects')) return SUBJECTS;
   if (path.includes('/series')) return SERIES;
+  if (path.startsWith('/bookings')) return BOOKING_PAGE;
   return [];
 }
 
@@ -64,7 +78,9 @@ function renderChart() {
   return render(
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="de">
-        <SeriesChart year={2026} categories={CATEGORIES as never} />
+        <MemoryRouter>
+          <SeriesChart year={2026} categories={CATEGORIES as never} />
+        </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,
   );
@@ -94,20 +110,47 @@ describe('the per-subject series', () => {
     expect(screen.getAllByText('3', { selector: '.num' }).length).toBeGreaterThan(0);
   });
 
-  it('offers the most-used comments first and can switch to categories', async () => {
+  /**
+   * Category is the question this section is usually opened with; comment is the
+   * follow-up. Opening on a category also means the picker is never empty, which
+   * the comment default could be before the suggestion list arrived.
+   */
+  it('opens on categories and can switch to comments', async () => {
     const user = userEvent.setup();
     renderChart();
     await screen.findByText(/tanken · 2026/);
 
-    const picker = screen.getByRole('combobox');
-    const options = [...picker.querySelectorAll('option')].map((o) => o.textContent);
-    expect(options[0]).toContain('essen');
-    expect(options[0]).toContain('94');
+    const options = [...screen.getByRole('combobox').querySelectorAll('option')]
+      .map((o) => o.textContent);
+    expect(options).toContain('Auto & Parken');
 
-    await user.click(screen.getByRole('button', { name: 'Nach Kategorie' }));
+    await user.click(screen.getByRole('button', { name: 'Nach Kommentar' }));
     const afterSwitch = [...screen.getByRole('combobox').querySelectorAll('option')]
       .map((o) => o.textContent);
-    expect(afterSwitch).toContain('Auto & Parken');
+    // Most used first, with its row count.
+    expect(afterSwitch[0]).toContain('essen');
+    expect(afterSwitch[0]).toContain('94');
+  });
+
+  /**
+   * A bar answers "how much"; the user's next question is always "on what". The
+   * list opens in place so the spike and the booking behind it are on screen
+   * together.
+   */
+  it('expands the bookings behind the chart without leaving the page', async () => {
+    const user = userEvent.setup();
+    renderChart();
+    await screen.findByText(/tanken · 2026/);
+
+    // Not fetched until asked for: the chart alone is the common case.
+    expect(mocked.mock.calls.some(([p]) => String(p).startsWith('/bookings'))).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: /3 Buchungen ansehen/ }));
+    expect(await screen.findByText('tanken')).toBeInTheDocument();
+
+    const call = mocked.mock.calls.map(([p]) => String(p)).find((p) => p.startsWith('/bookings'));
+    // Filtered by the charted category, not by everything in the year.
+    expect(call).toContain('categoryId=c1');
   });
 
   it('survives a payload that is not a list', async () => {
