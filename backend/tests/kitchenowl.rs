@@ -53,6 +53,9 @@ struct MockState {
     /// Every endpoint refuses, as an instance that has gone down does.
     offline: bool,
     post_count: usize,
+    /// The last body received, verbatim, so a test can assert the REQUEST spelling
+    /// rather than only what the mock chose to echo back.
+    last_post_body: Option<Value>,
     page_requests: Vec<Option<i64>>,
 }
 
@@ -193,21 +196,41 @@ async fn mock_create(
         return offline();
     }
     state.post_count += 1;
+    state.last_post_body = Some(body.clone());
     let id = state.next_id;
     state.next_id += 1;
+    // The mock translates the REQUEST spelling into the RESPONSE spelling, because
+    // that is what the real instance does and the asymmetry is the whole trap:
+    //   request   paid_by {id} · paid_for [{id, factor}] · category  <int>
+    //   response  paid_by_id   · paid_for [{user_id, …}] · category_id
+    // Verified live. A mock that echoed the request verbatim would let a wrong
+    // request shape pass every test and still fail against KitchenOwl.
     let created = json!({
         "id": id,
         "name": body["name"],
         "description": body["description"],
         "amount": body["amount"],
         "date": body["date"],
-        "category_id": body["category_id"],
-        "paid_by_id": body["paid_by_id"],
-        "paid_for": body["paid_for"],
+        "category_id": body["category"],
+        "paid_by_id": body["paid_by"]["id"],
+        "paid_for": body["paid_for"].as_array().map(|shares| {
+            shares.iter().map(|s| json!({
+                "user_id": s["id"], "factor": s["factor"], "expense_id": id,
+            })).collect::<Vec<_>>()
+        }).unwrap_or_default(),
         "exclude_from_statistics": false,
         "household_id": 1,
     });
+    // The real create response omits `paid_for` entirely, which is why the push
+    // re-fetches instead of trusting what it gets back. Keep the stored row full
+    // and hand the caller the thinner object.
+    let create_response = {
+        let mut thin = created.clone();
+        thin.as_object_mut().expect("object").remove("paid_for");
+        thin
+    };
     state.expenses.push(created.clone());
+    let created = create_response;
     if state.swallow_posts {
         // The expense EXISTS but the caller never learns its id. Retrying blindly
         // is what would double-post.
@@ -935,6 +958,19 @@ async fn a_push_carries_the_full_amount_the_chosen_split_and_the_kitchenowl_cate
     assert_eq!(posted["paid_by_id"], 1);
     assert_eq!(posted["paid_for"][0]["factor"], 12);
     assert_eq!(posted["paid_for"][1]["factor"], 7);
+
+    // And the body as it went over the wire, in the request spelling the live
+    // instance actually accepts — the first attempt at this used the response
+    // spelling and was rejected with a plain-text 400.
+    let sent = mock
+        .inner()
+        .last_post_body
+        .clone()
+        .expect("a body was posted");
+    assert_eq!(sent["category"], 2, "bare int, not category_id");
+    assert_eq!(sent["paid_by"]["id"], 1, "object keyed id, not paid_by_id");
+    assert_eq!(sent["paid_for"][0]["id"], 1, "id, not user_id");
+    assert_eq!(sent["paid_for"][0]["factor"], 12);
     assert!(
         posted["description"].as_str().unwrap().starts_with("#fin:"),
         "the marker is what makes a retry safe: {posted}"

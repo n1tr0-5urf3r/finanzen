@@ -451,14 +451,30 @@ pub struct PushPayload {
 
 /// Builds the POST body.
 ///
-/// VERIFY: **no write was ever made against the live instance**, so every field name
-/// below is the GET spelling assumed to round-trip, which is the usual shape for
-/// this API's Flask/marshmallow handlers but is not observed. If the shape is wrong
-/// the instance answers `400 Request invalid` as plain text, the intent lands in
-/// `failed` with that body as its visible error, and nothing is double-posted — so
-/// the failure mode of guessing wrong is loud and safe rather than silent.
+/// **Verified against the live instance** with a single one-cent expense, which was
+/// the only write this project has ever made to it. The request spelling is NOT the
+/// response spelling, and assuming it was is what made the first attempt fail with
+/// `400 Request invalid`:
 ///
-/// VERIFY: whether `category_id: null` clears a category on update. Not exercised:
+/// | field | request (here) | response (see [`RawExpense`]) |
+/// |---|---|---|
+/// | payer | `paid_by: {id}` | `paid_by_id: i64` |
+/// | split | `paid_for: [{id, factor}]` | `paid_for: [{user_id, factor, …}]` |
+/// | category | `category: i64 \| null` | `category_id`, plus a nested `category` object |
+///
+/// So the payer and the split are **objects keyed `id`** on the way in and flat
+/// `*_id` fields on the way out, and the category is a bare integer in and a pair of
+/// fields out. Three asymmetries in one body.
+///
+/// Verified at the same time: the create response does **not** echo `paid_for`
+/// (`GET /api/expense/{id}` does), which is why the push re-fetches rather than
+/// trusting what it gets back.
+///
+/// If a future instance rejects this shape the failure stays loud and safe — a
+/// plain-text `400`, the intent parked in `failed` with that body visible, and
+/// nothing double-posted.
+///
+/// VERIFY: whether `category: null` clears a category on *update*. Not exercised:
 /// push only ever creates.
 pub fn push_body(payload: &PushPayload) -> serde_json::Value {
     let description = marked_description(payload);
@@ -467,10 +483,13 @@ pub fn push_body(payload: &PushPayload) -> serde_json::Value {
         "amount": payload.amount_cents as f64 / 100.0,
         "date": epoch_ms_from_date(payload.date),
         "description": description,
-        "category_id": payload.ko_category_id,
-        "paid_by_id": payload.paid_by_id,
+        // `category`, not `category_id` — and a bare integer, not an object.
+        "category": payload.ko_category_id,
+        // `paid_by` and `paid_for` take objects keyed `id` here, while the response
+        // returns `paid_by_id` and `paid_for[].user_id`. Verified live.
+        "paid_by": { "id": payload.paid_by_id },
         "paid_for": payload.paid_for.iter().map(|s| serde_json::json!({
-            "user_id": s.member_id,
+            "id": s.member_id,
             "factor": s.factor,
         })).collect::<Vec<_>>(),
         "exclude_from_statistics": false,
@@ -822,10 +841,43 @@ mod tests {
         assert_eq!(marked_name(&payload), "Kaufland #fin:abc12345");
         assert_eq!(marked_description(&payload), "Wocheneinkauf");
 
+        // The request spelling, verified live. Asserted field by field because
+        // assuming it matched the RESPONSE spelling is what made the first real
+        // push fail with a plain-text `400 Request invalid`, and the three
+        // asymmetries are not guessable from the GET shape.
         let body = push_body(&payload);
         assert_eq!(body["amount"], serde_json::json!(19.07));
+        assert_eq!(
+            body["category"],
+            serde_json::json!(1),
+            "bare int, not category_id"
+        );
+        assert!(
+            body.get("category_id").is_none(),
+            "category_id is the RESPONSE spelling"
+        );
+
+        assert_eq!(
+            body["paid_by"]["id"],
+            serde_json::json!(1),
+            "object keyed id"
+        );
+        assert!(
+            body.get("paid_by_id").is_none(),
+            "paid_by_id is the RESPONSE spelling"
+        );
+
+        assert_eq!(
+            body["paid_for"][0]["id"],
+            serde_json::json!(1),
+            "id, not user_id"
+        );
         assert_eq!(body["paid_for"][0]["factor"], serde_json::json!(1));
-        assert_eq!(body["category_id"], serde_json::json!(1));
+        assert!(
+            body["paid_for"][0].get("user_id").is_none(),
+            "user_id is the RESPONSE spelling"
+        );
+        assert_eq!(body["paid_for"][1]["id"], serde_json::json!(2));
     }
 
     #[test]
