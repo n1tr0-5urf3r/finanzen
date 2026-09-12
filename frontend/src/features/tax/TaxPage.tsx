@@ -156,7 +156,7 @@ export function TaxPage() {
             </div>
           </div>
 
-          <div className="panel table-wrap">
+          <div className="panel table-wrap screen-table">
             <table className="data-table">
               <thead>
                 <tr>
@@ -214,6 +214,45 @@ export function TaxPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* The receipt button is the point of this screen on a phone — it opens
+              the camera — so the card keeps it reachable without sideways
+              scrolling past six columns to find it. */}
+          <div className="screen-cards">
+            {query.data.entries.map((entry) => (
+              <article key={entry.bookingId} className="mcard bcard">
+                <header>
+                  <strong>
+                    <DataLabel>{entry.comment}</DataLabel>
+                  </strong>
+                  <Money
+                    cents={entry.incomeCents > 0 ? entry.incomeCents : -entry.expenseCents}
+                    basis="signed"
+                    tone={entry.incomeCents > 0 ? 'income' : 'expense'}
+                  />
+                </header>
+                <div className="bcard__meta">
+                  <span className="num">#{entry.index}</span>
+                  <DataLabel>{entry.monthName}</DataLabel>
+                  <CategoryChip
+                    name={entry.categoryName}
+                    fallback={t('bookings.sourceNone')}
+                  />
+                </div>
+                <div className="bcard__actions">
+                  <ReceiptCell
+                    bookingId={entry.bookingId}
+                    comment={entry.comment}
+                    hasReceipt={entry.hasReceipt}
+                    busy={upload.isPending && upload.variables?.bookingId === entry.bookingId}
+                    onPick={(file) => upload.mutate({ bookingId: entry.bookingId, file })}
+                    onOpen={() => download.mutate(`/bookings/${entry.bookingId}/receipt`)}
+                    onDelete={() => removeReceipt.mutate(entry.bookingId)}
+                  />
+                </div>
+              </article>
+            ))}
           </div>
 
           <section style={{ marginTop: '1.5rem' }}>

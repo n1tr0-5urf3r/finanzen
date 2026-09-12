@@ -120,3 +120,25 @@
 .settings-section > h2 { margin-bottom: .4rem; }
 .settings-section > p { color: var(--muted); font-size: .85rem; margin-bottom: .75rem; max-width: 46rem; }
 .settings-form { display: grid; gap: .75rem; max-width: 26rem; }
+
+/* ── Buchungen on a phone ────────────────────────────────────────────────────
+   Eight columns need roughly 730px and a phone has 375, so the table becomes one
+   card per booking rather than two screen-widths of sideways scrolling. The
+   amount leads, because it is what you opened the row to see. */
+.bcard > header { align-items: center; }
+.bcard > header strong {
+  font-size: .95rem; font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bcard > header .money { font-size: 1rem; font-weight: 700; white-space: nowrap; }
+.bcard__meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .4rem;
+  font-size: .78rem; color: var(--muted);
+}
+/* The same left rail the table rows carry, so an unmatched booking is as loud
+   here as it is there. */
+.bcard--uncategorized {
+  border-left: 3px solid var(--uncategorized); background: var(--uncategorized-soft);
+}
+.bcard--transfer { border-left: 3px solid var(--transfer); }
+.bcard__actions { display: flex; justify-content: flex-end; margin-top: .5rem; }

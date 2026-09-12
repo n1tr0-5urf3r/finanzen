@@ -150,7 +150,7 @@ export function BookingsPage() {
           {query.data.items.length === 0 ? (
             <EmptyState hint={t('bookings.empty')} />
           ) : (
-            <div className="panel table-wrap">
+            <div className="panel table-wrap screen-table">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -240,6 +240,57 @@ export function BookingsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Eight columns need ~730px; a phone has 375. Scrolling two
+              screen-widths sideways per row is not reading, so below the sidebar
+              breakpoint the table is replaced by a card per booking. Both are in
+              the DOM and CSS picks, which keeps the markup testable. */}
+          {query.data.items.length > 0 && (
+            <div className="screen-cards">
+              {query.data.items.map((b) => (
+                <article
+                  key={b.id}
+                  className={`mcard bcard ${
+                    b.categorySource === 'unresolved' && b.kind !== 'transfer'
+                      ? 'bcard--uncategorized'
+                      : b.kind === 'transfer'
+                        ? 'bcard--transfer'
+                        : ''
+                  }`}
+                >
+                  <header>
+                    <strong>
+                      <DataLabel>{b.comment}</DataLabel>
+                    </strong>
+                    {/* The amount is the reason you opened the row, so it leads. */}
+                    <Money
+                      cents={b.kind === 'income' ? b.amountCents : -b.amountCents}
+                      basis="signed"
+                      tone={b.kind}
+                    />
+                  </header>
+                  <div className="bcard__meta">
+                    <DataLabel>{b.monthName}</DataLabel>
+                    {!b.bookedOn && <span title={t('bookings.noDay')}> ·</span>}
+                    <CategoryChip
+                      name={b.categoryName}
+                      typeLabel={b.categoryType}
+                      fallback={t('bookings.sourceNone')}
+                    />
+                    {b.categorySource === 'manual' && (
+                      <StatusPill tone="info">{t('bookings.sourceManual')}</StatusPill>
+                    )}
+                    {b.kind === 'transfer' && (
+                      <StatusPill tone="neutral">{t('bookings.kind.transfer')}</StatusPill>
+                    )}
+                    {b.taxRelevant && (
+                      <StatusPill tone="danger">{t('bookings.tax')}</StatusPill>
+                    )}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </>

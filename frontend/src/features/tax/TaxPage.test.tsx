@@ -85,7 +85,7 @@ describe('the tax screen', () => {
    */
   it('opens the rear camera on a phone and still accepts a PDF on a desktop', async () => {
     renderPage();
-    await screen.findByText('Semestergebühr');
+    await screen.findAllByText('Semestergebühr');
 
     const input = document.getElementById('receipt-a') as HTMLInputElement;
     expect(input).toBeTruthy();
@@ -96,13 +96,13 @@ describe('the tax screen', () => {
 
   it('offers capture where a receipt is missing and open/remove where it is not', async () => {
     renderPage();
-    await screen.findByText('Semestergebühr');
+    await screen.findAllByText('Semestergebühr');
 
     // The action offered names the booking, so a row of identical icons is still
     // unambiguous to a screen reader.
-    expect(screen.getByLabelText(/Beleg aufnehmen — Semestergebühr/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Beleg öffnen — TTTech/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Beleg entfernen — TTTech/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/Beleg aufnehmen — Semestergebühr/).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/Beleg öffnen — TTTech/).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/Beleg entfernen — TTTech/).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText(/Beleg öffnen — Semestergebühr/)).not.toBeInTheDocument();
   });
 
@@ -116,7 +116,7 @@ describe('the tax screen', () => {
 
   it('renders amounts de-DE and category names in German even in English', async () => {
     renderPage('en');
-    await screen.findByText('Semestergebühr');
+    await screen.findAllByText('Semestergebühr');
     // It appears in the entry row and again in the per-category summary.
     expect(screen.getAllByText(/390,00/).length).toBeGreaterThan(0);
     // A category name is data: it stays German and is marked as such.
