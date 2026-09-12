@@ -197,6 +197,10 @@ export interface TypeSlice {
 export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
   const t = useT();
   const rowHeight = 34;
+  // "Variable Kosten" is the widest label in the set and the month charts' 58-unit
+  // gutter cuts it in half. The viewBox is 720 units wide regardless of the
+  // rendered size, so this is measured in the same units as LEFT/RIGHT.
+  const labelGutter = 132;
   const height = Math.max(90, slices.length * rowHeight + 34);
   // A horizontal chart needs the same nice, zero-containing domain, mapped along x.
   const ticks = niceTicks(
@@ -206,7 +210,7 @@ export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
   const lo = ticks[0];
   const hi = ticks[ticks.length - 1];
   const span = hi - lo || 1;
-  const x = (v: number) => LEFT + ((v - lo) / span) * (RIGHT - LEFT);
+  const x = (v: number) => labelGutter + ((v - lo) / span) * (RIGHT - labelGutter);
   const zeroX = x(0);
 
   const data: ChartDatum[] = slices.map((s) => ({
@@ -242,9 +246,9 @@ export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
               className={`chart__bar chart__bar--type chart__bar--${s.typeCode}`}
             />
             <text
-              x={LEFT - 6}
+              x={labelGutter - 8}
               y={y + rowHeight / 2 - 3}
-              className="chart__tick"
+              className="chart__tick chart__tick--label"
               textAnchor="end"
               {...DATA_TEXT}
             >

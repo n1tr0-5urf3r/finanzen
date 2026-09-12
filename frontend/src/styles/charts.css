@@ -11,6 +11,12 @@
 .chart__grid { stroke: var(--line); stroke-width: 1; }
 .chart__baseline { stroke: var(--line-strong); stroke-width: 1.5; }
 .chart__tick { font-size: 10px; fill: var(--muted); }
+/* The viewBox is a fixed 720 units wide, so a chart rendered in a 420px panel
+   scales all of its text down by ~40% — 10px becomes 6px and stops being
+   readable. `vector-effect: non-scaling-...` does not apply to text, so the
+   size is set in absolute units instead and the SVG is told not to scale it. */
+.chart__svg text { font-size: 13px; }
+.chart__tick--label { font-size: 13px; font-weight: 600; fill: var(--ink-2); }
 .chart__tick--dim { opacity: .45; }
 
 .chart__bar--income  { fill: var(--income); }
