@@ -1,0 +1,1099 @@
+[
+ {
+  "id": 465,
+  "name": "Pizzeria",
+  "description": "",
+  "amount": 13.8,
+  "date": 1789231733900,
+  "category_id": 2,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1789231733900,
+    "expense_id": 465,
+    "factor": 1,
+    "updated_at": 1789231733900,
+    "user_id": 1
+   },
+   {
+    "created_at": 1789231733900,
+    "expense_id": 465,
+    "factor": 1,
+    "updated_at": 1789231733900,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1789231733900,
+  "updated_at": 1789231733900,
+  "category": {
+   "id": 2,
+   "name": "Essen gehen",
+   "color": 4289003611,
+   "budget": null,
+   "created_at": 1745002984011,
+   "household_id": 1,
+   "updated_at": 1745002993273
+  }
+ },
+ {
+  "id": 463,
+  "name": "Kletterhalle",
+  "description": "",
+  "amount": 13.64,
+  "date": 1788980227043,
+  "category_id": 7,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788980227043,
+    "expense_id": 463,
+    "factor": 1,
+    "updated_at": 1788980227043,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788980227043,
+    "expense_id": 463,
+    "factor": 1,
+    "updated_at": 1788980227043,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788980227043,
+  "updated_at": 1788980227043,
+  "category": {
+   "id": 7,
+   "name": "Hobbies",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003128996,
+   "household_id": 1,
+   "updated_at": 1745003128996
+  }
+ },
+ {
+  "id": 462,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 44.94,
+  "date": 1788804808253,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788804808253,
+    "expense_id": 462,
+    "factor": 1,
+    "updated_at": 1788804808253,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788804808253,
+    "expense_id": 462,
+    "factor": 1,
+    "updated_at": 1788804808253,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788804808253,
+  "updated_at": 1788804808253,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 461,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 28.86,
+  "date": 1788640664304,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1788640664304,
+    "expense_id": 461,
+    "factor": 1,
+    "updated_at": 1788640664304,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788640664304,
+    "expense_id": 461,
+    "factor": 1,
+    "updated_at": 1788640664304,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788640664304,
+  "updated_at": 1788640664304,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 460,
+  "name": "Baumarkt",
+  "description": "",
+  "amount": 9.63,
+  "date": 1788634525624,
+  "category_id": 3,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788634525624,
+    "expense_id": 460,
+    "factor": 1,
+    "updated_at": 1788634525624,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788634525624,
+    "expense_id": 460,
+    "factor": 1,
+    "updated_at": 1788634525624,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788634525624,
+  "updated_at": 1788634525624,
+  "category": {
+   "id": 3,
+   "name": "Haushalt",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003002978,
+   "household_id": 1,
+   "updated_at": 1745003002978
+  }
+ },
+ {
+  "id": 459,
+  "name": "Drogerie",
+  "description": "",
+  "amount": 24.38,
+  "date": 1788623679703,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788623679703,
+    "expense_id": 459,
+    "factor": 1,
+    "updated_at": 1788623679703,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788623679703,
+    "expense_id": 459,
+    "factor": 1,
+    "updated_at": 1788623679703,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788623679703,
+  "updated_at": 1788623679703,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 458,
+  "name": "Baeckerei",
+  "description": "",
+  "amount": 6.0,
+  "date": 1788458241880,
+  "category_id": null,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1788458241880,
+    "expense_id": 458,
+    "factor": 1,
+    "updated_at": 1788458241880,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788458241880,
+    "expense_id": 458,
+    "factor": 1,
+    "updated_at": 1788458241880,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788458241880,
+  "updated_at": 1788458241880
+ },
+ {
+  "id": 457,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 61.03,
+  "date": 1788204883044,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788204883044,
+    "expense_id": 457,
+    "factor": 1,
+    "updated_at": 1788204883044,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788204883044,
+    "expense_id": 457,
+    "factor": 1,
+    "updated_at": 1788204883044,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788204883044,
+  "updated_at": 1788204883044,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 456,
+  "name": "Kiosk",
+  "description": "",
+  "amount": 7.9,
+  "date": 1788097047062,
+  "category_id": null,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1788097047062,
+    "expense_id": 456,
+    "factor": 1,
+    "updated_at": 1788097047062,
+    "user_id": 1
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788097047062,
+  "updated_at": 1788097047062
+ },
+ {
+  "id": 455,
+  "name": "Imbiss",
+  "description": "",
+  "amount": 8.0,
+  "date": 1788068077043,
+  "category_id": 2,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1788068077043,
+    "expense_id": 455,
+    "factor": 1,
+    "updated_at": 1788068077043,
+    "user_id": 1
+   },
+   {
+    "created_at": 1788068077043,
+    "expense_id": 455,
+    "factor": 1,
+    "updated_at": 1788068077043,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1788068077043,
+  "updated_at": 1788068077043,
+  "category": {
+   "id": 2,
+   "name": "Essen gehen",
+   "color": 4289003611,
+   "budget": null,
+   "created_at": 1745002984011,
+   "household_id": 1,
+   "updated_at": 1745002993273
+  }
+ },
+ {
+  "id": 454,
+  "name": "Handwerker",
+  "description": "",
+  "amount": 490.0,
+  "date": 1787994475985,
+  "category_id": null,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1787994475985,
+    "expense_id": 454,
+    "factor": 1,
+    "updated_at": 1787994475985,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787994475985,
+    "expense_id": 454,
+    "factor": 1,
+    "updated_at": 1787994475985,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787994475985,
+  "updated_at": 1787994475985
+ },
+ {
+  "id": 453,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 42.48,
+  "date": 1787758401945,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1787758401945,
+    "expense_id": 453,
+    "factor": 1,
+    "updated_at": 1787758401945,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787758401945,
+    "expense_id": 453,
+    "factor": 1,
+    "updated_at": 1787758401945,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787758401945,
+  "updated_at": 1787758401945,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 452,
+  "name": "Moebelhaus",
+  "description": "",
+  "amount": 62.45,
+  "date": 1787732905592,
+  "category_id": 3,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1787732905592,
+    "expense_id": 452,
+    "factor": 1,
+    "updated_at": 1787732905592,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787732905592,
+    "expense_id": 452,
+    "factor": 1,
+    "updated_at": 1787732905592,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787732905592,
+  "updated_at": 1787732905592,
+  "category": {
+   "id": 3,
+   "name": "Haushalt",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003002978,
+   "household_id": 1,
+   "updated_at": 1745003002978
+  }
+ },
+ {
+  "id": 451,
+  "name": "Kaffeebar",
+  "description": "",
+  "amount": 5.99,
+  "date": 1787732868792,
+  "category_id": 2,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1787732868792,
+    "expense_id": 451,
+    "factor": 1,
+    "updated_at": 1787732868792,
+    "user_id": 1
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787732868792,
+  "updated_at": 1787732868792,
+  "category": {
+   "id": 2,
+   "name": "Essen gehen",
+   "color": 4289003611,
+   "budget": null,
+   "created_at": 1745002984011,
+   "household_id": 1,
+   "updated_at": 1745002993273
+  }
+ },
+ {
+  "id": 450,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 19.07,
+  "date": 1787326931985,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1787326931985,
+    "expense_id": 450,
+    "factor": 1,
+    "updated_at": 1787326931985,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787326931985,
+    "expense_id": 450,
+    "factor": 1,
+    "updated_at": 1787326931985,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787326931985,
+  "updated_at": 1787326931985,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 449,
+  "name": "Pfandrueckgabe",
+  "description": "",
+  "amount": 3.01,
+  "date": 1787325500962,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1787325500962,
+    "expense_id": 449,
+    "factor": 1,
+    "updated_at": 1787325500962,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787325500962,
+    "expense_id": 449,
+    "factor": 1,
+    "updated_at": 1787325500962,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787325500962,
+  "updated_at": 1787325500962,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 448,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 19.95,
+  "date": 1787325486671,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1787325486671,
+    "expense_id": 448,
+    "factor": 1,
+    "updated_at": 1787325486671,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787325486671,
+    "expense_id": 448,
+    "factor": 1,
+    "updated_at": 1787325486671,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787325486671,
+  "updated_at": 1787325486671,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 464,
+  "name": "Kino",
+  "description": "",
+  "amount": 22.5,
+  "date": 1787132160000,
+  "category_id": 7,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1787132160000,
+    "expense_id": 464,
+    "factor": 1,
+    "updated_at": 1787132160000,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787132160000,
+    "expense_id": 464,
+    "factor": 1,
+    "updated_at": 1787132160000,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787132160000,
+  "updated_at": 1787132160000,
+  "category": {
+   "id": 7,
+   "name": "Hobbies",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003128996,
+   "household_id": 1,
+   "updated_at": 1745003128996
+  }
+ },
+ {
+  "id": 447,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 40.06,
+  "date": 1787042116376,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1787042116376,
+    "expense_id": 447,
+    "factor": 1,
+    "updated_at": 1787042116376,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787042116376,
+    "expense_id": 447,
+    "factor": 1,
+    "updated_at": 1787042116376,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787042116376,
+  "updated_at": 1787042116376,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 446,
+  "name": "Reiseanzahlung",
+  "description": "",
+  "amount": 372.0,
+  "date": 1787032371640,
+  "category_id": 5,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1787032371640,
+    "expense_id": 446,
+    "factor": 1,
+    "updated_at": 1787032371640,
+    "user_id": 1
+   },
+   {
+    "created_at": 1787032371640,
+    "expense_id": 446,
+    "factor": 1,
+    "updated_at": 1787032371640,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1787032371640,
+  "updated_at": 1787032371640,
+  "category": {
+   "id": 5,
+   "name": "Ausflug",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003024518,
+   "household_id": 1,
+   "updated_at": 1745003024518
+  }
+ },
+ {
+  "id": 445,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 17.57,
+  "date": 1786696369361,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1786696369361,
+    "expense_id": 445,
+    "factor": 1,
+    "updated_at": 1786696369361,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786696369361,
+    "expense_id": 445,
+    "factor": 1,
+    "updated_at": 1786696369361,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786696369361,
+  "updated_at": 1786696369361,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 443,
+  "name": "Freizeitpark",
+  "description": "",
+  "amount": 158.6,
+  "date": 1786686722233,
+  "category_id": 5,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1786686722233,
+    "expense_id": 443,
+    "factor": 1,
+    "updated_at": 1786686722233,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786686722233,
+    "expense_id": 443,
+    "factor": 1,
+    "updated_at": 1786686722233,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786686722233,
+  "updated_at": 1786686722233,
+  "category": {
+   "id": 5,
+   "name": "Ausflug",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003024518,
+   "household_id": 1,
+   "updated_at": 1745003024518
+  }
+ },
+ {
+  "id": 442,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 18.92,
+  "date": 1786604911825,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1786604911825,
+    "expense_id": 442,
+    "factor": 1,
+    "updated_at": 1786604911825,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786604911825,
+    "expense_id": 442,
+    "factor": 1,
+    "updated_at": 1786604911825,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786604911825,
+  "updated_at": 1786604911825,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 441,
+  "name": "Tankstelle",
+  "description": "",
+  "amount": 54.31,
+  "date": 1786348846954,
+  "category_id": null,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1786348846954,
+    "expense_id": 441,
+    "factor": 1,
+    "updated_at": 1786348846954,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786348846954,
+  "updated_at": 1786348846954
+ },
+ {
+  "id": 440,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 42.88,
+  "date": 1786167838159,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1786167838159,
+    "expense_id": 440,
+    "factor": 1,
+    "updated_at": 1786167838159,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786167838159,
+    "expense_id": 440,
+    "factor": 1,
+    "updated_at": 1786167838159,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786167838159,
+  "updated_at": 1786167838159,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 439,
+  "name": "Baeckerei",
+  "description": "",
+  "amount": 1.9,
+  "date": 1786163716394,
+  "category_id": null,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1786163716394,
+    "expense_id": 439,
+    "factor": 1,
+    "updated_at": 1786163716394,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786163716394,
+    "expense_id": 439,
+    "factor": 1,
+    "updated_at": 1786163716394,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786163716394,
+  "updated_at": 1786163716394
+ },
+ {
+  "id": 438,
+  "name": "Supermarkt",
+  "description": "",
+  "amount": 28.15,
+  "date": 1786163659648,
+  "category_id": 1,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1786163659648,
+    "expense_id": 438,
+    "factor": 1,
+    "updated_at": 1786163659648,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786163659648,
+    "expense_id": 438,
+    "factor": 1,
+    "updated_at": 1786163659648,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1786163659648,
+  "updated_at": 1786163659648,
+  "category": {
+   "id": 1,
+   "name": "Wocheneinkauf",
+   "color": null,
+   "budget": null,
+   "created_at": 1734886597538,
+   "household_id": 1,
+   "updated_at": 1734886597538
+  }
+ },
+ {
+  "id": 437,
+  "name": "Elektronikmarkt",
+  "description": "",
+  "amount": 213.87999999999994,
+  "date": 1786086929482,
+  "category_id": 4,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1786086929482,
+    "expense_id": 437,
+    "factor": 1,
+    "updated_at": 1786086929482,
+    "user_id": 1
+   },
+   {
+    "created_at": 1786086929482,
+    "expense_id": 437,
+    "factor": 1,
+    "updated_at": 1786086929482,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": true,
+  "created_at": 1786086929482,
+  "updated_at": 1786086929482,
+  "category": {
+   "id": 4,
+   "name": "Sonstiges",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003010734,
+   "household_id": 1,
+   "updated_at": 1745003010734
+  }
+ },
+ {
+  "id": 436,
+  "name": "Umzugskosten",
+  "description": "",
+  "amount": 19.0,
+  "date": 1785864046385,
+  "category_id": 3,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 1,
+  "paid_for": [
+   {
+    "created_at": 1785864046385,
+    "expense_id": 436,
+    "factor": 12,
+    "updated_at": 1785864046385,
+    "user_id": 1
+   },
+   {
+    "created_at": 1785864046385,
+    "expense_id": 436,
+    "factor": 7,
+    "updated_at": 1785864046385,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1785864046385,
+  "updated_at": 1785864046385,
+  "category": {
+   "id": 3,
+   "name": "Haushalt",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003002978,
+   "household_id": 1,
+   "updated_at": 1745003002978
+  }
+ },
+ {
+  "id": 466,
+  "name": "Buchladen",
+  "description": "",
+  "amount": 19.99,
+  "date": 1785700100718,
+  "category_id": 7,
+  "household_id": 1,
+  "photo": null,
+  "paid_by_id": 2,
+  "paid_for": [
+   {
+    "created_at": 1785700100718,
+    "expense_id": 466,
+    "factor": 1,
+    "updated_at": 1785700100718,
+    "user_id": 2
+   }
+  ],
+  "exclude_from_statistics": false,
+  "created_at": 1785700100718,
+  "updated_at": 1785700100718,
+  "category": {
+   "id": 7,
+   "name": "Hobbies",
+   "color": null,
+   "budget": null,
+   "created_at": 1745003128996,
+   "household_id": 1,
+   "updated_at": 1745003128996
+  }
+ }
+]

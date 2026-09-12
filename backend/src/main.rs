@@ -20,6 +20,11 @@ async fn main() -> anyhow::Result<()> {
     let bind = config.bind;
     let state = AppState::new(db, config);
 
+    // KitchenOwl's three loops. Each is a no-op when the integration is not
+    // configured or its interval is 0, so an unconfigured deployment starts exactly
+    // as it did before this existed.
+    finanzen::kitchenowl::spawn_loops(state.clone());
+
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(%bind, "Finanzen gestartet");
     axum::serve(listener, finanzen::router(state))

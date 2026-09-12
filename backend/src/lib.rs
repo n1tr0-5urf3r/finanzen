@@ -8,6 +8,7 @@ pub mod db;
 pub mod error;
 pub mod export;
 pub mod importer;
+pub mod kitchenowl;
 pub mod locale;
 pub mod models;
 pub mod receipts;
@@ -30,7 +31,7 @@ use axum::{
     http::{Method, header},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -48,10 +49,10 @@ use models::StatusResponse;
 /// because the loops are independent and must not block each other.
 #[derive(Default)]
 pub struct SyncGuards {
-    pub ko_expenses: AtomicBool,
-    pub ko_push: AtomicBool,
-    pub ko_metadata: AtomicBool,
-    pub import_commit: AtomicBool,
+    pub ko_expenses: Arc<AtomicBool>,
+    pub ko_push: Arc<AtomicBool>,
+    pub ko_metadata: Arc<AtomicBool>,
+    pub import_commit: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -155,6 +156,39 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/years", get(years::list).post(years::create))
         .route("/years/{year}", put(years::update))
+        // KitchenOwl — a separate, parallel ledger. Nothing under here writes a
+        // booking except an explicit, reversible link the user confirms.
+        .route("/kitchenowl/status", get(kitchenowl::routes::status))
+        .route("/kitchenowl/summary", get(kitchenowl::routes::summary))
+        .route("/kitchenowl/metadata", get(kitchenowl::routes::metadata))
+        .route("/kitchenowl/sync", post(kitchenowl::routes::sync_now))
+        .route("/kitchenowl/expenses", get(kitchenowl::routes::expenses))
+        .route(
+            "/kitchenowl/expenses/{id}/link",
+            delete(kitchenowl::routes::unlink),
+        )
+        .route("/kitchenowl/drafts", get(kitchenowl::routes::drafts))
+        .route(
+            "/kitchenowl/drafts/{id}/link",
+            post(kitchenowl::routes::link_draft),
+        )
+        .route(
+            "/kitchenowl/drafts/{id}/dismiss",
+            post(kitchenowl::routes::dismiss_draft),
+        )
+        .route("/kitchenowl/push", get(kitchenowl::routes::push_list))
+        .route(
+            "/kitchenowl/push/{bookingId}",
+            delete(kitchenowl::routes::push_retract),
+        )
+        .route(
+            "/kitchenowl/push/{bookingId}/retry",
+            post(kitchenowl::routes::push_retry),
+        )
+        .route(
+            "/bookings/{id}/kitchenowl",
+            post(kitchenowl::routes::push_booking),
+        )
         // Without this the nested router falls through to the outer SPA fallback,
         // so a typo'd API path would answer 200 text/html and a client bug would
         // look like a rendering glitch instead of a 404.

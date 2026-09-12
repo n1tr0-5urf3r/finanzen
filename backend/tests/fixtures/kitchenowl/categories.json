@@ -1,0 +1,65 @@
+[
+ {
+  "id": 5,
+  "name": "Ausflug",
+  "color": null,
+  "budget": null,
+  "created_at": 1745003024518,
+  "household_id": 1,
+  "updated_at": 1745003024518
+ },
+ {
+  "id": 2,
+  "name": "Essen gehen",
+  "color": 4289003611,
+  "budget": null,
+  "created_at": 1745002984011,
+  "household_id": 1,
+  "updated_at": 1745002993273
+ },
+ {
+  "id": 6,
+  "name": "Fitness",
+  "color": null,
+  "budget": null,
+  "created_at": 1745003068821,
+  "household_id": 1,
+  "updated_at": 1745003079792
+ },
+ {
+  "id": 3,
+  "name": "Haushalt",
+  "color": null,
+  "budget": null,
+  "created_at": 1745003002978,
+  "household_id": 1,
+  "updated_at": 1745003002978
+ },
+ {
+  "id": 7,
+  "name": "Hobbies",
+  "color": null,
+  "budget": null,
+  "created_at": 1745003128996,
+  "household_id": 1,
+  "updated_at": 1745003128996
+ },
+ {
+  "id": 4,
+  "name": "Sonstiges",
+  "color": null,
+  "budget": null,
+  "created_at": 1745003010734,
+  "household_id": 1,
+  "updated_at": 1745003010734
+ },
+ {
+  "id": 1,
+  "name": "Wocheneinkauf",
+  "color": null,
+  "budget": null,
+  "created_at": 1734886597538,
+  "household_id": 1,
+  "updated_at": 1734886597538
+ }
+]

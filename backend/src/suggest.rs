@@ -34,7 +34,7 @@ pub struct KnownRule {
     pub category_name: String,
 }
 
-fn normalize(raw: &str) -> String {
+pub(crate) fn normalize(raw: &str) -> String {
     raw.trim()
         .to_lowercase()
         .chars()
@@ -46,7 +46,7 @@ fn normalize(raw: &str) -> String {
 }
 
 /// Jaro-Winkler, for the gated similarity tier only.
-fn jaro_winkler(a: &str, b: &str) -> f64 {
+pub(crate) fn jaro_winkler(a: &str, b: &str) -> f64 {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let jaro = {
@@ -183,6 +183,30 @@ pub fn suggest(
     (suggestions, hints, false)
 }
 
+/// How alike two free-text labels are, in `0.0..=1.0`.
+///
+/// Shared with the KitchenOwl link suggester so both use one definition of "looks
+/// like the same purchase". Containment scores higher than pure edit distance
+/// because that is what the measurement on the real data showed: `Kaufland` inside
+/// `Kaufland Wocheneinkauf` is a real signal, whereas `trinken` vs `tanken` is not.
+pub fn similarity(a: &str, b: &str) -> f64 {
+    let (a, b) = (normalize(a), normalize(b));
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    if a == b {
+        return 1.0;
+    }
+    let contained = (a.chars().count() >= 4 && b.contains(&a))
+        || (b.chars().count() >= 4 && a.contains(&b))
+        || a.split(' ')
+            .any(|t| t.chars().count() >= 4 && b.split(' ').any(|u| u == t));
+    if contained {
+        return 0.9_f64.max(jaro_winkler(&a, &b));
+    }
+    jaro_winkler(&a, &b)
+}
+
 /// Comments the importer classifies as transfers without asking. Deliberately tiny:
 /// only moves between the user's own accounts, which is what was decided. Cash
 /// withdrawals and settlements import as income/expense and can be changed later.
@@ -281,6 +305,16 @@ mod tests {
         assert!(ambiguous, "two categories claim this comment equally");
         let names: Vec<&str> = s.iter().map(|x| x.category_name.as_str()).collect();
         assert!(names.contains(&"Sonstiges") && names.contains(&"Essen auswärts"));
+    }
+
+    #[test]
+    fn similarity_is_shared_with_the_kitchenowl_link_suggester() {
+        assert_eq!(similarity("Kaufland", "kaufland"), 1.0);
+        assert!(similarity("Kaufland", "Kaufland Wocheneinkauf") >= 0.9);
+        assert!(similarity("Kino", "Kinokarten Ada") >= 0.9);
+        // Different purchases must not look alike just because both are short.
+        assert!(similarity("Kino", "Miete") < 0.6);
+        assert_eq!(similarity("", "Kaufland"), 0.0);
     }
 
     #[test]

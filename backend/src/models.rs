@@ -492,6 +492,9 @@ pub struct RecurringTemplateInput {
 fn one() -> u8 {
     1
 }
+fn one_share() -> i64 {
+    1
+}
 fn yes() -> bool {
     true
 }
@@ -682,4 +685,276 @@ pub struct RestoreResult {
     /// makes that visible instead of silent.
     pub rule_links_downgraded: i64,
     pub warnings: Vec<String>,
+}
+
+// ------------------------------------------------------------- kitchenowl
+//
+// KitchenOwl is a SEPARATE, PARALLEL LEDGER. Nothing in this section may be added
+// to a personal-booking figure, and every DTO that carries both the shared amount
+// and the user's own share names them so they cannot be confused:
+// `amountCents` is what the household spent, `ownShareCents` is the user's slice.
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoMember {
+    pub member_id: i64,
+    pub name: String,
+    pub username: Option<String>,
+    /// From `member[].expense_balance`, the only balance KitchenOwl exposes.
+    /// Negative means the user owes the household.
+    pub balance_cents: i64,
+    pub is_me: bool,
+    pub is_owner: bool,
+    pub is_admin: bool,
+    pub fetched_at: DateTime<Utc>,
+}
+
+/// A KitchenOwl expense category. A **different taxonomy** from the app's 32
+/// categories: seven household labels with no relationship to Fixkosten/Variable
+/// Kosten. Never auto-mapped, and the UI must not style it like an app category.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategory {
+    pub category_id: i64,
+    pub name: String,
+    /// Packed ARGB as KitchenOwl stores it, not a CSS colour.
+    pub color_argb: Option<i64>,
+    pub budget_cents: Option<i64>,
+    pub fetched_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoMetadata {
+    pub members: Vec<KoMember>,
+    pub categories: Vec<KoCategory>,
+    pub fetched_at: Option<DateTime<Utc>>,
+    /// Older than `KITCHENOWL_METADATA_STALE_SECONDS`. Served anyway: a push
+    /// dialogue that will not open because KitchenOwl is down is worse than one
+    /// that opens with yesterday's member list and says so.
+    pub stale: bool,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoShare {
+    pub member_id: i64,
+    pub name: Option<String>,
+    /// An integer WEIGHT, not a percentage: the share is
+    /// `amount * factor / sum(factors)`, allocated by largest remainder so the
+    /// shares sum to the amount exactly.
+    pub factor: i64,
+    pub share_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoExpense {
+    pub id: Uuid,
+    pub external_id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub date: NaiveDate,
+    /// The FULL shared amount — what left somebody's account.
+    pub amount_cents: i64,
+    /// The user's slice of it. These two are the most confusable pair of numbers in
+    /// the feature and are never summed with each other or with a booking.
+    pub own_share_cents: i64,
+    pub paid_by_id: Option<i64>,
+    pub paid_by_name: Option<String>,
+    pub paid_for: Vec<KoShare>,
+    pub ko_category_id: Option<i64>,
+    pub ko_category_name: Option<String>,
+    pub exclude_from_statistics: bool,
+    /// Set when the expense vanished from KitchenOwl. Kept rather than deleted,
+    /// because the row may carry a link the user confirmed by hand.
+    pub archived_at: Option<DateTime<Utc>>,
+    pub linked_booking_id: Option<Uuid>,
+    pub linked_booking_comment: Option<String>,
+    pub linked_booking_amount_cents: Option<i64>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoExpensePage {
+    pub items: Vec<KoExpense>,
+    pub total: i64,
+    pub page: u32,
+    pub page_size: u32,
+    /// Sums for the current filter. Both are reported, always, because showing only
+    /// one of them is how the two get confused.
+    pub sum_amount_cents: i64,
+    pub sum_own_share_cents: i64,
+    pub linked_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoMatchCandidate {
+    pub booking_id: Uuid,
+    pub comment: String,
+    pub amount_cents: i64,
+    pub year: i32,
+    pub month: u8,
+    pub month_name: String,
+    pub score: f64,
+    /// `fullAmount` | `ownShare` | `fullAmountNear` | `ownShareNear` — so the UI can
+    /// say why rather than showing a bare number.
+    pub basis: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoDraft {
+    pub id: Uuid,
+    pub status: String,
+    pub expense: KoExpense,
+    pub candidates: Vec<KoMatchCandidate>,
+    /// `link` when a candidate cleared the threshold, otherwise `none`. Never
+    /// `create`: a pull never writes a booking, and the 63-of-211 overlap is why.
+    pub suggested_action: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoDraftPage {
+    pub items: Vec<KoDraft>,
+    pub total: i64,
+    pub open_count: i64,
+    pub likely_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSyncRun {
+    pub id: Uuid,
+    pub kind: String,
+    pub status: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub created_count: i64,
+    pub updated_count: i64,
+    pub archived_count: i64,
+    pub failed_count: i64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoStatus {
+    /// The server has a URL and a token.
+    pub configured: bool,
+    /// This account opted in by running a sync at least once. The credentials are
+    /// process-global, so mirroring into every account would copy one household
+    /// into other people's books.
+    pub enabled: bool,
+    /// Derived from the last sync run, never from a live probe — this endpoint must
+    /// not block on HTTP.
+    pub reachable: Option<bool>,
+    pub running: bool,
+    pub household_id: Option<i64>,
+    pub household_name: Option<String>,
+    pub last_expense_run: Option<KoSyncRun>,
+    pub last_metadata_run: Option<KoSyncRun>,
+    pub next_run_at: Option<DateTime<Utc>>,
+    /// `0` means the periodic pull is disabled and only "jetzt synchronisieren"
+    /// moves anything.
+    pub poll_seconds: u64,
+    pub mirrored_count: i64,
+    pub archived_count: i64,
+    pub linked_count: i64,
+    pub open_draft_count: i64,
+    pub likely_duplicate_count: i64,
+    pub pending_push_count: i64,
+    pub failed_push_count: i64,
+    pub metadata_fetched_at: Option<DateTime<Utc>>,
+    pub metadata_stale: bool,
+    pub last_error: Option<String>,
+}
+
+/// The dashboard widget. Reads the **local mirror only** and never blocks on HTTP,
+/// so KitchenOwl being down costs a staleness warning rather than a spinner.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSummary {
+    pub configured: bool,
+    pub enabled: bool,
+    pub household_name: Option<String>,
+    pub members: Vec<KoMember>,
+    pub my_balance_cents: Option<i64>,
+    pub recent: Vec<KoExpense>,
+    pub month: Period,
+    /// The household's spend this month, and the user's share of it. Two figures,
+    /// always both, never added to anything from the personal ledger.
+    pub month_amount_cents: i64,
+    pub month_own_share_cents: i64,
+    pub month_count: i64,
+    pub last_synced_at: Option<DateTime<Utc>>,
+    pub stale: bool,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoPushIntent {
+    pub booking_id: Uuid,
+    /// `queued` | `sending` | `pushed` | `failed` | `abandoned` | `retracted`.
+    pub state: String,
+    pub booking_comment: Option<String>,
+    pub amount_cents: i64,
+    pub date: NaiveDate,
+    pub name: String,
+    pub marker: String,
+    pub attempts: i32,
+    /// Kept in every state. A queue item that failed silently is a booking the user
+    /// believes is in KitchenOwl and is not.
+    pub last_error: Option<String>,
+    pub external_id: Option<i64>,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoPushShareInput {
+    pub member_id: i64,
+    /// Integer weight. `1` each is an even split; `{12, 7}` occurs in the real data.
+    #[serde(default = "one_share")]
+    pub factor: i64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoPushRequest {
+    /// Defaults to the booking's comment.
+    pub name: Option<String>,
+    pub description: Option<String>,
+    /// Defaults to the booking's own amount, untouched.
+    pub amount_cents: Option<i64>,
+    pub date: Option<NaiveDate>,
+    /// KitchenOwl's own taxonomy. Never derived from the app's category.
+    pub ko_category_id: Option<i64>,
+    pub paid_by_id: Option<i64>,
+    #[serde(default)]
+    pub paid_for: Vec<KoPushShareInput>,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoLinkRequest {
+    pub booking_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSyncResult {
+    pub started: bool,
+    pub expenses: Option<KoSyncRun>,
+    pub metadata: Option<KoSyncRun>,
+    /// Set when the run could not finish. The rest of the app keeps working.
+    pub error: Option<String>,
 }

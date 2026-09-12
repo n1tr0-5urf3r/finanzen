@@ -1,0 +1,1171 @@
+//! KitchenOwl integration tests, against the real router and a **mock KitchenOwl**.
+//!
+//! The live instance is the user's household and is shared with another person, so
+//! it was probed read-only and no write was ever made against it. Every write path
+//! here runs against the mock below, whose responses reproduce the shapes observed
+//! live — including the ones that break naive clients: a `date`-descending page
+//! order rather than id-descending, `category`/`category_id` absent together on a
+//! third of the corpus, float amounts carrying IEEE-754 artifacts, integer split
+//! weights, and a plain-text `Request invalid` error body served as `text/html`.
+//!
+//! **On the fixtures.** `tests/fixtures/kitchenowl/*.json` are ANONYMISED, not
+//! recorded verbatim. The real corpus is a shared household: the expense names and
+//! descriptions are another person's spending, which is their personal data and not
+//! the user's to commit. The fixtures therefore keep every *structural* property
+//! that matters — key presence and absence, ordering, float artifacts, weights, the
+//! id gap left by an upstream deletion — with invented merchant names and amounts,
+//! except for the handful of artifact values already written down in the project's
+//! own design notes. The alternative, gitignoring them like the workbook fixtures,
+//! would leave CI unable to exercise any of this.
+
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+
+use axum::{
+    Json, Router,
+    body::Body,
+    extract::{Query, State},
+    http::{Request, StatusCode, header},
+    response::IntoResponse,
+    routing::get,
+};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use sqlx::postgres::PgPoolOptions;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+use finanzen::{AppState, Config, db::Db};
+
+const ORIGIN: &str = "http://localhost:3100";
+
+// --------------------------------------------------------- the mock instance
+
+#[derive(Default)]
+struct MockState {
+    expenses: Vec<Value>,
+    next_id: i64,
+    /// POSTs answered with a 504 *after* creating the expense — the ambiguous
+    /// timeout that reconcile-before-post exists for.
+    swallow_posts: bool,
+    /// Every endpoint refuses, as an instance that has gone down does.
+    offline: bool,
+    post_count: usize,
+    page_requests: Vec<Option<i64>>,
+}
+
+#[derive(Clone)]
+struct Mock(Arc<Mutex<MockState>>);
+
+struct MockServer {
+    url: String,
+    state: Mock,
+}
+
+fn expense(
+    id: i64,
+    name: &str,
+    amount: f64,
+    date: i64,
+    category: Option<(i64, &str)>,
+    paid_by: i64,
+    weights: &[(i64, i64)],
+) -> Value {
+    let mut v = json!({
+        "id": id, "name": name, "description": "", "amount": amount, "date": date,
+        "category_id": category.map(|c| c.0), "household_id": 1, "photo": null,
+        "paid_by_id": paid_by,
+        "paid_for": weights.iter().map(|(u, f)| json!({
+            "user_id": u, "factor": f, "expense_id": id,
+            "created_at": date, "updated_at": date
+        })).collect::<Vec<_>>(),
+        "exclude_from_statistics": false,
+        "created_at": date, "updated_at": date,
+    });
+    // The nested object is present exactly when the id is — and absent, not null,
+    // otherwise. 173 of 464 live expenses look like this.
+    if let Some((cid, cname)) = category {
+        v["category"] = json!({
+            "id": cid, "name": cname, "color": null, "budget": null,
+            "household_id": 1, "created_at": date, "updated_at": date
+        });
+    }
+    v
+}
+
+/// `2026-05-03T12:00` Berlin and friends, as epoch milliseconds.
+fn ms(day: i64) -> i64 {
+    // 2026-05-01T12:00:00+02:00
+    1777629600000 + day * 86_400_000
+}
+
+fn offline() -> axum::response::Response {
+    (StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable").into_response()
+}
+
+async fn mock_household(State(mock): State<Mock>) -> axum::response::Response {
+    if mock.0.lock().expect("mock lock").offline {
+        return offline();
+    }
+    Json(json!([{
+        "id": 1, "name": "Beispielhaushalt", "expenses_feature": true,
+        "member": [
+            {"id": 1, "name": "Fabi", "username": "fabi",
+             "expense_balance": -149.16999999999217, "owner": true, "admin": false},
+            {"id": 2, "name": "Ada", "username": "ada",
+             "expense_balance": 149.16999999999217, "owner": false, "admin": true},
+        ]
+    }]))
+    .into_response()
+}
+
+async fn mock_user(State(mock): State<Mock>) -> axum::response::Response {
+    if mock.0.lock().expect("mock lock").offline {
+        return offline();
+    }
+    Json(json!({"id": 1, "name": "Fabi"})).into_response()
+}
+
+async fn mock_categories(State(mock): State<Mock>) -> axum::response::Response {
+    if mock.0.lock().expect("mock lock").offline {
+        return offline();
+    }
+    Json(json!([
+        {"id": 1, "name": "Wocheneinkauf", "color": null, "budget": null},
+        {"id": 2, "name": "Essen gehen", "color": 4289003611i64, "budget": null},
+    ]))
+    .into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct PageQuery {
+    #[serde(rename = "startAfterId")]
+    start_after_id: Option<i64>,
+    /// Anything else is refused exactly as the live instance refuses it.
+    #[serde(flatten)]
+    rest: std::collections::BTreeMap<String, String>,
+}
+
+async fn mock_expenses(
+    State(mock): State<Mock>,
+    Query(q): Query<PageQuery>,
+) -> axum::response::Response {
+    if !q.rest.is_empty() {
+        // Plain text, served as text/html, with a 400. Verified live for
+        // ?page= / ?limit= / ?offset=.
+        return (
+            StatusCode::BAD_REQUEST,
+            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            "Request invalid",
+        )
+            .into_response();
+    }
+    let mut state = mock.0.lock().expect("mock lock");
+    if state.offline {
+        return offline();
+    }
+    state.page_requests.push(q.start_after_id);
+    // Date descending — NOT id descending. This is the ordering observed live.
+    let mut ordered = state.expenses.clone();
+    ordered.sort_by_key(|e| std::cmp::Reverse(e["date"].as_i64().unwrap_or(0)));
+    let start = match q.start_after_id {
+        None => 0,
+        Some(cursor) => match ordered
+            .iter()
+            .position(|e| e["id"].as_i64() == Some(cursor))
+        {
+            Some(i) => i + 1,
+            None => ordered.len(),
+        },
+    };
+    let page: Vec<Value> = ordered.into_iter().skip(start).take(30).collect();
+    Json(page).into_response()
+}
+
+async fn mock_create(
+    State(mock): State<Mock>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    let mut state = mock.0.lock().expect("mock lock");
+    if state.offline {
+        return offline();
+    }
+    state.post_count += 1;
+    let id = state.next_id;
+    state.next_id += 1;
+    let created = json!({
+        "id": id,
+        "name": body["name"],
+        "description": body["description"],
+        "amount": body["amount"],
+        "date": body["date"],
+        "category_id": body["category_id"],
+        "paid_by_id": body["paid_by_id"],
+        "paid_for": body["paid_for"],
+        "exclude_from_statistics": false,
+        "household_id": 1,
+    });
+    state.expenses.push(created.clone());
+    if state.swallow_posts {
+        // The expense EXISTS but the caller never learns its id. Retrying blindly
+        // is what would double-post.
+        return (StatusCode::GATEWAY_TIMEOUT, "upstream timeout").into_response();
+    }
+    Json(created).into_response()
+}
+
+impl MockServer {
+    async fn start() -> Self {
+        let state = Mock(Arc::new(Mutex::new(MockState {
+            next_id: 1000,
+            ..Default::default()
+        })));
+        let app = Router::new()
+            .route("/api/household", get(mock_household))
+            .route("/api/user", get(mock_user))
+            .route(
+                "/api/household/{id}/expense",
+                get(mock_expenses).post(mock_create),
+            )
+            .route(
+                "/api/household/{id}/expense/categories",
+                get(mock_categories),
+            )
+            .with_state(state.clone());
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock");
+        let addr: SocketAddr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        Self {
+            url: format!("http://{addr}"),
+            state,
+        }
+    }
+
+    fn seed(&self, expenses: Vec<Value>) {
+        self.inner().expenses = expenses;
+    }
+
+    fn inner(&self) -> std::sync::MutexGuard<'_, MockState> {
+        self.state.0.lock().expect("mock lock")
+    }
+}
+
+// ------------------------------------------------------------- the app under test
+
+struct TestApp {
+    router: Router,
+    cookie: Option<String>,
+}
+
+impl TestApp {
+    async fn new(kitchenowl_url: Option<String>) -> Option<Self> {
+        let url = std::env::var("TEST_DATABASE_URL").ok()?;
+        let admin = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .ok()?;
+        let name = format!("fin_ko_{}", Uuid::new_v4().simple());
+        let role = format!("fin_ko_role_{}", Uuid::new_v4().simple());
+        sqlx::query(&format!(
+            "CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS"
+        ))
+        .execute(&admin)
+        .await
+        .expect("create role");
+        sqlx::query(&format!("CREATE DATABASE {name} OWNER {role}"))
+            .execute(&admin)
+            .await
+            .expect("create database");
+        admin.close().await;
+
+        let mut target = url::Url::parse(&url).expect("url");
+        target.set_path(&name);
+        target.set_username(&role).ok()?;
+        target.set_password(Some("test")).ok()?;
+
+        let mut config = Config::test(target.as_str());
+        config.public_url = ORIGIN.to_string();
+        config.kitchenowl_url = kitchenowl_url;
+        config.kitchenowl_token = Some("mock-token".into());
+        config.kitchenowl_household_id = Some(1);
+        // Short, so the reconcile-before-post branch is reachable without waiting.
+        config.kitchenowl_http_timeout = std::time::Duration::from_secs(2);
+        let db = finanzen::db::connect(&config)
+            .await
+            .expect("connect + migrate");
+        let _ = db;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(target.as_str())
+            .await
+            .ok()?;
+        let state = AppState::new(Db::from_pool(pool), config);
+        let mut app = Self {
+            router: finanzen::router(state),
+            cookie: None,
+        };
+        app.setup_admin().await;
+        Some(app)
+    }
+
+    async fn send(&self, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(format!("/api/v1{path}"))
+            .header(header::ORIGIN, ORIGIN);
+        if let Some(c) = &self.cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        let req = match body {
+            Some(v) => req
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(v.to_string()))
+                .unwrap(),
+            None => req.body(Body::empty()).unwrap(),
+        };
+        let response = self.router.clone().oneshot(req).await.expect("request");
+        let status = response.status();
+        let bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    async fn setup_admin(&mut self) {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/auth/setup")
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"username":"fabi","displayName":"Fabian","password":"ein-langes-passwort"})
+                    .to_string(),
+            ))
+            .unwrap();
+        let response = self.router.clone().oneshot(req).await.expect("setup");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        self.cookie = response
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .map(str::to_string);
+    }
+
+    async fn booking(&self, comment: &str, amount: i64, day: u32) -> String {
+        let (status, body) = self
+            .send(
+                "POST",
+                "/bookings",
+                Some(json!({
+                    "year": 2026, "month": 5, "bookedOn": format!("2026-05-{day:02}"),
+                    "kind": "expense", "amountCents": amount, "comment": comment
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        body["id"].as_str().expect("booking id").to_string()
+    }
+
+    async fn sync(&self) -> (StatusCode, Value) {
+        self.send("POST", "/kitchenowl/sync", None).await
+    }
+}
+
+macro_rules! app {
+    ($mock:expr) => {
+        match TestApp::new($mock).await {
+            Some(app) => app,
+            None => return, // no TEST_DATABASE_URL: the suite skips, as elsewhere
+        }
+    };
+}
+
+// ------------------------------------------------------------------- the tests
+
+#[tokio::test]
+async fn a_pull_mirrors_the_household_and_writes_no_booking() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        expense(
+            1,
+            "Supermarkt",
+            19.07,
+            ms(2),
+            Some((1, "Wocheneinkauf")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(2, "Kiosk", 7.90, ms(3), None, 1, &[(1, 1)]),
+        expense(
+            3,
+            "Pizzeria",
+            13.80,
+            ms(4),
+            Some((2, "Essen gehen")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+
+    let (status, body) = app.sync().await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["expenses"]["createdCount"], 3);
+
+    let (status, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["total"], 3);
+    // Both figures, always: 19,07 + 7,90 + 13,80 full, and the user's slice of it.
+    assert_eq!(page["sumAmountCents"], 4077);
+    assert_eq!(page["sumOwnShareCents"], 954 + 790 + 690);
+
+    // THE invariant: a pull writes nothing to the personal ledger.
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(bookings["total"], 0, "a pull must never write a booking");
+    let (_, dashboard) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(dashboard["expenseCents"], 0);
+    assert_eq!(dashboard["bookingCount"], 0);
+}
+
+#[tokio::test]
+async fn re_syncing_an_unchanged_expense_is_a_no_op() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+
+    let (_, first) = app.sync().await;
+    assert_eq!(first["expenses"]["createdCount"], 1);
+
+    let (_, second) = app.sync().await;
+    assert_eq!(second["expenses"]["createdCount"], 0, "no new mirror row");
+    assert_eq!(
+        second["expenses"]["updatedCount"], 0,
+        "an unchanged expense must not touch a row — that is what remote_hash is for"
+    );
+
+    // And exactly one draft, not one per sync.
+    let (_, drafts) = app
+        .send("GET", "/kitchenowl/drafts?status=open", None)
+        .await;
+    assert_eq!(drafts["total"], 1);
+
+    // A genuine change upstream, however, is picked up.
+    {
+        let mut state = mock.inner();
+        state.expenses[0]["amount"] = json!(19.57);
+    }
+    let (_, third) = app.sync().await;
+    assert_eq!(third["expenses"]["updatedCount"], 1);
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(page["items"][0]["amountCents"], 1957);
+    assert_eq!(page["total"], 1, "an update must not duplicate the row");
+}
+
+#[tokio::test]
+async fn integer_weights_produce_shares_that_sum_to_the_total_exactly() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        // An odd number of cents split evenly: somebody must get the extra cent.
+        expense(1, "Imbiss", 13.81, ms(2), None, 1, &[(1, 1), (2, 1)]),
+        // Weights above one, as observed live (12 : 7).
+        expense(2, "Umzug", 19.00, ms(3), None, 1, &[(1, 12), (2, 7)]),
+        // A three-way split of 10,00 — the canonical lost-cent case.
+        expense(
+            3,
+            "Geschenk",
+            10.00,
+            ms(4),
+            None,
+            1,
+            &[(1, 1), (2, 1), (3, 1)],
+        ),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    for item in page["items"].as_array().expect("items") {
+        let total: i64 = item["amountCents"].as_i64().unwrap();
+        let sum: i64 = item["paidFor"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["shareCents"].as_i64().unwrap())
+            .sum();
+        assert_eq!(sum, total, "shares must sum to the amount exactly: {item}");
+    }
+    let by_id = |ext: i64| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["externalId"] == ext)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(by_id(1)["ownShareCents"], 691, "13,81 / 2 rounds up for me");
+    assert_eq!(by_id(2)["ownShareCents"], 1200, "12 of 19 weights on 19,00");
+    assert_eq!(by_id(3)["ownShareCents"], 334);
+}
+
+#[tokio::test]
+async fn a_full_amount_match_is_suggested_as_a_link_and_never_as_a_booking() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Wocheneinkauf",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    // The user records the FULL amount, which is the whole reason auto-booking
+    // would double-post: 63 of 211 overlapping expenses look exactly like this.
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+    app.sync().await;
+
+    let (status, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(drafts["likelyCount"], 1);
+    let draft = &drafts["items"][0];
+    assert_eq!(draft["status"], "likely_duplicate");
+    assert_eq!(draft["suggestedAction"], "link", "never 'create'");
+    assert_eq!(draft["candidates"][0]["bookingId"], booking_id);
+    assert_eq!(draft["candidates"][0]["basis"], "fullAmount");
+
+    // Confirming the link creates NO booking and moves no figure.
+    let draft_id = draft["id"].as_str().unwrap();
+    let (status, linked) = app
+        .send(
+            "POST",
+            &format!("/kitchenowl/drafts/{draft_id}/link"),
+            Some(json!({"bookingId": booking_id})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{linked}");
+    assert_eq!(linked["status"], "confirmed");
+
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(
+        bookings["total"], 1,
+        "linking must not create a second booking"
+    );
+    assert_eq!(bookings["sumExpenseCents"], 1907);
+    assert_eq!(bookings["items"][0]["externalSource"], "kitchenowl");
+    assert_eq!(bookings["items"][0]["externalId"], "1");
+
+    // A later pull of the same expense is a structural no-op.
+    let (_, again) = app.sync().await;
+    assert_eq!(again["expenses"]["createdCount"], 0);
+    assert_eq!(again["expenses"]["updatedCount"], 0);
+
+    // And the link is reversible, in both directions, without touching a figure.
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    let ko_id = page["items"][0]["id"].as_str().unwrap();
+    let (status, _) = app
+        .send(
+            "DELETE",
+            &format!("/kitchenowl/expenses/{ko_id}/link"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(bookings["total"], 1);
+    assert_eq!(bookings["sumExpenseCents"], 1907);
+    assert_eq!(bookings["items"][0]["externalSource"], Value::Null);
+}
+
+#[tokio::test]
+async fn an_own_share_match_alone_is_not_pre_selected() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Wocheneinkauf",
+        19.08,
+        ms(2),
+        None,
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    // Half of 19,08, recorded under a completely unrelated comment. Plausible, and
+    // exactly the kind of coincidence that must not attach itself silently.
+    app.booking("Zug Berlin", 954, 3).await;
+    app.sync().await;
+
+    let (_, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(drafts["likelyCount"], 0);
+    let draft = &drafts["items"][0];
+    assert_eq!(draft["suggestedAction"], "none");
+    assert_eq!(draft["status"], "possible_duplicate");
+    assert_eq!(draft["candidates"][0]["basis"], "ownShare");
+}
+
+#[tokio::test]
+async fn the_cursor_follows_date_order_and_pages_the_whole_household() {
+    let mock = MockServer::start().await;
+    let mut seeded: Vec<Value> = (0..70)
+        .map(|i| {
+            expense(
+                100 + i,
+                "Supermarkt",
+                10.0 + i as f64,
+                ms(i),
+                None,
+                1,
+                &[(1, 1), (2, 1)],
+            )
+        })
+        .collect();
+    // The back-dated expense: the highest id, dated oldest. An id high-water-mark
+    // would never see it, and a min(id) cursor would stall on it.
+    seeded.push(expense(
+        999,
+        "Nachgetragen",
+        5.0,
+        ms(-5),
+        None,
+        1,
+        &[(1, 1)],
+    ));
+    mock.seed(seeded);
+    let app = app!(Some(mock.url.clone()));
+
+    let (status, body) = app.sync().await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["expenses"]["createdCount"], 71);
+    assert_eq!(body["expenses"]["status"], "success");
+
+    let (_, page) = app
+        .send("GET", "/kitchenowl/expenses?pageSize=200", None)
+        .await;
+    assert_eq!(page["total"], 71);
+    assert!(
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["externalId"] == 999),
+        "the back-dated expense must be mirrored"
+    );
+    // Two full pages of 30, an eleven-row page, and one more request that comes
+    // back empty. The short page is deliberately NOT treated as the end: the page
+    // size is not part of KitchenOwl's contract, and guessing it would silently
+    // truncate the mirror the day it changes. One extra request per scan is the
+    // price. No cursor repeats, which is what would make the scan crawl or spin.
+    let requests = mock.inner().page_requests.clone();
+    assert_eq!(requests.len(), 4, "{requests:?}");
+    assert_eq!(requests[0], None);
+    let mut seen = requests.clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), requests.len(), "a cursor must never repeat");
+}
+
+#[tokio::test]
+async fn an_expense_deleted_upstream_is_archived_and_keeps_its_link() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        expense(1, "Supermarkt", 19.07, ms(2), None, 2, &[(1, 1), (2, 1)]),
+        expense(2, "Kiosk", 7.90, ms(3), None, 1, &[(1, 1)]),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    mock.inner().expenses.retain(|e| e["id"] != json!(2));
+    let (_, body) = app.sync().await;
+    assert_eq!(body["expenses"]["archivedCount"], 1);
+
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(
+        page["total"], 1,
+        "an archived expense leaves the default view"
+    );
+    let (_, all) = app
+        .send("GET", "/kitchenowl/expenses?includeArchived=true", None)
+        .await;
+    assert_eq!(all["total"], 2, "but it is not destroyed");
+}
+
+#[tokio::test]
+async fn a_push_is_accepted_while_kitchenowl_is_down_and_retried_later() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    // Metadata cached while the instance was up, which is the realistic outage:
+    // the dialogue still knows who is in the household.
+    app.sync().await;
+    mock.inner().offline = true;
+
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+
+    let (status, intent) = app
+        .send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    // 202 even though the far end is unreachable: the intent is durable, the HTTP
+    // call is opportunistic.
+    assert_eq!(status, StatusCode::ACCEPTED, "{intent}");
+    assert_eq!(intent["state"], "queued");
+    assert_eq!(
+        intent["amountCents"], 1907,
+        "the booking's amount is untouched"
+    );
+    assert!(intent["marker"].as_str().unwrap().starts_with("#fin:"));
+
+    // Queueing twice replaces the intent rather than creating a second one.
+    let (status, _) = app
+        .send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let (_, list) = app.send("GET", "/kitchenowl/push", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    // And the rest of the app is entirely unaffected by the outage.
+    let (status, dashboard) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dashboard["expenseCents"], 1907);
+    let (status, _) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, summary) = app.send("GET", "/kitchenowl/summary", None).await;
+    assert_eq!(status, StatusCode::OK, "the widget must not block on HTTP");
+    assert_eq!(summary["configured"], true);
+    // A manual sync surfaces the outage as a 502 rather than pretending to succeed.
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    let (status, st) = app.send("GET", "/kitchenowl/status", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(st["reachable"], false);
+    assert!(
+        st["lastExpenseRun"]["error"].is_string(),
+        "the failure is visible"
+    );
+}
+
+#[tokio::test]
+async fn a_retry_after_a_timeout_adopts_the_existing_expense_instead_of_double_posting() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await; // populate members and categories for the dialogue
+
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+    mock.inner().swallow_posts = true;
+
+    let (status, _) = app
+        .send(
+            "POST",
+            &format!("/bookings/{booking_id}/kitchenowl"),
+            Some(json!({"koCategoryId": 1, "paidById": 1,
+                        "paidFor": [{"memberId": 1, "factor": 1}, {"memberId": 2, "factor": 1}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    // The spawned attempt posts, the expense is created, the answer is lost.
+    wait_for(&app, |v| {
+        v["state"] == "failed" || v["state"] == "abandoned"
+    })
+    .await;
+    assert_eq!(mock.inner().post_count, 1);
+    assert_eq!(
+        mock.inner().expenses.len(),
+        1,
+        "the expense exists upstream"
+    );
+
+    // The far end recovers. The retry must NOT post again.
+    mock.inner().swallow_posts = false;
+    let (status, _) = app
+        .send(
+            "POST",
+            &format!("/kitchenowl/push/{booking_id}/retry"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let intent = wait_for(&app, |v| v["state"] == "pushed").await;
+
+    assert_eq!(
+        mock.inner().post_count,
+        1,
+        "reconcile-before-post must adopt the existing expense, not create a second"
+    );
+    assert_eq!(mock.inner().expenses.len(), 1);
+    assert_eq!(intent["externalId"], 1000);
+
+    // And the booking now carries the link.
+    let (_, booking) = app
+        .send("GET", &format!("/bookings/{booking_id}"), None)
+        .await;
+    assert_eq!(booking["externalSource"], "kitchenowl");
+    assert_eq!(booking["externalId"], "1000");
+}
+
+#[tokio::test]
+async fn a_push_carries_the_full_amount_the_chosen_split_and_the_kitchenowl_category() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let booking_id = app.booking("Umzugskisten", 1900, 3).await;
+
+    let (status, _) = app
+        .send(
+            "POST",
+            &format!("/bookings/{booking_id}/kitchenowl"),
+            Some(json!({"name": "Umzug", "koCategoryId": 2, "paidById": 1,
+                        "paidFor": [{"memberId": 1, "factor": 12},
+                                    {"memberId": 2, "factor": 7}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    wait_for(&app, |v| v["state"] == "pushed").await;
+
+    let posted = mock.inner().expenses[0].clone();
+    assert_eq!(posted["name"], "Umzug");
+    assert_eq!(
+        posted["amount"],
+        json!(19.0),
+        "the full amount, not the share"
+    );
+    assert_eq!(posted["category_id"], 2);
+    assert_eq!(posted["paid_by_id"], 1);
+    assert_eq!(posted["paid_for"][0]["factor"], 12);
+    assert_eq!(posted["paid_for"][1]["factor"], 7);
+    assert!(
+        posted["description"].as_str().unwrap().starts_with("#fin:"),
+        "the marker is what makes a retry safe: {posted}"
+    );
+}
+
+#[tokio::test]
+async fn a_transfer_and_an_already_linked_booking_are_refused() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (_, transfer) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({"year": 2026, "month": 5, "bookedOn": "2026-05-03",
+                        "kind": "transfer", "amountCents": 5000, "comment": "to ING"})),
+        )
+        .await;
+    let transfer_id = transfer["id"].as_str().unwrap();
+    let (status, body) = app
+        .send("POST", &format!("/bookings/{transfer_id}/kitchenowl"), None)
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+    app.send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    wait_for(&app, |v| v["state"] == "pushed").await;
+    let (status, _) = app
+        .send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "a booking already in KitchenOwl must not be pushed twice"
+    );
+}
+
+#[tokio::test]
+async fn metadata_is_served_stale_rather_than_withheld() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+
+    // Before any sync: no members, but the endpoint answers and says why.
+    let (status, empty) = app.send("GET", "/kitchenowl/metadata", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(empty["stale"], true);
+    assert!(empty["warning"].is_string());
+
+    app.sync().await;
+    let (status, fresh) = app.send("GET", "/kitchenowl/metadata", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fresh["stale"], false);
+    assert_eq!(fresh["warning"], Value::Null);
+    assert_eq!(fresh["members"].as_array().unwrap().len(), 2);
+    assert_eq!(fresh["categories"].as_array().unwrap().len(), 2);
+    let me: Vec<&Value> = fresh["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["isMe"] == true)
+        .collect();
+    assert_eq!(me.len(), 1);
+    assert_eq!(
+        me[0]["balanceCents"], -14917,
+        "the float artifact rounds exactly"
+    );
+}
+
+#[tokio::test]
+async fn the_two_ledgers_are_never_summed() {
+    // The widget reports the CURRENT month, so both ledgers are dated there.
+    let today = chrono::Utc::now().date_naive();
+    let now_ms = today
+        .and_hms_opt(12, 0, 0)
+        .unwrap()
+        .and_utc()
+        .timestamp_millis();
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        now_ms,
+        None,
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, created) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({
+                "year": today.format("%Y").to_string().parse::<i32>().unwrap(),
+                "month": today.format("%m").to_string().parse::<u8>().unwrap(),
+                "bookedOn": today.to_string(),
+                "kind": "expense", "amountCents": 1907, "comment": "Kaufland"
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    app.sync().await;
+
+    // The personal ledger reports its own figure and only its own.
+    let year = today.format("%Y").to_string();
+    let (_, dashboard) = app
+        .send("GET", &format!("/dashboard?year={year}"), None)
+        .await;
+    assert_eq!(dashboard["expenseCents"], 1907);
+    assert_eq!(dashboard["bookingCount"], 1);
+
+    // The KitchenOwl summary reports its own, labelled, and never adds the two.
+    let (_, summary) = app.send("GET", "/kitchenowl/summary", None).await;
+    assert_eq!(summary["monthAmountCents"], 1907);
+    assert_eq!(summary["monthOwnShareCents"], 954);
+    assert_eq!(summary["monthCount"], 1);
+    // No field anywhere carries 1907 + 1907 or 1907 + 954.
+    let text = summary.to_string();
+    assert!(!text.contains("3814") && !text.contains("2861"), "{text}");
+}
+
+#[tokio::test]
+async fn kitchenowl_is_tenant_scoped_like_everything_else() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        None,
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (status, _) = app
+        .send(
+            "POST",
+            "/admin/users",
+            Some(json!({"username": "ada", "displayName": "Ada",
+                        "password": "ein-anderes-langes-passwort"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/login")
+        .header(header::ORIGIN, ORIGIN)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"username": "ada", "password": "ein-anderes-langes-passwort"}).to_string(),
+        ))
+        .unwrap();
+    let response = app.router.clone().oneshot(req).await.expect("login");
+    let cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(';').next())
+        .map(str::to_string)
+        .expect("cookie");
+
+    let other = TestApp {
+        router: app.router.clone(),
+        cookie: Some(cookie),
+    };
+    let (status, page) = other.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        page["total"], 0,
+        "the mirror is one account's, not the server's"
+    );
+    let (_, st) = other.send("GET", "/kitchenowl/status", None).await;
+    assert_eq!(st["enabled"], false, "opting in is per account");
+    assert_eq!(st["configured"], true);
+}
+
+/// Polls the push intent until `predicate` holds. The attempt is spawned, so the
+/// alternative is a sleep long enough to be flaky in CI and slow everywhere else.
+async fn wait_for(app: &TestApp, predicate: impl Fn(&Value) -> bool) -> Value {
+    for _ in 0..100 {
+        let (_, list) = app.send("GET", "/kitchenowl/push", None).await;
+        if let Some(first) = list.as_array().and_then(|a| a.first())
+            && predicate(first)
+        {
+            return first.clone();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let (_, list) = app.send("GET", "/kitchenowl/push", None).await;
+    panic!("push intent never reached the expected state: {list}");
+}
+
+/// Re-verifies the fixture shapes against the real instance. **GET only.**
+///
+/// Ignored by default and skipped unless `KITCHENOWL_URL` and `KITCHENOWL_TOKEN` are
+/// set, exactly like the workbook re-parse test: CI must never depend on somebody's
+/// household being reachable, and nothing in this function may ever issue a POST,
+/// PUT or DELETE. Run it by hand after a KitchenOwl upgrade:
+///
+/// ```text
+/// set -a; . ../.env; set +a; cargo test --test kitchenowl -- --ignored --nocapture
+/// ```
+#[tokio::test]
+#[ignore = "hits the live KitchenOwl instance; read-only, run by hand"]
+async fn the_live_instance_still_has_the_shapes_the_fixtures_claim() {
+    let (Ok(url), Ok(token)) = (
+        std::env::var("KITCHENOWL_URL"),
+        std::env::var("KITCHENOWL_TOKEN"),
+    ) else {
+        eprintln!("KITCHENOWL_URL/KITCHENOWL_TOKEN not set — skipping");
+        return;
+    };
+    let url = url.trim_end_matches('/').to_string();
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("client");
+    let get = |path: String| {
+        let http = http.clone();
+        let token = token.clone();
+        let url = url.clone();
+        async move {
+            let response = http
+                .get(format!("{url}{path}"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .expect("request");
+            assert!(
+                response.status().is_success(),
+                "{path}: {}",
+                response.status()
+            );
+            response.bytes().await.expect("body").to_vec()
+        }
+    };
+
+    let households =
+        finanzen::kitchenowl::wire::parse_households(&get("/api/household".into()).await)
+            .expect("households");
+    let household = households.first().expect("at least one household");
+    assert!(household.expenses_feature, "expenses must be enabled");
+    assert!(
+        household.member.iter().all(|m| m.expense_balance.is_some()),
+        "expense_balance is the only balance source there is"
+    );
+
+    let me = finanzen::kitchenowl::wire::parse_user(&get("/api/user".into()).await)
+        .expect("user")
+        .id;
+    assert!(
+        household.member.iter().any(|m| m.id == me),
+        "the token's own user must be a member, since that is how `is_me` is decided"
+    );
+
+    let page = finanzen::kitchenowl::wire::parse_expenses(
+        &get(format!("/api/household/{}/expense", household.id)).await,
+    )
+    .expect("expenses");
+    assert!(!page.is_empty());
+    let dates: Vec<i64> = page.iter().map(|e| e.date).collect();
+    let mut sorted = dates.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(dates, sorted, "pages are ordered by DATE descending");
+    for raw in &page {
+        let mirror = finanzen::kitchenowl::wire::to_mirror(raw, me).expect("mirrors");
+        assert_eq!(
+            mirror.shares.iter().map(|s| s.share_cents).sum::<i64>(),
+            mirror.amount_cents
+        );
+    }
+
+    let categories = finanzen::kitchenowl::wire::parse_categories(
+        &get(format!(
+            "/api/household/{}/expense/categories",
+            household.id
+        ))
+        .await,
+    )
+    .expect("categories");
+    assert!(!categories.is_empty());
+
+    // The error body is plain text served as text/html, not JSON. Everything here
+    // must survive that; a GET with a rejected parameter is the cheapest way to see
+    // it, and it changes nothing on the instance.
+    let response = http
+        .get(format!(
+            "{url}/api/household/{}/expense?limit=5",
+            household.id
+        ))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("request");
+    assert_eq!(response.status(), 400);
+    let body = response.text().await.expect("body");
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&body).is_err(),
+        "the error body is not JSON: {body:?}"
+    );
+}

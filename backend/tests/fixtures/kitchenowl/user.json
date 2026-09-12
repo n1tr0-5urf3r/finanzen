@@ -1,0 +1,10 @@
+{
+ "id": 1,
+ "name": "Fabi",
+ "email": null,
+ "admin": true,
+ "email_verified": false,
+ "created_at": 1734885945906,
+ "last_seen": 1789228948592,
+ "oidc_links": []
+}

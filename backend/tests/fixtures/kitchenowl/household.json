@@ -1,0 +1,44 @@
+[
+ {
+  "id": 1,
+  "name": "Beispielhaushalt",
+  "description": null,
+  "expenses_feature": true,
+  "planner_feature": true,
+  "language": null,
+  "link": null,
+  "photo": null,
+  "photo_hash": null,
+  "verified": true,
+  "view_ordering": null,
+  "default_shopping_list": null,
+  "created_at": 1734885945906,
+  "updated_at": 1734885945906,
+  "member": [
+   {
+    "id": 1,
+    "name": "Fabi",
+    "username": "fabi",
+    "expense_balance": -149.16999999999217,
+    "owner": true,
+    "admin": false,
+    "photo": null,
+    "last_seen": 1789228948592,
+    "created_at": 1734885945906,
+    "updated_at": 1734885945906
+   },
+   {
+    "id": 2,
+    "name": "Ada",
+    "username": "ada",
+    "expense_balance": 149.16999999999217,
+    "owner": false,
+    "admin": true,
+    "photo": null,
+    "last_seen": 1789228948592,
+    "created_at": 1734885945906,
+    "updated_at": 1734885945906
+   }
+  ]
+ }
+]
