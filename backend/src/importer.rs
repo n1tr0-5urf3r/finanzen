@@ -21,7 +21,7 @@ use crate::{
     suggest::{self, KnownRule},
 };
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportCounts {
     pub data_rows: i64,
@@ -36,7 +36,7 @@ pub struct ImportCounts {
     pub open_review_items: i64,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MonthBlockInfo {
     pub index: i64,
@@ -52,7 +52,7 @@ pub struct MonthBlockInfo {
     pub delta_cents: Option<i64>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportPreview {
     pub id: Uuid,
@@ -70,7 +70,7 @@ pub struct ImportPreview {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct YearTotals {
     pub year: i32,
@@ -115,6 +115,15 @@ async fn known_rules(conn: &mut PgConnection) -> Result<Vec<KnownRule>> {
         .collect())
 }
 
+/// Resolving a review item writes a rule by default. That is what makes the queue
+/// finishable: the same merchant is never asked about twice, and every future import
+/// benefits.
+#[utoipa::path(
+    post,
+    path = "/api/v1/imports",
+    tag = "imports",
+    responses((status = 201, description = "Vorschau; es wurde noch nichts gebucht", body = ImportPreview), (status = 422, description = "Monatsfolge widerspricht sich", body = crate::error::ErrorBody)),
+)]
 pub async fn upload(
     mut ctx: Ctx,
     axum::extract::State(state): axum::extract::State<AppState>,
@@ -522,12 +531,25 @@ async fn load_preview(ctx: &mut Ctx, batch_id: Uuid) -> Result<ImportPreview> {
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/imports/{id}",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Die Vorschau", body = ImportPreview), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn get(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<ImportPreview>> {
     let preview = load_preview(&mut ctx, id).await?;
     ctx.tenant.commit().await?;
     Ok(Json(preview))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/imports",
+    tag = "imports",
+    responses((status = 200, description = "Bisherige Importe", body = Vec<serde_json::Value>)),
+)]
 pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<serde_json::Value>>> {
     let rows = sqlx::query(
         "SELECT id, filename, sheet, source, status, row_count, created_at, applied_at \
@@ -554,7 +576,7 @@ pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<serde_json::Value>>> {
     Ok(Json(out))
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitResult {
     pub inserted: i64,
@@ -563,6 +585,13 @@ pub struct CommitResult {
     pub uncategorized_remaining: i64,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/imports/{id}/commit",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Gebucht; erneutes Buchen ist wirkungslos", body = CommitResult)),
+)]
 pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitResult>> {
     let status: String = sqlx::query_scalar("SELECT status FROM import_batches WHERE id = $1")
         .bind(id)
@@ -651,6 +680,13 @@ pub struct ReviewQuery {
     pub limit: Option<i64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/imports/{id}/review",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Kommentare ohne Regel, nach Häufigkeit", body = Vec<serde_json::Value>)),
+)]
 pub async fn review(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -693,13 +729,13 @@ pub async fn review(
     Ok(Json(out))
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolveRequest {
     pub resolutions: Vec<Resolution>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Resolution {
     pub item_id: Uuid,
@@ -714,7 +750,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolveResult {
     pub resolved: i64,
@@ -723,9 +759,14 @@ pub struct ResolveResult {
     pub remaining_open: i64,
 }
 
-/// Resolving a review item writes a rule by default. That is what makes the queue
-/// finishable: the same merchant is never asked about twice, and every future import
-/// benefits.
+#[utoipa::path(
+    post,
+    path = "/api/v1/imports/{id}/review",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = ResolveRequest,
+    responses((status = 200, description = "Regel angelegt, Historie zugeordnet", body = ResolveResult)),
+)]
 pub async fn resolve(
     mut ctx: Ctx,
     Path(batch_id): Path<Uuid>,

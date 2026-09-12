@@ -32,6 +32,12 @@ const SELECT_RULES: &str = "\
              WHERE b.match_key = r.match_key AND b.status = 'confirmed')::bigint AS match_count \
       FROM category_rules r LEFT JOIN categories c ON c.id = r.category_id";
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/rules",
+    tag = "rules",
+    responses((status = 200, description = "Die Regeltabelle", body = Vec<Rule>)),
+)]
 pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<Rule>>> {
     let rows = sqlx::query(&format!("{SELECT_RULES} ORDER BY r.match_key"))
         .fetch_all(ctx.tenant.conn())
@@ -41,6 +47,13 @@ pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<Rule>>> {
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/rules",
+    tag = "rules",
+    request_body = RuleInput,
+    responses((status = 201, description = "Regel angelegt; Historie wurde neu zugeordnet", body = Rule), (status = 409, description = "Regelschlüssel existiert bereits", body = crate::error::ErrorBody)),
+)]
 pub async fn create(mut ctx: Ctx, Json(body): Json<RuleInput>) -> Result<(StatusCode, Json<Rule>)> {
     validate(&body)?;
     let id = Uuid::new_v4();
@@ -75,6 +88,14 @@ pub async fn create(mut ctx: Ctx, Json(body): Json<RuleInput>) -> Result<(Status
     Ok((StatusCode::CREATED, Json(rule)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/rules/{id}",
+    tag = "rules",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = RuleInput,
+    responses((status = 200, description = "Regel gespeichert", body = Rule), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn update(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -106,6 +127,13 @@ pub async fn update(
     Ok(Json(rule))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/rules/{id}",
+    tag = "rules",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Gelöscht; betroffene Buchungen sind wieder ohne Kategorie")),
+)]
 pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     // Release the bookings first. The FK is ON DELETE SET NULL, which would leave
     // category_source = 'rule' with a NULL resolved_rule_id and trip the
@@ -145,6 +173,13 @@ pub struct ApplyQuery {
     pub dry_run: bool,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/rules/apply",
+    tag = "rules",
+    params(("dryRun" = Option<bool>, Query, description = "Nur zählen, nichts schreiben")),
+    responses((status = 200, description = "Anzahl neu zugeordneter Buchungen", body = ApplyRulesResult)),
+)]
 pub async fn apply(
     mut ctx: Ctx,
     axum::extract::Query(q): axum::extract::Query<ApplyQuery>,

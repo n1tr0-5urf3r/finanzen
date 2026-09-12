@@ -99,6 +99,13 @@ const SELECT_RECEIPT: &str = "\
     SELECT id, booking_id, filename, content_type, byte_size, sha256, storage_key, uploaded_at \
       FROM receipts";
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/bookings/{id}/receipt",
+    tag = "receipts",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 201, description = "Beleg gespeichert", body = Receipt), (status = 400, description = "Kein Bild und kein PDF", body = crate::error::ErrorBody)),
+)]
 pub async fn upload(
     mut ctx: Ctx,
     State(state): State<AppState>,
@@ -249,6 +256,13 @@ pub async fn upload(
     Ok((StatusCode::CREATED, Json(out)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookings/{id}/receipt",
+    tag = "receipts",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Der Beleg", content_type = "application/octet-stream"), (status = 404, description = "Kein Beleg vorhanden", body = crate::error::ErrorBody)),
+)]
 pub async fn download(
     mut ctx: Ctx,
     State(state): State<AppState>,
@@ -293,6 +307,13 @@ pub async fn download(
         .into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/bookings/{id}/receipt",
+    tag = "receipts",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Beleg entfernt"), (status = 404, description = "Kein Beleg vorhanden", body = crate::error::ErrorBody)),
+)]
 pub async fn delete(
     mut ctx: Ctx,
     State(state): State<AppState>,

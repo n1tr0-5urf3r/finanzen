@@ -31,6 +31,12 @@ fn row_to_category(r: &sqlx::postgres::PgRow) -> Category {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/categories",
+    tag = "categories",
+    responses((status = 200, description = "Alle Kategorien mit Nettosumme", body = Vec<Category>)),
+)]
 pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<Category>>> {
     let rows = sqlx::query(&format!(
         "{SELECT_CATEGORIES} ORDER BY t.sort_order, c.sort_order, c.name"
@@ -42,6 +48,12 @@ pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<Category>>> {
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/category-types",
+    tag = "categories",
+    responses((status = 200, description = "Die fünf Typen mit Nettosumme", body = Vec<CategoryTypeSummary>)),
+)]
 pub async fn list_types(mut ctx: Ctx) -> Result<Json<Vec<CategoryTypeSummary>>> {
     let rows = sqlx::query(
         "SELECT t.code, t.label, \
@@ -67,6 +79,13 @@ pub async fn list_types(mut ctx: Ctx) -> Result<Json<Vec<CategoryTypeSummary>>> 
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/categories",
+    tag = "categories",
+    request_body = CategoryInput,
+    responses((status = 201, description = "Kategorie angelegt", body = Category), (status = 409, description = "Name bereits vergeben", body = crate::error::ErrorBody)),
+)]
 pub async fn create(
     mut ctx: Ctx,
     Json(body): Json<CategoryInput>,
@@ -98,6 +117,14 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(category)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/categories/{id}",
+    tag = "categories",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = CategoryInput,
+    responses((status = 200, description = "Kategorie gespeichert", body = Category), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn update(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -134,6 +161,13 @@ pub struct DeleteQuery {
     pub reassign_to: Option<Uuid>,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/categories/{id}",
+    tag = "categories",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Gelöscht"), (status = 409, description = "Noch Buchungen zugeordnet", body = crate::error::ErrorBody)),
+)]
 pub async fn delete(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,

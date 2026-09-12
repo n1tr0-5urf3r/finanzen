@@ -36,6 +36,14 @@ fn with_cookie(cookie: String, status: StatusCode, body: impl serde::Serialize) 
         .into_response()
 }
 
+/// First-run bootstrap. Re-checks the user count inside the transaction, so two
+/// concurrent setup requests cannot both create an admin.
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/setup-status",
+    tag = "auth",
+    responses((status = 200, description = "Ob die Ersteinrichtung noch aussteht", body = SetupStatus)),
+)]
 pub async fn setup_status(State(state): State<AppState>) -> Result<Json<SetupStatus>> {
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
         .fetch_one(state.db.system().inner())
@@ -47,8 +55,13 @@ pub async fn setup_status(State(state): State<AppState>) -> Result<Json<SetupSta
     }))
 }
 
-/// First-run bootstrap. Re-checks the user count inside the transaction, so two
-/// concurrent setup requests cannot both create an admin.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/setup",
+    tag = "auth",
+    request_body = SetupRequest,
+    responses((status = 201, description = "Administratorkonto angelegt", body = User), (status = 409, description = "Es existiert bereits ein Konto", body = crate::error::ErrorBody)),
+)]
 pub async fn setup(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -109,6 +122,14 @@ pub async fn setup(
     Ok(with_cookie(cookie, StatusCode::CREATED, user))
 }
 
+/// Registration is closed by default, so accounts are created here by an admin.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses((status = 200, description = "Angemeldet; Session als HttpOnly-Cookie", body = User), (status = 401, description = "Benutzername oder Passwort falsch", body = crate::error::ErrorBody)),
+)]
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -148,6 +169,12 @@ pub async fn login(
     Ok(with_cookie(cookie, StatusCode::OK, user))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "auth",
+    responses((status = 204, description = "Sitzung beendet")),
+)]
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
     if let Some(token) = auth::cookie_value(&headers, auth::COOKIE) {
         sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
@@ -162,10 +189,23 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    tag = "auth",
+    responses((status = 200, description = "Die angemeldete Person", body = User), (status = 401, description = "Nicht angemeldet", body = crate::error::ErrorBody)),
+)]
 pub async fn me(SessionUser(user): SessionUser) -> Json<User> {
     Json(user)
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/auth/password",
+    tag = "auth",
+    request_body = PasswordRequest,
+    responses((status = 204, description = "Passwort geändert, alle Sitzungen beendet"), (status = 401, description = "Aktuelles Passwort falsch", body = crate::error::ErrorBody)),
+)]
 pub async fn change_password(
     State(state): State<AppState>,
     SessionUser(user): SessionUser,
@@ -183,6 +223,12 @@ pub async fn change_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users",
+    tag = "admin",
+    responses((status = 200, description = "Alle Konten", body = Vec<User>), (status = 403, description = "Nur für Administratoren", body = crate::error::ErrorBody)),
+)]
 pub async fn list_users(
     State(state): State<AppState>,
     SessionUser(user): SessionUser,
@@ -205,7 +251,13 @@ pub async fn list_users(
     ))
 }
 
-/// Registration is closed by default, so accounts are created here by an admin.
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users",
+    tag = "admin",
+    request_body = CreateUserRequest,
+    responses((status = 201, description = "Konto angelegt", body = User), (status = 409, description = "Benutzername vergeben", body = crate::error::ErrorBody)),
+)]
 pub async fn create_user(
     State(state): State<AppState>,
     SessionUser(actor): SessionUser,

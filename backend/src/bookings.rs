@@ -129,6 +129,26 @@ fn filter_sql(q: &BookingQuery) -> (String, Vec<String>) {
     (clauses.join(" AND "), binds)
 }
 
+/// Confirms a draft booking, optionally correcting its amount.
+///
+/// A separate endpoint rather than a `status` field on `PUT /bookings/{id}`, for two
+/// reasons. The PUT body is a full `BookingInput`, so a status field there would
+/// travel on every ordinary edit and any client that forgot to echo it back would
+/// silently re-draft — or silently confirm — a booking; and draft→confirmed is the
+/// one transition that moves money into every total, so it deserves a request that
+/// cannot be made by accident.
+///
+/// Correcting the amount belongs here because it is the entire reason the draft
+/// exists: an `amountIsEstimate` template books 29,00 and the real invoice says
+/// 34,50. Confirming twice is harmless — the second call finds it already confirmed
+/// and changes nothing else.
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookings",
+    tag = "bookings",
+    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("categoryId" = Option<Uuid>, Query, description = "Kategorie"), ("categoryType" = Option<String>, Query, description = "Typ-Code"), ("kind" = Option<String>, Query, description = "income | expense | transfer"), ("taxRelevant" = Option<bool>, Query, description = "Nur steuerrelevante"), ("uncategorized" = Option<bool>, Query, description = "Nur ohne Kategorie"), ("search" = Option<String>, Query, description = "Kommentar enthält"), ("status" = Option<String>, Query, description = "confirmed (Standard) | draft | all"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..500, Standard 100")),
+    responses((status = 200, description = "Gefilterte Buchungen samt Summen der aktuellen Filterung", body = BookingPage)),
+)]
 pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<BookingPage>> {
     let page = q.page.unwrap_or(0);
     let page_size = q.page_size.unwrap_or(100).clamp(1, 500);
@@ -177,6 +197,13 @@ pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<Bo
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookings/{id}",
+    tag = "bookings",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Eine Buchung", body = Booking), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn get_one(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<Booking>> {
     let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
         .bind(id)
@@ -279,6 +306,13 @@ pub(crate) async fn resolve_category(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/bookings",
+    tag = "bookings",
+    request_body = BookingInput,
+    responses((status = 201, description = "Buchung angelegt", body = Booking), (status = 400, description = "Betrag, Kommentar oder Monat ungültig", body = crate::error::ErrorBody), (status = 409, description = "Jahr ist für die Steuer gesperrt", body = crate::error::ErrorBody)),
+)]
 pub async fn create(
     mut ctx: Ctx,
     Json(body): Json<BookingInput>,
@@ -329,6 +363,14 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(booking)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/bookings/{id}",
+    tag = "bookings",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = BookingInput,
+    responses((status = 200, description = "Buchung gespeichert", body = Booking), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn update(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -388,19 +430,14 @@ pub async fn update(
     Ok(Json(booking))
 }
 
-/// Confirms a draft booking, optionally correcting its amount.
-///
-/// A separate endpoint rather than a `status` field on `PUT /bookings/{id}`, for two
-/// reasons. The PUT body is a full `BookingInput`, so a status field there would
-/// travel on every ordinary edit and any client that forgot to echo it back would
-/// silently re-draft — or silently confirm — a booking; and draft→confirmed is the
-/// one transition that moves money into every total, so it deserves a request that
-/// cannot be made by accident.
-///
-/// Correcting the amount belongs here because it is the entire reason the draft
-/// exists: an `amountIsEstimate` template books 29,00 and the real invoice says
-/// 34,50. Confirming twice is harmless — the second call finds it already confirmed
-/// and changes nothing else.
+#[utoipa::path(
+    post,
+    path = "/api/v1/bookings/{id}/confirm",
+    tag = "bookings",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = ConfirmBookingInput,
+    responses((status = 200, description = "Entwurf bestätigt", body = Booking), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn confirm(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -440,6 +477,15 @@ pub async fn confirm(
     Ok(Json(booking))
 }
 
+/// Distinct comments, most used first. Feeds the Quick Add suggestion tiles and the
+/// filter-by-comment view.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/bookings/{id}",
+    tag = "bookings",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Gelöscht"), (status = 409, description = "Mit KitchenOwl verknüpft — erst die Verknüpfung lösen", body = crate::error::ErrorBody)),
+)]
 pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     let linked: Option<String> =
         sqlx::query_scalar("SELECT external_source FROM bookings WHERE id = $1")
@@ -464,7 +510,7 @@ pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkRequest {
     pub booking_ids: Vec<Uuid>,
@@ -475,12 +521,19 @@ pub struct BulkRequest {
     pub delete: Option<bool>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkResult {
     pub affected: i64,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/bookings/bulk",
+    tag = "bookings",
+    request_body = BulkRequest,
+    responses((status = 200, description = "Anzahl geänderter Buchungen", body = BulkResult), (status = 400, description = "Genau eine Änderung pro Massenaktion", body = crate::error::ErrorBody)),
+)]
 pub async fn bulk(mut ctx: Ctx, Json(body): Json<BulkRequest>) -> Result<Json<BulkResult>> {
     if body.booking_ids.is_empty() {
         return Err(AppError::Validation("Keine Buchungen ausgewählt".into()));
@@ -551,7 +604,7 @@ pub async fn bulk(mut ctx: Ctx, Json(body): Json<BulkRequest>) -> Result<Json<Bu
     }))
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentSummary {
     pub comment: String,
@@ -560,8 +613,12 @@ pub struct CommentSummary {
     pub is_uncategorized: bool,
 }
 
-/// Distinct comments, most used first. Feeds the Quick Add suggestion tiles and the
-/// filter-by-comment view.
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookings/comments",
+    tag = "bookings",
+    responses((status = 200, description = "Verschiedene Kommentare, häufigste zuerst", body = Vec<CommentSummary>)),
+)]
 pub async fn comments(mut ctx: Ctx) -> Result<Json<Vec<CommentSummary>>> {
     let rows = sqlx::query(
         "SELECT b.comment, count(*)::bigint AS n, \

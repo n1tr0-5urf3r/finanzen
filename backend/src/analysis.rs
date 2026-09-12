@@ -111,6 +111,22 @@ fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow>
         .collect()
 }
 
+/// The tax report, whose running number ends up on a printed list handed to a tax
+/// office — so the ordering has to be a function of the DATA, not of storage.
+///
+/// `created_at` defaults to `now()`, which inside a transaction is the transaction's
+/// timestamp: every row of one import commit carries the identical value, so it
+/// breaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,
+/// which made `Nr.` arbitrary within a month and reshuffled it on any re-import.
+/// `comment, amount_cents` restore determinism from the booking's own content; `id`
+/// stays last only to keep the sort total for genuinely identical rows.
+#[utoipa::path(
+    get,
+    path = "/api/v1/dashboard",
+    tag = "analysis",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Jahreszahlen, beide Sparquoten, Top-Kategorien", body = Dashboard)),
+)]
 pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Dashboard>> {
     let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
     let (opening, _, gap) = opening_balance(ctx.tenant.conn(), q.year).await?;
@@ -157,6 +173,13 @@ pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/overview/months",
+    tag = "analysis",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Monatswerte netto je Typ, kumuliert", body = MonthlyOverview)),
+)]
 pub async fn monthly(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<MonthlyOverview>> {
     let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
     let months = calc::by_month(&rows);
@@ -217,6 +240,13 @@ pub async fn monthly(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Mo
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/analysis/categories",
+    tag = "analysis",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Netto je Kategorie mit beiden Bruttoschenkeln", body = CategoryAnalysis)),
+)]
 pub async fn categories(
     mut ctx: Ctx,
     Query(q): Query<YearQuery>,
@@ -238,15 +268,13 @@ pub async fn categories(
     Ok(Json(out))
 }
 
-/// The tax report, whose running number ends up on a printed list handed to a tax
-/// office — so the ordering has to be a function of the DATA, not of storage.
-///
-/// `created_at` defaults to `now()`, which inside a transaction is the transaction's
-/// timestamp: every row of one import commit carries the identical value, so it
-/// breaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,
-/// which made `Nr.` arbitrary within a month and reshuffled it on any re-import.
-/// `comment, amount_cents` restore determinism from the booking's own content; `id`
-/// stays last only to keep the sort total for genuinely identical rows.
+#[utoipa::path(
+    get,
+    path = "/api/v1/tax",
+    tag = "tax",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Steuerrelevante Buchungen mit stabiler Nummer", body = TaxReport)),
+)]
 pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxReport>> {
     let rows = sqlx::query(
         "SELECT b.id, b.period_month, b.comment, c.name AS category_name, b.kind, \

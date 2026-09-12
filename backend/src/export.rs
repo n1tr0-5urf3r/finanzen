@@ -182,6 +182,24 @@ async fn tax_rows(ctx: &mut Ctx, year: i32) -> Result<Vec<TaxRow>> {
         .collect())
 }
 
+/// The printable receipt list.
+///
+/// Deliberately plain: A4, one table, a running number that matches the CSV and the
+/// on-screen report, and a per-category summary at the end. The point is that it can
+/// be printed, stapled to a folder of receipts and handed over — not that it is
+/// pretty.
+///
+/// Text goes through printpdf's built-in Helvetica, which is WinAnsi-encoded.
+/// Windows-1252 covers every German character including `ß`, `€` and the typographic
+/// quotes; anything outside it is dropped by printpdf rather than substituted, which
+/// is why the comment column is the user's own German data and not arbitrary input.
+#[utoipa::path(
+    get,
+    path = "/api/v1/tax/export.csv",
+    tag = "tax",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Steuerliste als CSV, Beträge deutsch formatiert", content_type = "application/octet-stream")),
+)]
 pub async fn tax_csv(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Response> {
     let rows = tax_rows(&mut ctx, q.year).await?;
     ctx.tenant.commit().await?;
@@ -286,17 +304,13 @@ fn clip(text: &str, max_chars: usize) -> String {
     s
 }
 
-/// The printable receipt list.
-///
-/// Deliberately plain: A4, one table, a running number that matches the CSV and the
-/// on-screen report, and a per-category summary at the end. The point is that it can
-/// be printed, stapled to a folder of receipts and handed over — not that it is
-/// pretty.
-///
-/// Text goes through printpdf's built-in Helvetica, which is WinAnsi-encoded.
-/// Windows-1252 covers every German character including `ß`, `€` and the typographic
-/// quotes; anything outside it is dropped by printpdf rather than substituted, which
-/// is why the comment column is the user's own German data and not arbitrary input.
+#[utoipa::path(
+    get,
+    path = "/api/v1/tax/export.pdf",
+    tag = "tax",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Steuerliste als PDF zum Abheften", content_type = "application/octet-stream")),
+)]
 pub async fn tax_pdf(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Response> {
     let rows = tax_rows(&mut ctx, q.year).await?;
     ctx.tenant.commit().await?;
@@ -659,6 +673,23 @@ async fn build_document(ctx: &mut Ctx, year: Option<i32>) -> Result<ExportDocume
     })
 }
 
+/// Rebuilds an account from an export document.
+///
+/// **Refuses a target that already has bookings.** Merge semantics for two ledgers
+/// that both claim to be the truth would be an invention — which booking wins, what
+/// happens to a rule that maps the same comment elsewhere — and inventing it quietly
+/// is how money goes missing. This is a restore, not a sync.
+///
+/// Categories, rules and templates are matched by NAME, because ids are per-user: a
+/// restore into a different account has to resolve them by the only thing both
+/// accounts agree on.
+#[utoipa::path(
+    get,
+    path = "/api/v1/exports/bookings.json",
+    tag = "exports",
+    params(("year" = Option<i32>, Query, description = "Ohne Angabe: das ganze Konto")),
+    responses((status = 200, description = "Vollsicherung in ganzen Cent; Eingabe für /exports/restore", content_type = "application/octet-stream")),
+)]
 pub async fn bookings_json(mut ctx: Ctx, Query(q): Query<OptionalYearQuery>) -> Result<Response> {
     let doc = build_document(&mut ctx, q.year).await?;
     ctx.tenant.commit().await?;
@@ -679,6 +710,13 @@ pub async fn bookings_json(mut ctx: Ctx, Query(q): Query<OptionalYearQuery>) -> 
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/exports/bookings.csv",
+    tag = "exports",
+    params(("year" = Option<i32>, Query, description = "Ohne Angabe: das ganze Konto")),
+    responses((status = 200, description = "Buchungen als CSV für Excel", content_type = "application/octet-stream")),
+)]
 pub async fn bookings_csv(mut ctx: Ctx, Query(q): Query<OptionalYearQuery>) -> Result<Response> {
     let doc = build_document(&mut ctx, q.year).await?;
     ctx.tenant.commit().await?;
@@ -761,16 +799,13 @@ pub async fn bookings_csv(mut ctx: Ctx, Query(q): Query<OptionalYearQuery>) -> R
 
 // ----------------------------------------------------------------- restore
 
-/// Rebuilds an account from an export document.
-///
-/// **Refuses a target that already has bookings.** Merge semantics for two ledgers
-/// that both claim to be the truth would be an invention — which booking wins, what
-/// happens to a rule that maps the same comment elsewhere — and inventing it quietly
-/// is how money goes missing. This is a restore, not a sync.
-///
-/// Categories, rules and templates are matched by NAME, because ids are per-user: a
-/// restore into a different account has to resolve them by the only thing both
-/// accounts agree on.
+#[utoipa::path(
+    post,
+    path = "/api/v1/exports/restore",
+    tag = "exports",
+    request_body = ExportDocument,
+    responses((status = 200, description = "Wiederhergestellt, mit Warnungen", body = RestoreResult), (status = 422, description = "Unbekannte Formatversion", body = crate::error::ErrorBody)),
+)]
 pub async fn restore(
     mut ctx: Ctx,
     Json(doc): Json<ExportDocument>,

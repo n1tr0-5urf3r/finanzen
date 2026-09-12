@@ -62,12 +62,25 @@ async fn load(ctx: &mut Ctx) -> Result<Vec<Year>> {
         .collect())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/years",
+    tag = "years",
+    responses((status = 200, description = "Jahre mit Vortrag, Saldo und Übertragslücke", body = Vec<Year>)),
+)]
 pub async fn list(mut ctx: Ctx) -> Result<Json<Vec<Year>>> {
     let out = load(&mut ctx).await?;
     ctx.tenant.commit().await?;
     Ok(Json(out))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/years",
+    tag = "years",
+    request_body = YearInput,
+    responses((status = 201, description = "Jahr angelegt", body = Year), (status = 409, description = "Dieses Jahr gibt es bereits", body = crate::error::ErrorBody)),
+)]
 pub async fn create(mut ctx: Ctx, Json(body): Json<YearInput>) -> Result<(StatusCode, Json<Year>)> {
     sqlx::query(
         "INSERT INTO fiscal_years (user_id, year, opening_cents, opening_source) \
@@ -89,6 +102,14 @@ pub async fn create(mut ctx: Ctx, Json(body): Json<YearInput>) -> Result<(Status
     Ok((StatusCode::CREATED, Json(year)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/years/{year}",
+    tag = "years",
+    params(("year" = i32, Path, description = "Kalenderjahr")),
+    request_body = YearInput,
+    responses((status = 200, description = "Vortrag gesetzt; er gilt damit als konfiguriert", body = Year), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn update(
     mut ctx: Ctx,
     Path(year): Path<i32>,

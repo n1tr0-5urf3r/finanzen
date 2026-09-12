@@ -11,6 +11,7 @@ pub mod importer;
 pub mod kitchenowl;
 pub mod locale;
 pub mod models;
+pub mod openapi;
 pub mod receipts;
 pub mod recurring;
 pub mod rules;
@@ -27,7 +28,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{Request, State},
+    extract::{OriginalUri, Request, State},
     http::{Method, header},
     middleware::{self, Next},
     response::Response,
@@ -208,19 +209,39 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
-async fn api_not_found(method: Method, uri: axum::http::Uri) -> AppError {
+/// The nested router's 404.
+///
+/// `OriginalUri` rather than `Uri`: `nest` strips the prefix before the inner router
+/// sees the request, so a plain `Uri` reports `/kitchenowl/status` for a call to
+/// `/api/v1/kitchenowl/status` — a path the client never typed, which is exactly
+/// the wrong thing to hand someone debugging a typo.
+async fn api_not_found(method: Method, OriginalUri(uri): OriginalUri) -> AppError {
     AppError::NotFound(format!("{method} {}", uri.path()))
 }
 
-async fn health() -> Json<StatusResponse> {
+/// Readiness means the migrations ran and the pool answers, which is what the
+/// container healthcheck and the CI smoke test actually care about.
+#[utoipa::path(
+    summary = "Liveness",
+    get,
+    path = "/api/v1/health",
+    tag = "system",
+    responses((status = 200, description = "Der Prozess läuft", body = StatusResponse)),
+)]
+pub async fn health() -> Json<StatusResponse> {
     Json(StatusResponse {
         status: "ok".into(),
     })
 }
 
-/// Readiness means the migrations ran and the pool answers, which is what the
-/// container healthcheck and the CI smoke test actually care about.
-async fn ready(State(state): State<AppState>) -> Result<Json<StatusResponse>> {
+#[utoipa::path(
+    summary = "Readiness",
+    get,
+    path = "/api/v1/ready",
+    tag = "system",
+    responses((status = 200, description = "Migrationen gelaufen, Pool antwortet", body = StatusResponse), (status = 500, description = "Datenbank nicht erreichbar", body = crate::error::ErrorBody)),
+)]
+pub async fn ready(State(state): State<AppState>) -> Result<Json<StatusResponse>> {
     sqlx::query("SELECT 1")
         .execute(state.db.system().inner())
         .await?;

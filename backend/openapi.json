@@ -1,0 +1,5825 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Finanzen",
+    "description": "Haushaltsbuch. Beträge sind durchgehend ganze Cent; jedes Geldfeld endet auf `Cents`. Kategorienamen, Typ-Labels und Kommentare sind Daten und bleiben deutsch. KitchenOwl ist ein getrenntes, paralleles Journal und wird nie mit den persönlichen Buchungen verrechnet.",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Dieselbe Origin wie die Oberfläche"
+    }
+  ],
+  "paths": {
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_users",
+        "responses": {
+          "200": {
+            "description": "Alle Konten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Nur für Administratoren",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "create_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Konto angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Benutzername vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/categories": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "categories",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Netto je Kategorie mit beiden Bruttoschenkeln",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryAnalysis"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Registration is closed by default, so accounts are created here by an admin.",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Angemeldet; Session als HttpOnly-Cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Benutzername oder Passwort falsch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Sitzung beendet"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Die angemeldete Person",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Passwort geändert, alle Sitzungen beendet"
+          },
+          "401": {
+            "description": "Aktuelles Passwort falsch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Administratorkonto angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Es existiert bereits ein Konto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/setup-status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "First-run bootstrap. Re-checks the user count inside the transaction, so two\nconcurrent setup requests cannot both create an admin.",
+        "operationId": "setup_status",
+        "responses": {
+          "200": {
+            "description": "Ob die Ersteinrichtung noch aussteht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "Confirms a draft booking, optionally correcting its amount.",
+        "description": "A separate endpoint rather than a `status` field on `PUT /bookings/{id}`, for two\nreasons. The PUT body is a full `BookingInput`, so a status field there would\ntravel on every ordinary edit and any client that forgot to echo it back would\nsilently re-draft — or silently confirm — a booking; and draft→confirmed is the\none transition that moves money into every total, so it deserves a request that\ncannot be made by accident.\n\nCorrecting the amount belongs here because it is the entire reason the draft\nexists: an `amountIsEstimate` template books 29,00 and the real invoice says\n34,50. Confirming twice is harmless — the second call finds it already confirmed\nand changes nothing else.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Monat 1..12",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "description": "Kategorie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "categoryType",
+            "in": "query",
+            "description": "Typ-Code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "income | expense | transfer",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taxRelevant",
+            "in": "query",
+            "description": "Nur steuerrelevante",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "uncategorized",
+            "in": "query",
+            "description": "Nur ohne Kategorie",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Kommentar enthält",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "confirmed (Standard) | draft | all",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Seite, ab 0",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "1..500, Standard 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gefilterte Buchungen samt Summen der aktuellen Filterung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Buchung angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Betrag, Kommentar oder Monat ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Jahr ist für die Steuer gesperrt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/bulk": {
+      "post": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Anzahl geänderter Buchungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Genau eine Änderung pro Massenaktion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/comments": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "comments",
+        "responses": {
+          "200": {
+            "description": "Verschiedene Kommentare, häufigste zuerst",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommentSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "get_one",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eine Buchung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Buchung gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "Distinct comments, most used first. Feeds the Quick Add suggestion tiles and the\nfilter-by-comment view.",
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "409": {
+            "description": "Mit KitchenOwl verknüpft — erst die Verknüpfung lösen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/confirm": {
+      "post": {
+        "tags": [
+          "bookings"
+        ],
+        "operationId": "confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmBookingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Entwurf bestätigt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/kitchenowl": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Queues a push. Commits the intent **before** any HTTP and answers 202 even when\nKitchenOwl is unreachable.",
+        "operationId": "push_booking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KoPushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Vorgemerkt — auch wenn KitchenOwl gerade nicht erreichbar ist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoPushIntent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Umbuchung, Entwurf oder unbekanntes Mitglied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Buchung ist bereits verknüpft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bookings/{id}/receipt": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "operationId": "download",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Der Beleg",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "404": {
+            "description": "Kein Beleg vorhanden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "operationId": "upload",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Beleg gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Kein Bild und kein PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "receipts"
+        ],
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Beleg entfernt"
+          },
+          "404": {
+            "description": "Kein Beleg vorhanden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "tags": [
+          "categories"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Alle Kategorien mit Nettosumme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Category"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "categories"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Kategorie angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Category"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name bereits vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{id}": {
+      "put": {
+        "tags": [
+          "categories"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Kategorie gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Category"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "categories"
+        ],
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "409": {
+            "description": "Noch Buchungen zugeordnet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/category-types": {
+      "get": {
+        "tags": [
+          "categories"
+        ],
+        "operationId": "list_types",
+        "responses": {
+          "200": {
+            "description": "Die fünf Typen mit Nettosumme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTypeSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "The tax report, whose running number ends up on a printed list handed to a tax\noffice — so the ordering has to be a function of the DATA, not of storage.",
+        "description": "`created_at` defaults to `now()`, which inside a transaction is the transaction's\ntimestamp: every row of one import commit carries the identical value, so it\nbreaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,\nwhich made `Nr.` arbitrary within a month and reshuffled it on any re-import.\n`comment, amount_cents` restore determinism from the booking's own content; `id`\nstays last only to keep the sort total for genuinely identical rows.",
+        "operationId": "dashboard",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Jahreszahlen, beide Sparquoten, Top-Kategorien",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exports/bookings.csv": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "operationId": "bookings_csv",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Ohne Angabe: das ganze Konto",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Buchungen als CSV für Excel",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exports/bookings.json": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Rebuilds an account from an export document.",
+        "description": "**Refuses a target that already has bookings.** Merge semantics for two ledgers\nthat both claim to be the truth would be an invention — which booking wins, what\nhappens to a rule that maps the same comment elsewhere — and inventing it quietly\nis how money goes missing. This is a restore, not a sync.\n\nCategories, rules and templates are matched by NAME, because ids are per-user: a\nrestore into a different account has to resolve them by the only thing both\naccounts agree on.",
+        "operationId": "bookings_json",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Ohne Angabe: das ganze Konto",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vollsicherung in ganzen Cent; Eingabe für /exports/restore",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exports/restore": {
+      "post": {
+        "tags": [
+          "exports"
+        ],
+        "operationId": "restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Wiederhergestellt, mit Warnungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unbekannte Formatversion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Liveness",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Der Prozess läuft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports": {
+      "get": {
+        "tags": [
+          "imports"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Bisherige Importe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "Resolving a review item writes a rule by default. That is what makes the queue\nfinishable: the same merchant is never asked about twice, and every future import\nbenefits.",
+        "operationId": "upload",
+        "responses": {
+          "201": {
+            "description": "Vorschau; es wurde noch nichts gebucht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Monatsfolge widerspricht sich",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports/{id}": {
+      "get": {
+        "tags": [
+          "imports"
+        ],
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Die Vorschau",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports/{id}/commit": {
+      "post": {
+        "tags": [
+          "imports"
+        ],
+        "operationId": "commit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gebucht; erneutes Buchen ist wirkungslos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports/{id}/review": {
+      "get": {
+        "tags": [
+          "imports"
+        ],
+        "operationId": "review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kommentare ohne Regel, nach Häufigkeit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "imports"
+        ],
+        "operationId": "resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Regel angelegt, Historie zugeordnet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/drafts": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "operationId": "drafts",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Kommagetrennt; Standard: alles Unentschiedene",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Seite, ab 0",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "1..200, Standard 50",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vorschlagsliste; „ohne Treffer“ ist der Normalfall",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoDraftPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/drafts/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Dismisses a suggestion. An unlinked expense is the normal case, so this is an\nordinary outcome and not a rejection of anything.",
+        "operationId": "dismiss_draft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vorschlag verworfen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoDraft"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/drafts/{id}/link": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "operationId": "link_draft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KoLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Verknüpft. Es wurde KEINE Buchung angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoDraft"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Buchung oder Ausgabe ist bereits verknüpft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/expenses": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Confirms a link. **Creates no booking** — it records that an existing booking and\na mirrored expense are the same purchase, and moves no figure in either ledger.",
+        "operationId": "expenses",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Monat 1..12",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "linked",
+            "in": "query",
+            "description": "Nur (nicht) verknüpfte",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Name oder Beschreibung enthält",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "description": "Auch in KitchenOwl gelöschte",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Seite, ab 0",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "1..200, Standard 50",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Der Spiegel — Gesamtbetrag UND eigener Anteil, nie summiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoExpensePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/expenses/{id}/link": {
+      "delete": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Removes a link. Reversible in both directions, which is the promise the product\ndecision made: nothing about the two ledgers is permanent.",
+        "operationId": "unlink",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Verknüpfung gelöst; keine Zahl bewegt sich"
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/metadata": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "operationId": "metadata",
+        "responses": {
+          "200": {
+            "description": "Mitglieder und Kategorien; veraltet mit Hinweis statt gar nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoMetadata"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/push": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Retries a failed or abandoned push. Safe by construction — the marker scan runs\nfirst — and the UI says so, because otherwise the user retries by hand in the\nKitchenOwl app and creates the duplicate this whole mechanism exists to avoid.",
+        "operationId": "push_list",
+        "responses": {
+          "200": {
+            "description": "Die Warteschlange, jeder Posten mit seinem letzten Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KoPushIntent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/push/{bookingId}": {
+      "delete": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Withdraws a push that has not gone out yet. A pushed one cannot be withdrawn from\nhere: deleting somebody else's household expense is not this app's decision.",
+        "operationId": "push_retract",
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "description": "Buchungs-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Zurückgezogen"
+          },
+          "409": {
+            "description": "Nur wartende Aufträge lassen sich zurückziehen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/push/{bookingId}/retry": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "operationId": "push_retry",
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "description": "Buchungs-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erneut vorgemerkt; der Abgleich vor dem Senden verhindert Dubletten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoPushIntent"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Wartet bereits oder ist übertragen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/status": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Members and categories for the push dialogue.",
+        "description": "**Served stale with a warning rather than withheld.** The dialogue must open when\nKitchenOwl is down, because the whole point of the outbox is that the user can\nqueue a push during an outage.",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "Konfiguration, Erreichbarkeit, letzter und nächster Lauf, offene Posten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/summary": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": "Aus dem lokalen Spiegel; blockiert nie auf HTTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/sync": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Runs a sync now, synchronously, so the button gives an answer rather than a\npromise. Concurrent clicks are absorbed by the same `AtomicBool` the periodic\nloop uses, so two users pressing it twice cannot run two scans at once.",
+        "operationId": "sync_now",
+        "responses": {
+          "200": {
+            "description": "Lauf beendet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSyncResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Ein Lauf war bereits aktiv",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSyncResult"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "KitchenOwl nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/overview/months": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "monthly",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Monatswerte netto je Typ, kumuliert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyOverview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Readiness",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "Migrationen gelaufen, Pool antwortet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Datenbank nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recurring": {
+      "get": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Deleting a template leaves the bookings it already produced alone —\n`bookings.template_id` is `ON DELETE SET NULL`. Money that has been spent does not\ndisappear because the plan for it was cancelled.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Bezugsjahr für fällig/gebucht",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Bezugsmonat",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vorlagen mit Fälligkeit im gefragten Monat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecurringTemplate"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "recurring"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringTemplateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Vorlage angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringTemplate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recurring/materialize": {
+      "post": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Creates the bookings due in one month.",
+        "description": "The guard against double-booking is `ON CONFLICT ... DO NOTHING` on the partial\nunique index. **The index predicate has to be repeated in the conflict target** —\nwithout `WHERE template_id IS NOT NULL` Postgres cannot infer a partial index and\nraises 42P10, which is exactly the trap the importer hit.",
+        "operationId": "materialize",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterializeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Was angelegt und was übersprungen wurde",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializeResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recurring/{id}": {
+      "put": {
+        "tags": [
+          "recurring"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringTemplateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Vorlage gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringTemplate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "recurring"
+        ],
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht; gebuchte Posten bleiben"
+          }
+        }
+      }
+    },
+    "/api/v1/rules": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Die Regeltabelle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Rule"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Regel angelegt; Historie wurde neu zugeordnet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Regelschlüssel existiert bereits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rules/apply": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "apply",
+        "parameters": [
+          {
+            "name": "dryRun",
+            "in": "query",
+            "description": "Nur zählen, nichts schreiben",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anzahl neu zugeordneter Buchungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyRulesResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rules/{id}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Regel gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht; betroffene Buchungen sind wieder ohne Kategorie"
+          }
+        }
+      }
+    },
+    "/api/v1/tax": {
+      "get": {
+        "tags": [
+          "tax"
+        ],
+        "operationId": "tax",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Steuerrelevante Buchungen mit stabiler Nummer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tax/export.csv": {
+      "get": {
+        "tags": [
+          "tax"
+        ],
+        "summary": "The printable receipt list.",
+        "description": "Deliberately plain: A4, one table, a running number that matches the CSV and the\non-screen report, and a per-category summary at the end. The point is that it can\nbe printed, stapled to a folder of receipts and handed over — not that it is\npretty.\n\nText goes through printpdf's built-in Helvetica, which is WinAnsi-encoded.\nWindows-1252 covers every German character including `ß`, `€` and the typographic\nquotes; anything outside it is dropped by printpdf rather than substituted, which\nis why the comment column is the user's own German data and not arbitrary input.",
+        "operationId": "tax_csv",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Steuerliste als CSV, Beträge deutsch formatiert",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tax/export.pdf": {
+      "get": {
+        "tags": [
+          "tax"
+        ],
+        "operationId": "tax_pdf",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Steuerliste als PDF zum Abheften",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/years": {
+      "get": {
+        "tags": [
+          "years"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Jahre mit Vortrag, Saldo und Übertragslücke",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Year"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "years"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YearInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Jahr angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Year"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dieses Jahr gibt es bereits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/years/{year}": {
+      "put": {
+        "tags": [
+          "years"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YearInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Vortrag gesetzt; er gilt damit als konfiguriert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Year"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApplyRulesResult": {
+        "type": "object",
+        "required": [
+          "examined",
+          "recategorized",
+          "stillUncategorized",
+          "dryRun"
+        ],
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "examined": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "recategorized": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "stillUncategorized": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AuthChallenge": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "password"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "url",
+              "state",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "redirect"
+                ]
+              },
+              "state": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Drives the login page without the frontend knowing which provider is configured."
+      },
+      "Booking": {
+        "type": "object",
+        "required": [
+          "id",
+          "year",
+          "month",
+          "monthName",
+          "kind",
+          "amountCents",
+          "netCents",
+          "comment",
+          "taxRelevant",
+          "categorySource",
+          "shared",
+          "hasReceipt",
+          "status",
+          "origin"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Always positive; the direction is carried by `kind`."
+          },
+          "bookedOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Absent for imported history, which genuinely has no day."
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "`null` means no rule matched and no override was set. Never silently folded\ninto the real `Sonstiges` category."
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categorySource": {
+            "$ref": "#/components/schemas/CategorySource"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasReceipt": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string",
+            "description": "Server-rendered German month name. Always derivable, but including it removes\na client-side lookup from every list render."
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`expense - income`, so a category that earned money nets negative."
+          },
+          "origin": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "BookingInput": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "kind",
+          "amountCents",
+          "comment"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookedOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Sets a manual override. Omit to let the rule table decide."
+          },
+          "clearCategoryOverride": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "BookingKind": {
+        "type": "string",
+        "enum": [
+          "income",
+          "expense",
+          "transfer"
+        ]
+      },
+      "BookingPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "sumIncomeCents",
+          "sumExpenseCents",
+          "sumNetCents",
+          "uncategorizedCount"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Booking"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sumExpenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sumIncomeCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sums for the CURRENT filter, so the UI never re-derives them client-side."
+          },
+          "sumNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BulkRequest": {
+        "type": "object",
+        "required": [
+          "bookingIds"
+        ],
+        "properties": {
+          "bookingIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "clearCategory": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "delete": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "setCategoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "setKind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind"
+              }
+            ]
+          },
+          "setTaxRelevant": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "BulkResult": {
+        "type": "object",
+        "required": [
+          "affected"
+        ],
+        "properties": {
+          "affected": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "typeCode",
+          "typeLabel",
+          "sortOrder",
+          "archived"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "bookingCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "typeCode": {
+            "type": "string"
+          },
+          "typeLabel": {
+            "type": "string"
+          }
+        }
+      },
+      "CategoryAnalysis": {
+        "type": "object",
+        "required": [
+          "year",
+          "rows",
+          "totalNetCents",
+          "monthsWithData",
+          "uncategorizedCount",
+          "excludedTransferCount"
+        ],
+        "properties": {
+          "excludedTransferCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Transfers are excluded from this analysis; the count lets the UI say so."
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryAnalysisRow"
+            }
+          },
+          "totalNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CategoryAnalysisRow": {
+        "type": "object",
+        "required": [
+          "categoryName",
+          "incomeCents",
+          "expenseCents",
+          "netCents",
+          "netIsNegative",
+          "shareOfTotal",
+          "averagePerMonthCents",
+          "bookingCount",
+          "monthlyNetCents"
+        ],
+        "properties": {
+          "averagePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthlyNetCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "netIsNegative": {
+            "type": "boolean",
+            "description": "True when the category earned more than it cost. The UI must render this as a\ncredit, not as a bare negative cost."
+          },
+          "shareOfTotal": {
+            "type": "number",
+            "format": "double",
+            "description": "Zero for negative-net categories — they have no share of the costs."
+          }
+        }
+      },
+      "CategoryInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "typeCode"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "typeCode": {
+            "type": "string"
+          }
+        }
+      },
+      "CategorySource": {
+        "type": "string",
+        "enum": [
+          "unresolved",
+          "rule",
+          "manual",
+          "imported"
+        ]
+      },
+      "CategoryTypeSummary": {
+        "type": "object",
+        "required": [
+          "typeCode",
+          "label",
+          "netCents",
+          "bookingCount"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "typeCode": {
+            "type": "string"
+          }
+        }
+      },
+      "CommentSummary": {
+        "type": "object",
+        "required": [
+          "comment",
+          "count",
+          "isUncategorized"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isUncategorized": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CommitResult": {
+        "type": "object",
+        "required": [
+          "inserted",
+          "skipped",
+          "yearsTouched",
+          "uncategorizedRemaining"
+        ],
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorizedRemaining": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "yearsTouched": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "ConfirmBookingInput": {
+        "type": "object",
+        "properties": {
+          "amountCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Confirming is also where an estimate's real amount is entered, because that\nis the only reason the draft existed."
+          }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "displayName",
+          "password"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "Dashboard": {
+        "type": "object",
+        "required": [
+          "year",
+          "incomeCents",
+          "expenseCents",
+          "balanceCents",
+          "openingBalanceCents",
+          "closingBalanceCents",
+          "averageExpensePerMonthCents",
+          "fixedCostsPerMonthCents",
+          "monthsWithData",
+          "savingsRateNaive",
+          "savingsRateConsumption",
+          "savingsAmountCents",
+          "bookingCount",
+          "taxRelevantCount",
+          "uncategorizedCount",
+          "uncategorizedNetCents",
+          "byType",
+          "topCategories"
+        ],
+        "properties": {
+          "averageExpensePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "balanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "byType": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryTypeSummary"
+            }
+          },
+          "carryoverGapCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Set when a configured opening disagrees with the previous year's close."
+          },
+          "closingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fixedCostsPerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "savingsAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "savingsRateConsumption": {
+            "type": "number",
+            "format": "double",
+            "description": "Excludes Sparen (retained wealth) and transfers."
+          },
+          "savingsRateNaive": {
+            "type": "number",
+            "format": "double",
+            "description": "`balance / income` — reproduces the spreadsheet, and is misleading on its own\nbecause gross income includes cost-sharing that is really negative expense."
+          },
+          "taxRelevantCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "topCategories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryAnalysisRow"
+            }
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorizedNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {},
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportBooking": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "kind",
+          "amountCents",
+          "comment",
+          "taxRelevant",
+          "categorySource",
+          "status",
+          "origin",
+          "shared",
+          "hasReceipt"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookedOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categorySource": {
+            "$ref": "#/components/schemas/CategorySource"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasReceipt": {
+            "type": "boolean"
+          },
+          "importFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Carried so a restore of an imported account stays idempotent against a later\nre-import of the same workbook."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "origin": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          },
+          "templateName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ExportCategory": {
+        "type": "object",
+        "required": [
+          "name",
+          "typeCode",
+          "sortOrder",
+          "archived"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "typeCode": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportCategoryType": {
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "sortOrder",
+          "isIncome",
+          "isSavings",
+          "inConsumption"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "inConsumption": {
+            "type": "boolean"
+          },
+          "isIncome": {
+            "type": "boolean"
+          },
+          "isSavings": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ExportDocument": {
+        "type": "object",
+        "description": "The full-export document.\n\nMoney here stays **integer cents**, because this file is the account's backup and\nthe input to `POST /exports/restore`. The CSV sibling is the one place de-DE\nformatting is applied to exported money, and only because its reader is Excel.\n\nNothing references a uuid across the document except where it is internal to it:\ncategories, rules and templates are joined by NAME, because ids are per-user and\na restore into a different account must still resolve them.",
+        "required": [
+          "formatVersion",
+          "exportedAt",
+          "app",
+          "categoryTypes",
+          "categories",
+          "rules",
+          "years",
+          "recurringTemplates",
+          "bookings"
+        ],
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "bookings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportBooking"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportCategory"
+            }
+          },
+          "categoryTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportCategoryType"
+            }
+          },
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "formatVersion": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Bumped when the shape changes incompatibly; `restore` refuses what it cannot\nread rather than guessing."
+          },
+          "recurringTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTemplate"
+            }
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportRule"
+            }
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "`null` for a whole-account export."
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportYear"
+            }
+          }
+        }
+      },
+      "ExportRule": {
+        "type": "object",
+        "required": [
+          "comment",
+          "source"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "kindOverride": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind"
+              }
+            ]
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportTemplate": {
+        "type": "object",
+        "required": [
+          "name",
+          "comment",
+          "kind",
+          "amountCents",
+          "amountIsEstimate",
+          "taxRelevant",
+          "intervalMonths",
+          "anchor",
+          "activeFrom",
+          "active",
+          "sortOrder"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "activeFrom": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "activeTo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Period"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amountIsEstimate": {
+            "type": "boolean"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "dayOfMonth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "intervalMonths": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ExportYear": {
+        "type": "object",
+        "required": [
+          "year",
+          "openingBalanceCents",
+          "openingSource",
+          "locked"
+        ],
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          },
+          "openingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openingSource": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ImportCounts": {
+        "type": "object",
+        "required": [
+          "dataRows",
+          "newBookings",
+          "duplicates",
+          "income",
+          "expense",
+          "transfer",
+          "categorized",
+          "uncategorized",
+          "taxRelevant",
+          "openReviewItems"
+        ],
+        "properties": {
+          "categorized": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dataRows": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicates": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expense": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "income": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "newBookings": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openReviewItems": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "taxRelevant": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transfer": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorized": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ImportPreview": {
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "sheet",
+          "source",
+          "status",
+          "counts",
+          "yearTotals",
+          "blocks",
+          "warnings"
+        ],
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthBlockInfo"
+            }
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ImportCounts"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "markerTotalCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Sum of the legacy sheet's own month-end markers, which is the authoritative\ncarryover even where the rows disagree with it."
+          },
+          "rowTotalCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "sheet": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "yearTotals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/YearTotals"
+            }
+          }
+        }
+      },
+      "KoCategory": {
+        "type": "object",
+        "description": "A KitchenOwl expense category. A **different taxonomy** from the app's 32\ncategories: seven household labels with no relationship to Fixkosten/Variable\nKosten. Never auto-mapped, and the UI must not style it like an app category.",
+        "required": [
+          "categoryId",
+          "name",
+          "fetchedAt"
+        ],
+        "properties": {
+          "budgetCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "colorArgb": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Packed ARGB as KitchenOwl stores it, not a CSS colour."
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "KoDraft": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "expense",
+          "candidates",
+          "suggestedAction",
+          "createdAt"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoMatchCandidate"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expense": {
+            "$ref": "#/components/schemas/KoExpense"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "suggestedAction": {
+            "type": "string",
+            "description": "`link` when a candidate cleared the threshold, otherwise `none`. Never\n`create`: a pull never writes a booking, and the 63-of-211 overlap is why."
+          }
+        }
+      },
+      "KoDraftPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "openCount",
+          "likelyCount"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoDraft"
+            }
+          },
+          "likelyCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoExpense": {
+        "type": "object",
+        "required": [
+          "id",
+          "externalId",
+          "name",
+          "date",
+          "amountCents",
+          "ownShareCents",
+          "paidFor",
+          "excludeFromStatistics",
+          "updatedAt"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The FULL shared amount — what left somebody's account."
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Set when the expense vanished from KitchenOwl. Kept rather than deleted,\nbecause the row may carry a link the user confirmed by hand."
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "excludeFromStatistics": {
+            "type": "boolean"
+          },
+          "externalId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linkedBookingAmountCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "linkedBookingComment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linkedBookingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The user's slice of it. These two are the most confusable pair of numbers in\nthe feature and are never summed with each other or with a booking."
+          },
+          "paidById": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "paidByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paidFor": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoShare"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "KoExpensePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "sumAmountCents",
+          "sumOwnShareCents",
+          "linkedCount"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoExpense"
+            }
+          },
+          "linkedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sumAmountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sums for the current filter. Both are reported, always, because showing only\none of them is how the two get confused."
+          },
+          "sumOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoLinkRequest": {
+        "type": "object",
+        "required": [
+          "bookingId"
+        ],
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "KoMatchCandidate": {
+        "type": "object",
+        "required": [
+          "bookingId",
+          "comment",
+          "amountCents",
+          "year",
+          "month",
+          "monthName",
+          "score",
+          "basis"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "basis": {
+            "type": "string",
+            "description": "`fullAmount` | `ownShare` | `fullAmountNear` | `ownShareNear` — so the UI can\nsay why rather than showing a bare number."
+          },
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "KoMember": {
+        "type": "object",
+        "required": [
+          "memberId",
+          "name",
+          "balanceCents",
+          "isMe",
+          "isOwner",
+          "isAdmin",
+          "fetchedAt"
+        ],
+        "properties": {
+          "balanceCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "From `member[].expense_balance`, the only balance KitchenOwl exposes.\nNegative means the user owes the household."
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "isMe": {
+            "type": "boolean"
+          },
+          "isOwner": {
+            "type": "boolean"
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "KoMetadata": {
+        "type": "object",
+        "required": [
+          "members",
+          "categories",
+          "stale"
+        ],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoCategory"
+            }
+          },
+          "fetchedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoMember"
+            }
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "Older than `KITCHENOWL_METADATA_STALE_SECONDS`. Served anyway: a push\ndialogue that will not open because KitchenOwl is down is worse than one\nthat opens with yesterday's member list and says so."
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "KoPushIntent": {
+        "type": "object",
+        "required": [
+          "bookingId",
+          "state",
+          "amountCents",
+          "date",
+          "name",
+          "marker",
+          "attempts",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bookingComment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "externalId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kept in every state. A queue item that failed silently is a booking the user\nbelieves is in KitchenOwl and is not."
+          },
+          "marker": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "`queued` | `sending` | `pushed` | `failed` | `abandoned` | `retracted`."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "KoPushRequest": {
+        "type": "object",
+        "properties": {
+          "amountCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Defaults to the booking's own amount, untouched."
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "KitchenOwl's own taxonomy. Never derived from the app's category."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Defaults to the booking's comment."
+          },
+          "paidById": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "paidFor": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoPushShareInput"
+            }
+          }
+        }
+      },
+      "KoPushShareInput": {
+        "type": "object",
+        "required": [
+          "memberId"
+        ],
+        "properties": {
+          "factor": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Integer weight. `1` each is an even split; `{12, 7}` occurs in the real data."
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoShare": {
+        "type": "object",
+        "required": [
+          "memberId",
+          "factor",
+          "shareCents"
+        ],
+        "properties": {
+          "factor": {
+            "type": "integer",
+            "format": "int64",
+            "description": "An integer WEIGHT, not a percentage: the share is\n`amount * factor / sum(factors)`, allocated by largest remainder so the\nshares sum to the amount exactly."
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shareCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoStatus": {
+        "type": "object",
+        "required": [
+          "configured",
+          "enabled",
+          "running",
+          "pollSeconds",
+          "mirroredCount",
+          "archivedCount",
+          "linkedCount",
+          "openDraftCount",
+          "likelyDuplicateCount",
+          "pendingPushCount",
+          "failedPushCount",
+          "metadataStale"
+        ],
+        "properties": {
+          "archivedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "configured": {
+            "type": "boolean",
+            "description": "The server has a URL and a token."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "This account opted in by running a sync at least once. The credentials are\nprocess-global, so mirroring into every account would copy one household\ninto other people's books."
+          },
+          "failedPushCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "householdId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "householdName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastExpenseRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoSyncRun"
+              }
+            ]
+          },
+          "lastMetadataRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoSyncRun"
+              }
+            ]
+          },
+          "likelyDuplicateCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "linkedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "metadataFetchedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "metadataStale": {
+            "type": "boolean"
+          },
+          "mirroredCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "nextRunAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "openDraftCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pendingPushCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pollSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`0` means the periodic pull is disabled and only \"jetzt synchronisieren\"\nmoves anything.",
+            "minimum": 0
+          },
+          "reachable": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Derived from the last sync run, never from a live probe — this endpoint must\nnot block on HTTP."
+          },
+          "running": {
+            "type": "boolean"
+          }
+        }
+      },
+      "KoSummary": {
+        "type": "object",
+        "description": "The dashboard widget. Reads the **local mirror only** and never blocks on HTTP,\nso KitchenOwl being down costs a staleness warning rather than a spinner.",
+        "required": [
+          "configured",
+          "enabled",
+          "members",
+          "recent",
+          "month",
+          "monthAmountCents",
+          "monthOwnShareCents",
+          "monthCount",
+          "stale"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "householdName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastSyncedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoMember"
+            }
+          },
+          "month": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "monthAmountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The household's spend this month, and the user's share of it. Two figures,\nalways both, never added to anything from the personal ledger."
+          },
+          "monthCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "myBalanceCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoExpense"
+            }
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "KoSyncResult": {
+        "type": "object",
+        "required": [
+          "started"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when the run could not finish. The rest of the app keeps working."
+          },
+          "expenses": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoSyncRun"
+              }
+            ]
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoSyncRun"
+              }
+            ]
+          },
+          "started": {
+            "type": "boolean"
+          }
+        }
+      },
+      "KoSyncRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "startedAt",
+          "createdCount",
+          "updatedCount",
+          "archivedCount",
+          "failedCount"
+        ],
+        "properties": {
+          "archivedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "finishedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "MaterializeRequest": {
+        "type": "object",
+        "required": [
+          "year",
+          "month"
+        ],
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "templateIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Restricts the run to a subset — the month checklist's individual ticks.\nOmitted means every template due in that month."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MaterializeResult": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "monthName",
+          "created",
+          "skipped",
+          "drafts",
+          "dryRun",
+          "items"
+        ],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "drafts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterializedItem"
+            }
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MaterializedItem": {
+        "type": "object",
+        "required": [
+          "templateId",
+          "templateName",
+          "comment",
+          "amountCents",
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "skippedReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when nothing was created. `alreadyBooked` is the normal, expected case."
+          },
+          "status": {
+            "type": "string",
+            "description": "`draft` for estimate templates, `confirmed` otherwise."
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "templateName": {
+            "type": "string"
+          }
+        }
+      },
+      "MonthBlockInfo": {
+        "type": "object",
+        "required": [
+          "index",
+          "year",
+          "month",
+          "rowCount",
+          "labelSource",
+          "computedCents"
+        ],
+        "properties": {
+          "computedCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Non-zero when the block's own saldo marker disagrees with its rows. Recorded,\nnever silently adjusted."
+          },
+          "index": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "labelSource": {
+            "type": "string"
+          },
+          "markerCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "rawLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rowCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MonthlyOverview": {
+        "type": "object",
+        "required": [
+          "year",
+          "months",
+          "total"
+        ],
+        "properties": {
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyRow"
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/MonthlyRow"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MonthlyRow": {
+        "type": "object",
+        "required": [
+          "month",
+          "monthName",
+          "incomeCents",
+          "expenseCents",
+          "balanceCents",
+          "fixedCostsNetCents",
+          "variableCostsNetCents",
+          "savingsNetCents",
+          "otherNetCents",
+          "bookingCount",
+          "uncategorizedCount"
+        ],
+        "properties": {
+          "balanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cumulativeCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`null` for months with no bookings — the sheet's `NA()`. Zero-filling would\ndraw a cliff in the cumulative chart that does not exist."
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fixedCostsNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "otherNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "savingsNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "savingsRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "variableCostsNetCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PasswordRequest": {
+        "type": "object",
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        }
+      },
+      "Period": {
+        "type": "object",
+        "description": "A year/month pair on the wire. `period_ord` is an internal encoding —\n`year*12 + month - 1` — and leaking it into the API would force every client to\nreimplement the arithmetic to show a month name.",
+        "required": [
+          "year",
+          "month"
+        ],
+        "properties": {
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "contentType",
+          "byteSize",
+          "sha256",
+          "uploadedAt"
+        ],
+        "properties": {
+          "bookingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "byteSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string",
+            "description": "The user's own filename, kept as metadata only. It is never a path component."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RecurringTemplate": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "comment",
+          "kind",
+          "amountCents",
+          "amountIsEstimate",
+          "taxRelevant",
+          "intervalMonths",
+          "anchor",
+          "activeFrom",
+          "active",
+          "sortOrder",
+          "bookingCount"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "activeFrom": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "activeTo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Period"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amountIsEstimate": {
+            "type": "boolean",
+            "description": "The amount varies month to month (the gym is 29,00 / 31,50 / 34,50), so\nmaterialising must produce a **draft** the user confirms with the real figure."
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/Period",
+            "description": "The month the cycle is measured from; due months are `anchor + n*interval`."
+          },
+          "bookedInPeriod": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "dayOfMonth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "dueInPeriod": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the template falls due in the period the request asked about, and\nwhether a booking for it already exists there. Both are `null` when the\nrequest named no period."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "intervalMonths": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 = monthly, 3 = quarterly, 12 = annual.",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "lastBooked": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Period"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RecurringTemplateInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "comment",
+          "kind",
+          "amountCents",
+          "activeFrom"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "activeFrom": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "activeTo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Period"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amountIsEstimate": {
+            "type": "boolean"
+          },
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Period",
+                "description": "Defaults to `active_from`, which is what makes a plain monthly template a\ntwo-field affair."
+              }
+            ]
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "A manual override, exactly as on a booking. Omit to let the rule table decide\nat materialisation time, so a rule change still reaches future bookings."
+          },
+          "comment": {
+            "type": "string"
+          },
+          "dayOfMonth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "intervalMonths": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookingKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taxRelevant": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Resolution": {
+        "type": "object",
+        "required": [
+          "itemId"
+        ],
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "createRule": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "skip": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ResolveRequest": {
+        "type": "object",
+        "required": [
+          "resolutions"
+        ],
+        "properties": {
+          "resolutions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Resolution"
+            }
+          }
+        }
+      },
+      "ResolveResult": {
+        "type": "object",
+        "required": [
+          "resolved",
+          "skipped",
+          "rulesCreated",
+          "remainingOpen"
+        ],
+        "properties": {
+          "remainingOpen": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "resolved": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rulesCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RestoreResult": {
+        "type": "object",
+        "required": [
+          "categoriesCreated",
+          "rulesCreated",
+          "yearsCreated",
+          "templatesCreated",
+          "bookingsCreated",
+          "ruleLinksDowngraded",
+          "warnings"
+        ],
+        "properties": {
+          "bookingsCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoriesCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ruleLinksDowngraded": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bookings whose export said `rule` but whose rule is absent from the document.\nThey are restored as manual overrides so the figure never moves; the count\nmakes that visible instead of silent."
+          },
+          "rulesCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "templatesCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "yearsCreated": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Rule": {
+        "type": "object",
+        "required": [
+          "id",
+          "comment",
+          "normalizedComment",
+          "source",
+          "matchCount"
+        ],
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kindOverride": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind",
+                "description": "How `to ING` and `from Volksbank` become transfers: an ordinary editable rule,\nnot a hard-coded list."
+              }
+            ]
+          },
+          "matchCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "normalizedComment": {
+            "type": "string",
+            "description": "`lower(trim(comment))` — what matching actually compares."
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "RuleInput": {
+        "type": "object",
+        "required": [
+          "comment"
+        ],
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "kindOverride": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind"
+              }
+            ]
+          }
+        }
+      },
+      "SetupRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "displayName",
+          "password"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "SetupStatus": {
+        "type": "object",
+        "required": [
+          "setupRequired",
+          "provider",
+          "registrationOpen"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Which provider the login page should render for. Lets the frontend stay\nignorant of whether local auth or OIDC is configured."
+          },
+          "registrationOpen": {
+            "type": "boolean"
+          },
+          "setupRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "TaxCategorySummary": {
+        "type": "object",
+        "required": [
+          "categoryName",
+          "expenseCents",
+          "incomeCents",
+          "netCents",
+          "count"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TaxEntry": {
+        "type": "object",
+        "required": [
+          "bookingId",
+          "index",
+          "month",
+          "monthName",
+          "comment",
+          "incomeCents",
+          "expenseCents",
+          "hasReceipt"
+        ],
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hasReceipt": {
+            "type": "boolean"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "index": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          }
+        }
+      },
+      "TaxReport": {
+        "type": "object",
+        "required": [
+          "year",
+          "totalExpenseCents",
+          "totalIncomeCents",
+          "totalNetCents",
+          "bookingCount",
+          "receiptsPresent",
+          "entries",
+          "byCategory"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "byCategory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaxCategorySummary"
+            }
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaxEntry"
+            }
+          },
+          "receiptsPresent": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalExpenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalIncomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "displayName",
+          "isAdmin"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "Year": {
+        "type": "object",
+        "required": [
+          "year",
+          "openingBalanceCents",
+          "openingSource",
+          "locked",
+          "bookingCount",
+          "incomeCents",
+          "expenseCents",
+          "balanceCents",
+          "closingBalanceCents"
+        ],
+        "properties": {
+          "balanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "carryoverGapCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "closingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "openingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "openingSource": {
+            "type": "string",
+            "description": "`configured` for 2026 (40.000,00 entered by hand) versus `derived` from the\nprevious year's close."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "YearInput": {
+        "type": "object",
+        "required": [
+          "year",
+          "openingBalanceCents"
+        ],
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          },
+          "openingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "YearTotals": {
+        "type": "object",
+        "required": [
+          "year",
+          "months",
+          "incomeCents",
+          "expenseCents",
+          "balanceCents",
+          "bookingCount"
+        ],
+        "properties": {
+          "balanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "months": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "Liveness und Readiness"
+    },
+    {
+      "name": "auth",
+      "description": "Anmeldung und Ersteinrichtung"
+    },
+    {
+      "name": "admin",
+      "description": "Kontenverwaltung"
+    },
+    {
+      "name": "bookings",
+      "description": "Das persönliche Journal"
+    },
+    {
+      "name": "receipts",
+      "description": "Belege, auf der Platte statt in der Datenbank"
+    },
+    {
+      "name": "categories",
+      "description": "Die 32 Kategorien und ihre fünf Typen"
+    },
+    {
+      "name": "rules",
+      "description": "Kommentar → Kategorie, rückwirkend"
+    },
+    {
+      "name": "analysis",
+      "description": "Auswertungen, durchgehend netto"
+    },
+    {
+      "name": "tax",
+      "description": "Steuerliste und ihre Exporte"
+    },
+    {
+      "name": "exports",
+      "description": "Sicherung und Wiederherstellung"
+    },
+    {
+      "name": "recurring",
+      "description": "Vorlagen und ihre Monatsliste"
+    },
+    {
+      "name": "imports",
+      "description": "Tabellenimport mit Vorschau und Prüfliste"
+    },
+    {
+      "name": "years",
+      "description": "Geschäftsjahre und Vorträge"
+    },
+    {
+      "name": "kitchenowl",
+      "description": "Das getrennte, parallele Journal"
+    }
+  ]
+}

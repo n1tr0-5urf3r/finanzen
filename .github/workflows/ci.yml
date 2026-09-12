@@ -42,6 +42,18 @@ jobs:
       - run: cargo test --locked
         env:
           TEST_DATABASE_URL: postgres://finanzen:finanzen@localhost:5432/finanzen
+      # openapi.json is committed, so every contract change arrives as a reviewable
+      # diff instead of as a surprise for whoever wrote the client. Two tests already
+      # pin the document against a hardcoded (method, path) contract and against the
+      # real router; this is the third gate, and the only one that catches a
+      # regenerated document nobody committed.
+      - name: OpenAPI document is up to date
+        run: |
+          cargo run --locked --bin openapi-export > openapi.json
+          jq -e '.paths | length > 0' openapi.json > /dev/null
+          git diff --exit-code -- openapi.json \
+            || { echo "::error::openapi.json ist veraltet — 'cargo run --bin openapi-export > openapi.json' und mitcommitten"; exit 1; }
+
       - run: cargo build --release --locked
 
   frontend:

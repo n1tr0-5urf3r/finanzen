@@ -119,6 +119,16 @@ fn requested_period(q: &TemplateQuery) -> Result<Option<i32>> {
     }
 }
 
+/// Deleting a template leaves the bookings it already produced alone —
+/// `bookings.template_id` is `ON DELETE SET NULL`. Money that has been spent does not
+/// disappear because the plan for it was cancelled.
+#[utoipa::path(
+    get,
+    path = "/api/v1/recurring",
+    tag = "recurring",
+    params(("year" = Option<i32>, Query, description = "Bezugsjahr für fällig/gebucht"), ("month" = Option<u8>, Query, description = "Bezugsmonat")),
+    responses((status = 200, description = "Vorlagen mit Fälligkeit im gefragten Monat", body = Vec<RecurringTemplate>)),
+)]
 pub async fn list(
     mut ctx: Ctx,
     Query(q): Query<TemplateQuery>,
@@ -185,6 +195,13 @@ fn validate(body: &RecurringTemplateInput) -> Result<Period> {
     Ok(body.anchor.unwrap_or(body.active_from))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/recurring",
+    tag = "recurring",
+    request_body = RecurringTemplateInput,
+    responses((status = 201, description = "Vorlage angelegt", body = RecurringTemplate)),
+)]
 pub async fn create(
     mut ctx: Ctx,
     Json(body): Json<RecurringTemplateInput>,
@@ -223,6 +240,14 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(out)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/recurring/{id}",
+    tag = "recurring",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = RecurringTemplateInput,
+    responses((status = 200, description = "Vorlage gespeichert", body = RecurringTemplate), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn update(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -264,9 +289,13 @@ pub async fn update(
     Ok(Json(out))
 }
 
-/// Deleting a template leaves the bookings it already produced alone —
-/// `bookings.template_id` is `ON DELETE SET NULL`. Money that has been spent does not
-/// disappear because the plan for it was cancelled.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/recurring/{id}",
+    tag = "recurring",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Gelöscht; gebuchte Posten bleiben")),
+)]
 pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     let affected = sqlx::query("DELETE FROM recurring_templates WHERE id = $1")
         .bind(id)
@@ -304,6 +333,13 @@ fn booking_date(year: i32, month: u8, day: Option<u8>) -> Option<NaiveDate> {
 /// unique index. **The index predicate has to be repeated in the conflict target** —
 /// without `WHERE template_id IS NOT NULL` Postgres cannot infer a partial index and
 /// raises 42P10, which is exactly the trap the importer hit.
+#[utoipa::path(
+    post,
+    path = "/api/v1/recurring/materialize",
+    tag = "recurring",
+    request_body = MaterializeRequest,
+    responses((status = 200, description = "Was angelegt und was übersprungen wurde", body = MaterializeResult)),
+)]
 pub async fn materialize(
     mut ctx: Ctx,
     Json(body): Json<MaterializeRequest>,

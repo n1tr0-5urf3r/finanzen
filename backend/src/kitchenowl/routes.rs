@@ -110,6 +110,17 @@ fn run_to_dto(run: mirror::LastRun) -> KoSyncRun {
 
 // ------------------------------------------------------------------ status
 
+/// Members and categories for the push dialogue.
+///
+/// **Served stale with a warning rather than withheld.** The dialogue must open when
+/// KitchenOwl is down, because the whole point of the outbox is that the user can
+/// queue a push during an outage.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/status",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Konfiguration, Erreichbarkeit, letzter und nächster Lauf, offene Posten", body = KoStatus)),
+)]
 pub async fn status(State(state): State<AppState>, mut ctx: Ctx) -> Result<Json<KoStatus>> {
     let conn = ctx.tenant.conn();
     let enabled = mirror::is_enabled(conn).await?;
@@ -205,6 +216,12 @@ fn is_stale(fetched_at: Option<chrono::DateTime<Utc>>, stale_seconds: i64) -> bo
 
 // ----------------------------------------------------------------- summary
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/summary",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Aus dem lokalen Spiegel; blockiert nie auf HTTP", body = KoSummary)),
+)]
 pub async fn summary(State(state): State<AppState>, mut ctx: Ctx) -> Result<Json<KoSummary>> {
     let conn = ctx.tenant.conn();
     let enabled = mirror::is_enabled(&mut *conn).await?;
@@ -310,11 +327,12 @@ async fn load_members(conn: &mut PgConnection) -> Result<Vec<KoMember>> {
 
 // ---------------------------------------------------------------- metadata
 
-/// Members and categories for the push dialogue.
-///
-/// **Served stale with a warning rather than withheld.** The dialogue must open when
-/// KitchenOwl is down, because the whole point of the outbox is that the user can
-/// queue a push during an outage.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/metadata",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Mitglieder und Kategorien; veraltet mit Hinweis statt gar nicht", body = KoMetadata)),
+)]
 pub async fn metadata(State(state): State<AppState>, mut ctx: Ctx) -> Result<Json<KoMetadata>> {
     let conn = ctx.tenant.conn();
     let members = load_members(&mut *conn).await?;
@@ -368,6 +386,12 @@ pub async fn metadata(State(state): State<AppState>, mut ctx: Ctx) -> Result<Jso
 /// Runs a sync now, synchronously, so the button gives an answer rather than a
 /// promise. Concurrent clicks are absorbed by the same `AtomicBool` the periodic
 /// loop uses, so two users pressing it twice cannot run two scans at once.
+#[utoipa::path(
+    post,
+    path = "/api/v1/kitchenowl/sync",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Lauf beendet", body = KoSyncResult), (status = 202, description = "Ein Lauf war bereits aktiv", body = KoSyncResult), (status = 502, description = "KitchenOwl nicht erreichbar", body = crate::error::ErrorBody)),
+)]
 pub async fn sync_now(
     State(state): State<AppState>,
     mut ctx: Ctx,
@@ -483,6 +507,15 @@ fn expense_filter(q: &ExpenseQuery) -> (String, Vec<String>) {
     (clauses.join(" AND "), binds)
 }
 
+/// Confirms a link. **Creates no booking** — it records that an existing booking and
+/// a mirrored expense are the same purchase, and moves no figure in either ledger.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/expenses",
+    tag = "kitchenowl",
+    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("linked" = Option<bool>, Query, description = "Nur (nicht) verknüpfte"), ("search" = Option<String>, Query, description = "Name oder Beschreibung enthält"), ("includeArchived" = Option<bool>, Query, description = "Auch in KitchenOwl gelöschte"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..200, Standard 50")),
+    responses((status = 200, description = "Der Spiegel — Gesamtbetrag UND eigener Anteil, nie summiert", body = KoExpensePage)),
+)]
 pub async fn expenses(mut ctx: Ctx, Query(q): Query<ExpenseQuery>) -> Result<Json<KoExpensePage>> {
     let page = q.page.unwrap_or(0);
     let page_size = q.page_size.unwrap_or(50).clamp(1, 200);
@@ -540,6 +573,13 @@ pub struct DraftQuery {
     pub page_size: Option<u32>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/drafts",
+    tag = "kitchenowl",
+    params(("status" = Option<String>, Query, description = "Kommagetrennt; Standard: alles Unentschiedene"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..200, Standard 50")),
+    responses((status = 200, description = "Vorschlagsliste; „ohne Treffer“ ist der Normalfall", body = KoDraftPage)),
+)]
 pub async fn drafts(mut ctx: Ctx, Query(q): Query<DraftQuery>) -> Result<Json<KoDraftPage>> {
     let page = q.page.unwrap_or(0);
     let page_size = q.page_size.unwrap_or(50).clamp(1, 200);
@@ -618,8 +658,14 @@ pub async fn drafts(mut ctx: Ctx, Query(q): Query<DraftQuery>) -> Result<Json<Ko
     Ok(Json(out))
 }
 
-/// Confirms a link. **Creates no booking** — it records that an existing booking and
-/// a mirrored expense are the same purchase, and moves no figure in either ledger.
+#[utoipa::path(
+    post,
+    path = "/api/v1/kitchenowl/drafts/{id}/link",
+    tag = "kitchenowl",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = KoLinkRequest,
+    responses((status = 200, description = "Verknüpft. Es wurde KEINE Buchung angelegt", body = KoDraft), (status = 409, description = "Buchung oder Ausgabe ist bereits verknüpft", body = crate::error::ErrorBody)),
+)]
 pub async fn link_draft(
     mut ctx: Ctx,
     Path(id): Path<Uuid>,
@@ -653,6 +699,13 @@ pub async fn link_draft(
 
 /// Dismisses a suggestion. An unlinked expense is the normal case, so this is an
 /// ordinary outcome and not a rejection of anything.
+#[utoipa::path(
+    post,
+    path = "/api/v1/kitchenowl/drafts/{id}/dismiss",
+    tag = "kitchenowl",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 200, description = "Vorschlag verworfen", body = KoDraft), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn dismiss_draft(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<KoDraft>> {
     let affected =
         sqlx::query("UPDATE ko_drafts SET status = 'discarded', resolved_at = now() WHERE id = $1")
@@ -701,6 +754,13 @@ async fn load_draft(ctx: &mut Ctx, id: Uuid) -> Result<KoDraft> {
 
 /// Removes a link. Reversible in both directions, which is the promise the product
 /// decision made: nothing about the two ledgers is permanent.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/kitchenowl/expenses/{id}/link",
+    tag = "kitchenowl",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Verknüpfung gelöst; keine Zahl bewegt sich"), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
 pub async fn unlink(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     if !link::detach(ctx.tenant.conn(), id).await? {
         return Err(AppError::NotFound("KitchenOwl-Ausgabe".into()));
@@ -713,6 +773,14 @@ pub async fn unlink(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
 
 /// Queues a push. Commits the intent **before** any HTTP and answers 202 even when
 /// KitchenOwl is unreachable.
+#[utoipa::path(
+    post,
+    path = "/api/v1/bookings/{id}/kitchenowl",
+    tag = "kitchenowl",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = KoPushRequest,
+    responses((status = 202, description = "Vorgemerkt — auch wenn KitchenOwl gerade nicht erreichbar ist", body = KoPushIntent), (status = 400, description = "Umbuchung, Entwurf oder unbekanntes Mitglied", body = crate::error::ErrorBody), (status = 409, description = "Buchung ist bereits verknüpft", body = crate::error::ErrorBody)),
+)]
 pub async fn push_booking(
     State(state): State<AppState>,
     mut ctx: Ctx,
@@ -755,6 +823,15 @@ pub async fn push_booking(
     Ok((StatusCode::ACCEPTED, Json(intent)))
 }
 
+/// Retries a failed or abandoned push. Safe by construction — the marker scan runs
+/// first — and the UI says so, because otherwise the user retries by hand in the
+/// KitchenOwl app and creates the duplicate this whole mechanism exists to avoid.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/push",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Die Warteschlange, jeder Posten mit seinem letzten Fehler", body = Vec<KoPushIntent>)),
+)]
 pub async fn push_list(mut ctx: Ctx) -> Result<Json<Vec<KoPushIntent>>> {
     let rows = sqlx::query(
         "SELECT i.booking_id, i.state, i.marker, i.payload, i.attempts, i.last_error, \
@@ -803,9 +880,13 @@ async fn load_intent(ctx: &mut Ctx, booking_id: Uuid) -> Result<KoPushIntent> {
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Push-Payload nicht lesbar")))
 }
 
-/// Retries a failed or abandoned push. Safe by construction — the marker scan runs
-/// first — and the UI says so, because otherwise the user retries by hand in the
-/// KitchenOwl app and creates the duplicate this whole mechanism exists to avoid.
+#[utoipa::path(
+    post,
+    path = "/api/v1/kitchenowl/push/{bookingId}/retry",
+    tag = "kitchenowl",
+    params(("bookingId" = Uuid, Path, description = "Buchungs-Id")),
+    responses((status = 200, description = "Erneut vorgemerkt; der Abgleich vor dem Senden verhindert Dubletten", body = KoPushIntent), (status = 409, description = "Wartet bereits oder ist übertragen", body = crate::error::ErrorBody)),
+)]
 pub async fn push_retry(
     State(state): State<AppState>,
     mut ctx: Ctx,
@@ -834,6 +915,13 @@ pub async fn push_retry(
 
 /// Withdraws a push that has not gone out yet. A pushed one cannot be withdrawn from
 /// here: deleting somebody else's household expense is not this app's decision.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/kitchenowl/push/{bookingId}",
+    tag = "kitchenowl",
+    params(("bookingId" = Uuid, Path, description = "Buchungs-Id")),
+    responses((status = 204, description = "Zurückgezogen"), (status = 409, description = "Nur wartende Aufträge lassen sich zurückziehen", body = crate::error::ErrorBody)),
+)]
 pub async fn push_retract(mut ctx: Ctx, Path(booking_id): Path<Uuid>) -> Result<StatusCode> {
     let affected = sqlx::query(
         "UPDATE ko_push_intents SET state = 'retracted', next_attempt_at = NULL, \
