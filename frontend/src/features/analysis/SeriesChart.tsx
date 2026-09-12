@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { ChartFrame } from '../../charts/ChartFrame';
 import { bands, niceTicks } from '../../charts/scales';
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
-import { Money } from '../../components/Money';
+import { FlowMoney } from '../../components/Money';
 import { Button, ErrorState, LoadingState } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { formatEuroCompact, monthShort } from '../../lib/format';
@@ -31,11 +31,51 @@ const RIGHT = 710;
  * spend on tanken, and is it getting worse" — which is what the spreadsheet's
  * Filter tab was for.
  */
+/** The table below scrolls the chart back into view when it changes it. */
+export const SERIES_ANCHOR = 'serie';
+
+const PARAM_MODE = 'serieTyp';
+const PARAM_SUBJECT = 'serieWert';
+
+/**
+ * Which series is charted, held in the URL rather than in component state.
+ *
+ * Two reasons: the category table below the chart drives the same selection, and
+ * lifting it into a shared parent would put the whole picker's state one level
+ * away from the picker; and a chart someone wants to show another person is then
+ * simply a link.
+ */
+export function useSeriesSelection() {
+  const [params, setParams] = useSearchParams();
+  const mode: 'comment' | 'category' =
+    params.get(PARAM_MODE) === 'kommentar' ? 'comment' : 'category';
+  const subject = params.get(PARAM_SUBJECT) ?? '';
+
+  const select = useCallback(
+    (nextMode: 'comment' | 'category', nextSubject: string) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set(PARAM_MODE, nextMode === 'comment' ? 'kommentar' : 'kategorie');
+          if (nextSubject) next.set(PARAM_SUBJECT, nextSubject);
+          else next.delete(PARAM_SUBJECT);
+          return next;
+        },
+        // Replace: picking a series is a filter, not a place. Twenty clicks
+        // should not mean twenty presses of the back button to leave the page.
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  return { mode, subject, select };
+}
+
 export function SeriesChart({ year, categories }: { year: number; categories: Category[] }) {
   const t = useT();
   const maskAmount = useMaskAmount();
-  const [mode, setMode] = useState<'comment' | 'category'>('category');
-  const [subject, setSubject] = useState<string>('');
+  const { mode, subject, select } = useSeriesSelection();
   const [showBookings, setShowBookings] = useState(false);
 
   const subjects = useQuery({
@@ -117,7 +157,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
   const zeroY = y(0);
 
   return (
-    <section className="panel panel--pad series">
+    <section className="panel panel--pad series" id={SERIES_ANCHOR}>
       <header className="series__header">
         <h2>{t('analysis.seriesTitle')}</h2>
         <p className="footnote">{t('analysis.seriesHint')}</p>
@@ -128,20 +168,14 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
           <button
             type="button"
             aria-pressed={mode === 'category'}
-            onClick={() => {
-              setMode('category');
-              setSubject('');
-            }}
+            onClick={() => select('category', '')}
           >
             {t('analysis.byCategory')}
           </button>
           <button
             type="button"
             aria-pressed={mode === 'comment'}
-            onClick={() => {
-              setMode('comment');
-              setSubject('');
-            }}
+            onClick={() => select('comment', '')}
           >
             {t('analysis.byComment')}
           </button>
@@ -155,7 +189,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
             id="series-subject"
             className="select"
             value={active}
-            onChange={(e) => setSubject(e.target.value)}
+            onChange={(e) => select(mode, e.target.value)}
           >
             {mode === 'comment'
               ? options.map((s) => (
@@ -177,11 +211,11 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
           <div className="series__stats">
             <div>
               <span className="kpi__label">{t('common.total')}</span>
-              <Money cents={series.data.netCents} basis="net" tone="auto" />
+              <FlowMoney netCents={series.data.netCents} />
             </div>
             <div>
               <span className="kpi__label">{t('analysis.perActiveMonth')}</span>
-              <Money cents={series.data.averagePerActiveMonthCents} basis="net" tone="auto" />
+              <FlowMoney netCents={series.data.averagePerActiveMonthCents} />
             </div>
             <div>
               <span className="kpi__label">{t('analysis.count')}</span>
@@ -240,7 +274,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
                           />
                         </td>
                         <td className="num">
-                          <Money cents={b.netCents} basis="net" tone="auto" />
+                          <FlowMoney netCents={b.netCents} />
                         </td>
                       </tr>
                     ))}
@@ -263,6 +297,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
           <ChartFrame
             title={`${series.data.subject} · ${year}`}
             columns={[t('bookings.net')]}
+            valueBasis="flow"
             note={t('analysis.seriesOrientation')}
             data={bars.months.map((m) => ({
               label: m.monthName,

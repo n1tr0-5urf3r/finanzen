@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react';
 
-import { Money } from '../components/Money';
+import { FlowMoney, Money } from '../components/Money';
 import { useT } from '../lib/i18n';
 import { useMaskAmount } from '../lib/privacy';
 
@@ -24,6 +24,7 @@ export function ChartFrame({
   note,
   columns,
   data,
+  valueBasis = 'net',
   height = 240,
   children,
 }: {
@@ -32,6 +33,12 @@ export function ChartFrame({
   /** Column headings for the data table, one per series. */
   columns: string[];
   data: ChartDatum[];
+  /**
+   * How the values are oriented. `flow` flips the stored expense-positive sign
+   * for display, so the table agrees with a chart whose bars point up for money
+   * in — a table that contradicts the picture above it is worse than no table.
+   */
+  valueBasis?: 'net' | 'flow';
   height?: number;
   children: ReactNode;
 }) {
@@ -74,7 +81,11 @@ export function ChartFrame({
                 <th scope="row">{row.label}</th>
                 {row.values.map((v, j) => (
                   <td key={j} className="num">
-                    <Money cents={v} basis="net" tone="auto" />
+                    {valueBasis === 'flow' ? (
+                      <FlowMoney netCents={v} />
+                    ) : (
+                      <Money cents={v} basis="net" tone="auto" />
+                    )}
                   </td>
                 ))}
               </tr>

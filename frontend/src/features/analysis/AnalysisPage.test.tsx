@@ -107,14 +107,51 @@ describe('the category analysis', () => {
    * category brought IN, and rendering it as a bare minus invites reading it as a
    * negative cost.
    */
-  it('marks a negative net as a credit and says so', async () => {
+  /**
+   * Money that came IN must not be printed with a minus. The stored convention is
+   * expenses minus income, so Gehalt is −22.000,00 in the database and would read
+   * as a loss in a column next to Miete — the one row that is unambiguously a
+   * gain. The display flips; the arithmetic does not.
+   */
+  it('shows a category that earned money as a gain, not as a negative cost', async () => {
     const { container } = renderPage();
     await screen.findAllByText('Gehalt');
 
     const gehalt = tableRows(container).find((r) => r.textContent?.includes('Gehalt'))!;
     expect(within(gehalt).getAllByText('Gutschrift').length).toBeGreaterThan(0);
-    const net = within(gehalt).getByText(/-22\.000,00/);
+
+    const net = within(gehalt).getByText(/^\+22\.000,00/);
     expect(net.className).toContain('money--credit');
+    expect(net.className).toContain('money--income');
+    expect(gehalt.textContent).not.toContain('-22.000,00');
+  });
+
+  /** ...and the other direction keeps its minus: that money left the account. */
+  it('shows a cost as money out', async () => {
+    const { container } = renderPage();
+    await screen.findAllByText('Miete');
+
+    const miete = tableRows(container).find((r) => r.textContent?.includes('Miete'))!;
+    const net = within(miete).getByText(/^-4\.800,00/);
+    expect(net.className).toContain('money--expense');
+  });
+
+  /**
+   * The chart and the table answer the same question at different resolutions, so
+   * the table is the natural way to aim the chart — clicking a row beats hunting
+   * the same name in a dropdown of thirty.
+   */
+  it('charts the category that was clicked in the table', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Lebensmittel');
+
+    api.mockClear();
+    await user.click(screen.getAllByTitle('Diese Kategorie im Diagramm zeigen')[1]);
+
+    const calls = api.mock.calls.map(([p]) => String(p));
+    expect(calls.some((p) => p.includes('/analysis/series?') && p.includes('categoryId=lebensmittel')))
+      .toBe(true);
   });
 
   it('explains the zero share of a credit instead of printing 0,00 %', async () => {

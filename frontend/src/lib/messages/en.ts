@@ -124,6 +124,7 @@ export const en: Messages = {
   'analysis.hideBookings': 'Hide bookings',
   'analysis.openInBookings': 'Open in bookings',
   'analysis.moreBookings': '{shown} of {total} bookings — show all',
+  'analysis.chartThis': 'Chart this category',
   'analysis.showBookings': 'Show {count} bookings',
   'analysis.seriesTitle': 'Month by month',
   'analysis.seriesHint': 'One comment or category across twelve months — tanken, say, to see whether it is getting worse.',

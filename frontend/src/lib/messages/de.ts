@@ -141,6 +141,7 @@ export const de = {
   'analysis.hideBookings': 'Buchungen ausblenden',
   'analysis.openInBookings': 'In Buchungen öffnen',
   'analysis.moreBookings': '{shown} von {total} Buchungen — alle ansehen',
+  'analysis.chartThis': 'Diese Kategorie im Diagramm zeigen',
   'analysis.showBookings': '{count} Buchungen ansehen',
   'analysis.seriesTitle': 'Verlauf je Monat',
   'analysis.seriesHint': 'Ein Kommentar oder eine Kategorie über zwölf Monate — etwa tanken, um zu sehen, ob es teurer wird.',

@@ -3,14 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
-import { Money, NetBreakdown, ScopeNote } from '../../components/Money';
+import { FlowMoney, Money, NetBreakdown, ScopeNote } from '../../components/Money';
 import { Banner, EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
 import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
-import { SeriesChart } from './SeriesChart';
+import { SeriesChart, SERIES_ANCHOR, useSeriesSelection } from './SeriesChart';
 import type { MessageKey } from '../../lib/messages/de';
 import type { Category, CategoryAnalysis, CategoryAnalysisRow } from '../../lib/types';
 
@@ -72,6 +72,18 @@ export function AnalysisPage() {
   }
 
   const anyCredit = rows.some((r) => r.netIsNegative);
+
+  // Clicking a category in the table charts it. The chart sits above the table,
+  // so a click at row 25 would otherwise change something the user cannot see.
+  const { mode: seriesMode, subject: seriesSubject, select: selectSeries } = useSeriesSelection();
+  function chartCategory(categoryId: string) {
+    selectSeries('category', categoryId);
+    // Optional call: jsdom has no scrollIntoView, and a missing scroll must not
+    // take the selection down with it.
+    document.getElementById(SERIES_ANCHOR)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }
+  const charted = (categoryId: string | null) =>
+    seriesMode === 'category' && categoryId !== null && categoryId === seriesSubject;
 
   return (
     <>
@@ -160,13 +172,32 @@ export function AnalysisPage() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.categoryId ?? row.categoryName}>
+                  <tr
+                    key={row.categoryId ?? row.categoryName}
+                    className={charted(row.categoryId) ? 'is-charted' : undefined}
+                  >
                     <th scope="row">
-                      <CategoryChip
-                        name={row.categoryName}
-                        typeLabel={row.categoryType}
-                        fallback={t('bookings.sourceNone')}
-                      />
+                      {row.categoryId ? (
+                        <button
+                          type="button"
+                          className="linkish"
+                          aria-pressed={charted(row.categoryId)}
+                          title={t('analysis.chartThis')}
+                          onClick={() => chartCategory(row.categoryId as string)}
+                        >
+                          <CategoryChip
+                            name={row.categoryName}
+                            typeLabel={row.categoryType}
+                            fallback={t('bookings.sourceNone')}
+                          />
+                        </button>
+                      ) : (
+                        <CategoryChip
+                          name={row.categoryName}
+                          typeLabel={row.categoryType}
+                          fallback={t('bookings.sourceNone')}
+                        />
+                      )}
                       {row.incomeCents > 0 && (
                         <StatusPill tone="info">{t('money.containsRefunds')}</StatusPill>
                       )}
@@ -202,7 +233,7 @@ export function AnalysisPage() {
                       )}
                     </td>
                     <td className="num">
-                      <Money cents={row.averagePerMonthCents} basis="net" tone="auto" />
+                      <FlowMoney netCents={row.averagePerMonthCents} />
                     </td>
                     <td className="num">{row.bookingCount}</td>
                     {row.monthlyNetCents.map((cents, i) => (
@@ -210,7 +241,7 @@ export function AnalysisPage() {
                         {cents === 0 ? (
                           <span className="money money--empty">–</span>
                         ) : (
-                          <Money cents={cents} basis="net" tone="auto" />
+                          <FlowMoney netCents={cents} />
                         )}
                       </td>
                     ))}
@@ -228,18 +259,14 @@ export function AnalysisPage() {
                     <Money cents={rows.reduce((s, r) => s + r.expenseCents, 0)} tone="expense" />
                   </td>
                   <td className="num">
-                    <Money cents={query.data.totalNetCents} basis="net" tone="auto" />
+                    <FlowMoney netCents={query.data.totalNetCents} />
                   </td>
                   <td />
                   <td />
                   <td className="num">{rows.reduce((s, r) => s + r.bookingCount, 0)}</td>
                   {Array.from({ length: 12 }, (_, i) => (
                     <td key={i} className="num">
-                      <Money
-                        cents={rows.reduce((s, r) => s + (r.monthlyNetCents[i] ?? 0), 0)}
-                        basis="net"
-                        tone="auto"
-                      />
+                      <FlowMoney netCents={rows.reduce((s, r) => s + (r.monthlyNetCents[i] ?? 0), 0)} />
                     </td>
                   ))}
                 </tr>
@@ -252,11 +279,27 @@ export function AnalysisPage() {
               <article key={row.categoryId ?? row.categoryName} className="mcard">
                 <header>
                   <strong>
-                    <CategoryChip
-                      name={row.categoryName}
-                      typeLabel={row.categoryType}
-                      fallback={t('bookings.sourceNone')}
-                    />
+                    {row.categoryId ? (
+                      <button
+                        type="button"
+                        className="linkish"
+                        aria-pressed={charted(row.categoryId)}
+                        title={t('analysis.chartThis')}
+                        onClick={() => chartCategory(row.categoryId as string)}
+                      >
+                        <CategoryChip
+                          name={row.categoryName}
+                          typeLabel={row.categoryType}
+                          fallback={t('bookings.sourceNone')}
+                        />
+                      </button>
+                    ) : (
+                      <CategoryChip
+                        name={row.categoryName}
+                        typeLabel={row.categoryType}
+                        fallback={t('bookings.sourceNone')}
+                      />
+                    )}
                   </strong>
                   <span className="kpi__scope">
                     {row.bookingCount} {t('analysis.count')}
@@ -286,13 +329,13 @@ export function AnalysisPage() {
                   <div>
                     <dt>{t('bookings.net')}</dt>
                     <dd>
-                      <Money cents={row.netCents} basis="net" tone="auto" />
+                      <FlowMoney netCents={row.netCents} />
                     </dd>
                   </div>
                   <div>
                     <dt>{t('analysis.perMonth')}</dt>
                     <dd>
-                      <Money cents={row.averagePerMonthCents} basis="net" tone="auto" />
+                      <FlowMoney netCents={row.averagePerMonthCents} />
                     </dd>
                   </div>
                   <div>

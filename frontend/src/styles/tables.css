@@ -1,0 +1,4 @@
+
+/* The row whose category is currently charted. */
+.data-table tr.is-charted > * { background: var(--surface-2); }
+.data-table tr.is-charted th[scope='row'] { box-shadow: inset 3px 0 0 var(--primary); }

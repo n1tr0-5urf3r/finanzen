@@ -92,3 +92,14 @@
   border-color: var(--line);
   color: var(--ink);
 }
+
+/* A control that carries a data label: the label keeps its own styling and the
+   button adds only the affordance, so a category chip reads the same whether it
+   is clickable or not. */
+.linkish {
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left;
+  cursor: pointer; border-radius: var(--r-sm);
+}
+.linkish:hover { text-decoration: underline; text-underline-offset: 2px; }
+.linkish:focus-visible { outline: 2px solid var(--cyan-500); outline-offset: 2px; }

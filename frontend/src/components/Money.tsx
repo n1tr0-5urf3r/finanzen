@@ -31,6 +31,8 @@ interface MoneyProps {
   cents: number | null | undefined;
   basis?: Basis;
   tone?: BookingKind | 'credit' | 'auto';
+  /** Force an explicit +/− while keeping the basis marker. See `FlowMoney`. */
+  signed?: boolean;
   className?: string;
 }
 
@@ -42,7 +44,7 @@ interface MoneyProps {
  * site remembering it, and it is why a screen reader hears "4.800,00 Euro netto"
  * where a sighted user sees the superscript marker.
  */
-export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
+export function Money({ cents, basis = 'gross', tone, signed, className }: MoneyProps) {
   const t = useT();
   const { hidden } = usePrivacy();
   if (cents === null || cents === undefined) {
@@ -58,7 +60,9 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
   // Privacy mode replaces the figure and its accessible name, and nothing else:
   // the tone, the credit styling and the netto marker all describe what KIND of
   // number this is, which is the part that stays useful with the amount gone.
-  const text = hidden ? MASKED_AMOUNT : formatEuro(cents, { showSign: basis === 'signed' });
+  const text = hidden
+    ? MASKED_AMOUNT
+    : formatEuro(cents, { showSign: signed || basis === 'signed' });
   const basisWord = t(`money.basis.${basis}` as const);
   const marker = MARKERS[basis];
 
@@ -88,6 +92,43 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
         </abbr>
       )}
     </span>
+  );
+}
+
+/**
+ * The same net figure, oriented the way a bank statement orients it: POSITIVE
+ * means money came in, negative means it went out.
+ *
+ * The stored convention is the opposite — `net_cents` is expenses minus income,
+ * so a category that earned money is negative. That is right for "what did Miete
+ * cost me" and actively misleading as soon as income categories sit in the same
+ * column: Gehalt reading −22.000,00 says "lost" to every reader, when it is the
+ * one row that is unambiguously a gain.
+ *
+ * So the arithmetic keeps its sign and the DISPLAY flips it, in one place. The
+ * tone is taken from the stored value, not the flipped one, so the colour still
+ * says income or expense rather than following the minus sign around.
+ */
+export function FlowMoney({
+  netCents,
+  className,
+}: {
+  netCents: number | null | undefined;
+  className?: string;
+}) {
+  if (netCents === null || netCents === undefined) return <Money cents={null} />;
+  // `money--credit` normally keys off a negative net; flipping the display would
+  // silently drop it from exactly the rows it exists for, so it is applied here
+  // from the stored sign.
+  const credit = netCents < 0;
+  return (
+    <Money
+      cents={-netCents}
+      basis="net"
+      signed
+      tone={credit ? 'income' : 'expense'}
+      className={[credit ? 'money--credit' : '', className ?? ''].filter(Boolean).join(' ')}
+    />
   );
 }
 
@@ -122,7 +163,7 @@ export function NetBreakdown({
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
       >
-        <Money cents={netCents} basis="net" tone="auto" />
+        <FlowMoney netCents={netCents} />
       </button>
       {open && (
         <span
@@ -138,17 +179,21 @@ export function NetBreakdown({
           }}
         >
           <span className="net-breakdown">
-            <span className="net-breakdown__row">
-              <span>{t('bookings.expense')}</span>
-              <Money cents={expenseCents} tone="expense" />
-            </span>
+            {/* Read as a flow, in the order money moves: what came in, what went
+                out, what is left. The signs add up on the page, which the old
+                "expense minus income" ordering only did if you knew the
+                convention. */}
             <span className="net-breakdown__row">
               <span>{t('bookings.income')}</span>
-              <Money cents={-incomeCents} basis="signed" tone="income" />
+              <Money cents={incomeCents} basis="signed" tone="income" />
+            </span>
+            <span className="net-breakdown__row">
+              <span>{t('bookings.expense')}</span>
+              <Money cents={-expenseCents} basis="signed" tone="expense" />
             </span>
             <span className="net-breakdown__row net-breakdown__row--total">
               <span>{t('bookings.net')}</span>
-              <Money cents={netCents} tone="auto" />
+              <FlowMoney netCents={netCents} />
             </span>
             {bookingCount !== undefined && (
               <span className="net-breakdown__note">
