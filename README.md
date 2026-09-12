@@ -29,6 +29,9 @@ of it exactly.
 - **Receipts** photographed straight from the phone camera and attached to a booking.
 - **Exports**: the tax list as CSV and a printable PDF, and the whole account as
   JSON (a restorable backup) or CSV.
+- **KitchenOwl** mirrored as a second, parallel ledger — browsable, with link
+  suggestions, a push queue and a read-only dashboard tile. Never summed with the
+  personal bookings.
 - **Multi-user** with local auth; the authenticator sits behind a trait so OIDC can
   be added without touching call sites.
 
@@ -75,6 +78,13 @@ TEST_DATABASE_URL=postgres://finanzen:finanzen@localhost:55432/finanzen cargo te
 # They are gitignored: they carry every booking amount and comment.
 cargo run --bin extract-fixtures -- \
   ../konten_2026_auswertung.xlsx ../konten.ods tests/fixtures
+
+# The KitchenOwl fixtures ARE committed: they are anonymised, not recorded. The real
+# household is shared, so the expense names are another person's spending. They keep
+# every structural property that matters and invent the rest. One #[ignore]d test
+# re-verifies the shapes against the live instance, read-only:
+set -a; . ../.env; set +a
+cargo test --test kitchenowl -- --ignored
 
 cd ../frontend && npm ci && npm run dev    # proxies /api to localhost:3100
 ```
@@ -137,8 +147,43 @@ The consumption rate divides real income by real consumption. The identity
 `savings_amount = balance + net(Sparen)` ties them together and is asserted.
 
 **KitchenOwl is a separate, parallel ledger.** Its expenses are mirrored locally and
-never summed with the personal bookings; pulled items land as drafts and are never
-auto-booked. The two ledgers will not fully reconcile, by design.
+never summed with the personal bookings; pulled items land in a review list and are
+never auto-booked. Matching is an optional, reversible **link** that creates no
+booking and moves no figure. The two ledgers will not fully reconcile, by design —
+an expense with no link is the normal case and is never framed as an outstanding
+task.
+
+That is not squeamishness. Where the two overlap, most shared purchases are already
+recorded at their **full** value, because that is what left the account. Booking a
+pulled expense automatically would double-post most of the groceries.
+
+Three things about KitchenOwl's API are worth knowing before touching
+`backend/src/kitchenowl/wire.rs`, which is the one module allowed to see its JSON:
+
+- Expense pages are ordered by **`date` descending, not by id**. A back-dated
+  expense entered today lands in the middle of the first page, so the pagination
+  cursor is the *last item in the returned order* and an id high-water-mark can
+  never be a stop condition. The pull is a complete scan each time, capped by
+  `KITCHENOWL_MAX_PULL_PAGES`; a capped scan reports `partial`, not success.
+- `category_id` is `null` when there is no category, and the nested `category`
+  object is absent entirely rather than null. A third of the corpus looks like that.
+- `paid_for[].factor` is an **integer weight**, not a percentage. Shares are
+  allocated by largest remainder so they sum to the amount exactly.
+
+Push is a transactional outbox: the intent is committed before any HTTP and the
+endpoint answers 202 with KitchenOwl down. Retrying is safe because a `#fin:` marker
+in the description lets an attempt recognise its own earlier work — after a timeout
+it scans for that marker instead of posting again.
+
+Participation is **per account**: the credentials are process-global, so an account
+takes part only after someone presses *jetzt synchronisieren* on it once.
+
+**`backend/openapi.json` is committed and CI fails on `git diff --exit-code`.**
+Regenerate it with `cargo run --bin openapi-export > openapi.json` whenever a
+handler's contract changes. Three tests guard it: the document must match a
+hardcoded `(method, path)` contract exactly (both directions, and in count), every
+documented path must be reachable on the real router, and the committed file must
+equal what the binary prints.
 
 ## Verified against the source data
 
