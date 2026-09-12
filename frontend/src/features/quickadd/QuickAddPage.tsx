@@ -12,6 +12,7 @@ import type { Booking, Category, CommentSummary, Rule } from '../../lib/types';
 import { CategorySheet } from './CategorySheet';
 import { CommentSheet } from './CommentSheet';
 import { useKeyboardBridge, usePrediction, useQuickAdd, useSuggestions } from './useQuickAdd';
+import { useMaskAmount } from '../../lib/privacy';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫'] as const;
 
@@ -244,6 +245,7 @@ function SuggestionTile({
  */
 function SavedToast({ booking, onDismiss }: { booking: Booking; onDismiss: () => void }) {
   const t = useT();
+  const maskAmount = useMaskAmount();
   const navigate = useNavigate();
   const unmatched = booking.categorySource === 'unresolved';
 
@@ -259,7 +261,7 @@ function SavedToast({ booking, onDismiss }: { booking: Booking; onDismiss: () =>
         <div>
           <div>
             {t('quick.saved', {
-              amount: formatEuro(booking.amountCents),
+              amount: maskAmount(formatEuro(booking.amountCents)),
               comment: booking.comment,
             })}
           </div>

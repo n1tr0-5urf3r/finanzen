@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react';
 
 import { formatEuro } from '../lib/format';
 import { useT } from '../lib/i18n';
+import { MASKED_AMOUNT, usePrivacy } from '../lib/privacy';
 import type { MessageKey } from '../lib/messages/de';
 import type { BookingKind } from '../lib/types';
 
@@ -43,6 +44,7 @@ interface MoneyProps {
  */
 export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
   const t = useT();
+  const { hidden } = usePrivacy();
   if (cents === null || cents === undefined) {
     return (
       <span className="money money--empty" aria-label={t('common.noValue')}>
@@ -53,7 +55,10 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
 
   const resolved = tone === 'auto' ? (cents < 0 ? 'income' : 'expense') : tone;
   const isCredit = basis === 'net' && cents < 0;
-  const text = formatEuro(cents, { showSign: basis === 'signed' });
+  // Privacy mode replaces the figure and its accessible name, and nothing else:
+  // the tone, the credit styling and the netto marker all describe what KIND of
+  // number this is, which is the part that stays useful with the amount gone.
+  const text = hidden ? MASKED_AMOUNT : formatEuro(cents, { showSign: basis === 'signed' });
   const basisWord = t(`money.basis.${basis}` as const);
   const marker = MARKERS[basis];
 
@@ -68,7 +73,13 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={basisWord ? `${text} ${basisWord}` : text}
+      aria-label={
+        hidden
+          ? t('privacy.hiddenValue')
+          : basisWord
+            ? `${text} ${basisWord}`
+            : text
+      }
     >
       {text}
       {marker && (

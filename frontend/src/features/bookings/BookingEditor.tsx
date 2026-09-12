@@ -8,6 +8,7 @@ import { formatEuro, MONTHS_DE, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterBookingChange, qk } from '../../lib/queryKeys';
 import type { Booking, BookingKind, Category } from '../../lib/types';
+import { useMaskedFieldClass } from '../../lib/privacy';
 
 /**
  * Editing one booking.
@@ -27,6 +28,7 @@ export function BookingEditor({
   onClose: () => void;
 }) {
   const t = useT();
+  const maskedField = useMaskedFieldClass();
   const client = useQueryClient();
 
   const [comment, setComment] = useState(booking.comment);
@@ -120,7 +122,7 @@ export function BookingEditor({
               <label htmlFor="be-amount">{t('bookings.amount')}</label>
               <input
                 id="be-amount"
-                className="input"
+                className={`input ${maskedField}`}
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

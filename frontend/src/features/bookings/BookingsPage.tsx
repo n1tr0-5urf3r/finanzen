@@ -23,9 +23,11 @@ import { BookingEditor } from './BookingEditor';
 import type { Booking, BookingPage, Category, KoStatus } from '../../lib/types';
 
 import { PushDialog } from '../kitchenowl/PushDialog';
+import { useMaskAmount } from '../../lib/privacy';
 
 export function BookingsPage() {
   const t = useT();
+  const maskAmount = useMaskAmount();
   const [params, setParams] = useSearchParams();
 
   const year = Number(params.get('jahr')) || new Date().getFullYear();
@@ -191,13 +193,13 @@ export function BookingsPage() {
           <p style={{ fontSize: '.85rem', color: 'var(--muted)', marginBottom: '.6rem' }}>
             {t('bookings.summary', {
               count: query.data.total,
-              income: formatEuro(query.data.sumIncomeCents),
-              expense: formatEuro(query.data.sumExpenseCents),
+              income: maskAmount(formatEuro(query.data.sumIncomeCents)),
+              expense: maskAmount(formatEuro(query.data.sumExpenseCents)),
               // The per-category convention is expense-positive, which is right
               // for "what did Miete cost me". Summed over a whole filter it is
               // the balance, and showing +9.000,00 gained as "-9.000,00" reads
               // as a loss — so the sign is flipped and shown explicitly here.
-              net: formatEuro(-query.data.sumNetCents, { showSign: true }),
+              net: maskAmount(formatEuro(-query.data.sumNetCents, { showSign: true })),
             })}
             {query.data.uncategorizedCount > 0 && (
               <>

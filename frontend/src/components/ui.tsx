@@ -3,6 +3,7 @@ import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
 
 import { errorMessage } from '../lib/api';
 import { useT } from '../lib/i18n';
+import { PrivacyToggle } from './PrivacyToggle';
 
 export function Button({
   variant = 'primary',
@@ -40,7 +41,13 @@ export function PageHeader({
         <h1 tabIndex={-1}>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </div>
-      {actions && <div className="page-header__actions">{actions}</div>}
+      {/* The privacy toggle rides in every header rather than living in Settings:
+          it is wanted at the moment someone else can see the screen, and one place
+          to reach it beats ten pages remembering to offer it. */}
+      <div className="page-header__actions">
+        {actions}
+        <PrivacyToggle />
+      </div>
     </header>
   );
 }

@@ -6,6 +6,7 @@ import { api, jsonBody } from '../../lib/api';
 import { MONTHS_DE, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import type { BookingKind, Category, Period, RecurringTemplate } from '../../lib/types';
+import { useMaskedFieldClass } from '../../lib/privacy';
 
 /**
  * Create or edit a template.
@@ -28,6 +29,7 @@ export function TemplateForm({
   onCancel: () => void;
 }) {
   const t = useT();
+  const maskedField = useMaskedFieldClass();
   const [name, setName] = useState(template?.name ?? '');
   const [comment, setComment] = useState(template?.comment ?? '');
   const [kind, setKind] = useState<BookingKind>(template?.kind ?? 'expense');
@@ -129,7 +131,7 @@ export function TemplateForm({
           <label htmlFor="tf-amount">{t('recurring.amount')}</label>
           <input
             id="tf-amount"
-            className="input"
+            className={`input ${maskedField}`}
             inputMode="decimal"
             required
             value={amount}

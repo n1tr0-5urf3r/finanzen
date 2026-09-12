@@ -10,6 +10,7 @@ import { Button, ErrorState, LoadingState } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { formatEuroCompact, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { useMaskAmount } from '../../lib/privacy';
 import { qk } from '../../lib/queryKeys';
 import type {
   Booking,
@@ -32,6 +33,7 @@ const RIGHT = 710;
  */
 export function SeriesChart({ year, categories }: { year: number; categories: Category[] }) {
   const t = useT();
+  const maskAmount = useMaskAmount();
   const [mode, setMode] = useState<'comment' | 'category'>('category');
   const [subject, setSubject] = useState<string>('');
   const [showBookings, setShowBookings] = useState(false);
@@ -272,7 +274,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
               <g key={tick}>
                 <line x1={LEFT} x2={RIGHT} y1={y(tick)} y2={y(tick)} className="chart__grid" />
                 <text x={LEFT - 8} y={y(tick) + 4} className="chart__tick" textAnchor="end">
-                  {formatEuroCompact(tick)}
+                  {maskAmount(formatEuroCompact(tick))}
                 </text>
               </g>
             ))}

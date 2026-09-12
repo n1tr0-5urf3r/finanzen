@@ -10,6 +10,7 @@ import { parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterKitchenOwlChange, qk } from '../../lib/queryKeys';
 import type { Booking, KoMetadata, KoPushIntent } from '../../lib/types';
+import { useMaskedFieldClass } from '../../lib/privacy';
 
 /**
  * KitchenOwl's own *add expense* form, mirrored.
@@ -39,6 +40,7 @@ export function PushDialog({
   onClose: (message?: string) => void;
 }) {
   const t = useT();
+  const maskedField = useMaskedFieldClass();
   const client = useQueryClient();
 
   const metadata = useQuery({
@@ -146,7 +148,7 @@ export function PushDialog({
                 <label htmlFor="ko-amount">{t('ko.pushAmount')}</label>
                 <input
                   id="ko-amount"
-                  className="input"
+                  className={`input ${maskedField}`}
                   inputMode="decimal"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}

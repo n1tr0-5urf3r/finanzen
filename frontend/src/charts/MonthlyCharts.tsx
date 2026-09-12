@@ -2,6 +2,7 @@ import { ChartFrame, Gridlines, type ChartDatum } from './ChartFrame';
 import { bands, linearScale, niceTicks } from './scales';
 import { DataLabel } from '../components/DataLabel';
 import { formatEuroCompact } from '../lib/format';
+import { useMaskAmount } from '../lib/privacy';
 import { useT } from '../lib/i18n';
 
 /**
@@ -196,6 +197,7 @@ export interface TypeSlice {
  */
 export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
   const t = useT();
+  const maskAmount = useMaskAmount();
   const rowHeight = 34;
   // "Variable Kosten" is the widest label in the set and the month charts' 58-unit
   // gutter cuts it in half. The viewBox is 720 units wide regardless of the
@@ -265,7 +267,7 @@ export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
           className="chart__tick"
           textAnchor="middle"
         >
-          {formatEuroCompact(tick)}
+          {maskAmount(formatEuroCompact(tick))}
         </text>
       ))}
     </ChartFrame>

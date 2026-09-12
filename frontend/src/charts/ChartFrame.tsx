@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react';
 
 import { Money } from '../components/Money';
 import { useT } from '../lib/i18n';
+import { useMaskAmount } from '../lib/privacy';
 
 export interface ChartDatum {
   /** Already a data string (a German month name) or UI chrome; the caller decides. */
@@ -100,6 +101,9 @@ export function Gridlines({
   right: number;
   format: (v: number) => string;
 }) {
+  // Every caller formats money here; a visible axis would give the scale away
+  // while the bars themselves only show proportion.
+  const mask = useMaskAmount();
   return (
     <g>
       {ticks.map((tick) => (
@@ -112,7 +116,7 @@ export function Gridlines({
             className={tick === 0 ? 'chart__baseline' : 'chart__grid'}
           />
           <text x={left - 6} y={y(tick) + 4} className="chart__tick" textAnchor="end">
-            {format(tick)}
+            {mask(format(tick))}
           </text>
         </g>
       ))}

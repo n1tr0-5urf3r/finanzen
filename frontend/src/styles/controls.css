@@ -79,3 +79,16 @@
 .pill--warn    { background: var(--warn-soft); color: var(--warn); }
 .pill--danger  { background: var(--danger-soft); color: var(--danger); }
 .pill--info    { background: var(--info-soft); color: var(--info); }
+
+/* Privacy mode. A masked figure is REPLACED (see components/Money), but an input
+   still has to be editable, so it is blurred instead and clears on focus: the
+   amount is unreadable over a shoulder and available to the person typing. */
+.input.is-masked:not(:focus) {
+  color: transparent;
+  text-shadow: 0 0 .5rem var(--ink);
+}
+.icon-button.is-active {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--ink);
+}

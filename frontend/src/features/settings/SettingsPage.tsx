@@ -22,6 +22,7 @@ import { invalidateAfterYearChange, qk } from '../../lib/queryKeys';
 import { useTheme, type ThemePreference } from '../../lib/theme';
 import type { MessageKey } from '../../lib/messages/de';
 import type { KoStatus, KoSyncResult, User, Year } from '../../lib/types';
+import { useMaskAmount, useMaskedFieldClass } from '../../lib/privacy';
 
 type Tab = 'jahre' | 'vorlagen' | 'kitchenowl' | 'export' | 'darstellung' | 'konto' | 'benutzer';
 
@@ -91,6 +92,8 @@ export function SettingsPage() {
  */
 function YearsSection() {
   const t = useT();
+  const maskAmount = useMaskAmount();
+  const maskedField = useMaskedFieldClass();
   const client = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
@@ -137,7 +140,7 @@ function YearsSection() {
         .map((y) => (
           <Banner key={y.year} tone="info">
             {y.year}: {t('settings.carryoverGapHint', {
-              amount: formatEuro(y.carryoverGapCents as number, { showSign: true }),
+              amount: maskAmount(formatEuro(y.carryoverGapCents as number, { showSign: true })),
             })}
           </Banner>
         ))}
@@ -228,7 +231,7 @@ function YearsSection() {
             <label htmlFor="year-opening">{t('settings.openingBalance')}</label>
             <input
               id="year-opening"
-              className="input"
+              className={`input ${maskedField}`}
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}

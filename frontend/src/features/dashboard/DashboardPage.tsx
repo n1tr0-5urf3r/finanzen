@@ -11,6 +11,7 @@ import { qk } from '../../lib/queryKeys';
 import type { Dashboard } from '../../lib/types';
 import type { MessageKey } from '../../lib/messages/de';
 import { KitchenOwlWidget } from '../kitchenowl/KitchenOwlWidget';
+import { useMaskAmount } from '../../lib/privacy';
 
 function Kpi({
   labelKey,
@@ -38,6 +39,7 @@ function Kpi({
 
 export function DashboardPage() {
   const t = useT();
+  const maskAmount = useMaskAmount();
   const [params] = useSearchParams();
   const year = Number(params.get('jahr')) || new Date().getFullYear();
 
@@ -56,7 +58,9 @@ export function DashboardPage() {
 
       {d.carryoverGapCents != null && (
         <Banner tone="warn">
-          {t('dashboard.carryoverGap', { amount: formatEuro(d.carryoverGapCents, { showSign: true }) })}
+          {t('dashboard.carryoverGap', {
+            amount: maskAmount(formatEuro(d.carryoverGapCents, { showSign: true })),
+          })}
         </Banner>
       )}
 

@@ -51,6 +51,9 @@ because that is the format the data was recorded in.
 - **KitchenOwl** — the household's shared expenses as a *separate* ledger of their
   own. Never netted against the personal bookings, and matching one up never books
   anything by itself.
+- **Privacy mode** — one eye button in the header masks every euro figure while
+  categories, months, counts and the shape of every chart stay exactly as they
+  were. For a screen someone else can see.
 - **Multiple users** — separate data, enforced by row-level security in the database
   rather than by handler discipline.
 

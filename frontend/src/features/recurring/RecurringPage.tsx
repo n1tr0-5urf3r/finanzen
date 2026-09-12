@@ -27,6 +27,7 @@ import type {
 } from '../../lib/types';
 
 import { TemplateForm } from './TemplateForm';
+import { useMaskedFieldClass } from '../../lib/privacy';
 
 /**
  * The fixed-cost ritual, as a checklist.
@@ -329,6 +330,7 @@ export function RecurringPage() {
  */
 function DraftList({ year, items }: { year: number; items: Booking[] }) {
   const t = useT();
+  const maskedField = useMaskedFieldClass();
   const client = useQueryClient();
   const [amounts, setAmounts] = useState<Record<string, string>>({});
 
@@ -370,7 +372,7 @@ function DraftList({ year, items }: { year: number; items: Booking[] }) {
                 </td>
                 <td className="num">
                   <input
-                    className="input"
+                    className={`input ${maskedField}`}
                     inputMode="decimal"
                     style={{ maxWidth: '7rem', textAlign: 'right' }}
                     aria-label={`${t('recurring.amount')} ${b.comment}`}
