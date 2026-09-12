@@ -6,6 +6,8 @@ import { LoginPage, SetupPage } from './features/auth/AuthPages';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
+import { RecurringPage } from './features/recurring/RecurringPage';
+import { TaxPage } from './features/tax/TaxPage';
 
 /**
  * German slugs, deliberately: they mirror the spreadsheet tabs the user already
@@ -24,6 +26,8 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/buchungen" element={<BookingsPage />} />
+          <Route path="/vorlagen" element={<RecurringPage />} />
+          <Route path="/steuer" element={<TaxPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

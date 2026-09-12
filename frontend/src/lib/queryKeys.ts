@@ -33,6 +33,12 @@ export const qk = {
     tax: (year: number) => ['derived', year, 'tax'] as const,
   },
   years: () => ['years'] as const,
+  recurring: {
+    root: ['recurring'] as const,
+    /** Scoped by period: due/booked flags are answers about one month. */
+    list: (year: number, month: number) => ['recurring', 'list', year, month] as const,
+  },
+  drafts: (year: number, month: number) => ['bookings', 'drafts', year, month] as const,
   imports: {
     root: ['imports'] as const,
     list: () => ['imports', 'list'] as const,
@@ -63,6 +69,16 @@ export function invalidateAfterTaxonomyChange(client: QueryClient) {
   client.invalidateQueries({ queryKey: qk.taxonomy.categories() });
   client.invalidateQueries({ queryKey: qk.bookings.root });
   client.invalidateQueries({ queryKey: qk.derived.root });
+}
+
+/**
+ * Templates were materialised. Bookings changed, every aggregate for that year
+ * changed, and the checklist's own due/booked flags changed — the last of which
+ * is the one a blanket booking invalidation would miss.
+ */
+export function invalidateAfterMaterialize(client: QueryClient, year: number) {
+  client.invalidateQueries({ queryKey: qk.recurring.root });
+  invalidateAfterBookingChange(client, [year]);
 }
 
 /** Only the year overview and that year's aggregates; bookings are untouched. */

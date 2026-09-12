@@ -173,3 +173,102 @@ export interface CommentSummary {
   categoryName: string | null;
   isUncategorized: boolean;
 }
+
+/**
+ * A year/month pair. `periodOrd` is an internal encoding on the server; the wire
+ * carries the two fields so nothing here has to reimplement the arithmetic.
+ */
+export interface Period {
+  year: number;
+  month: number;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  name: string;
+  comment: string;
+  kind: BookingKind;
+  amountCents: number;
+  /** The amount varies, so materialising produces a draft to confirm. */
+  amountIsEstimate: boolean;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryType: string | null;
+  taxRelevant: boolean;
+  dayOfMonth: number | null;
+  /** 1 monthly, 3 quarterly, 12 annual. */
+  intervalMonths: number;
+  anchor: Period;
+  activeFrom: Period;
+  activeTo: Period | null;
+  active: boolean;
+  sortOrder: number;
+  /** Both null unless the request named a period. */
+  dueInPeriod: boolean | null;
+  bookedInPeriod: boolean | null;
+  lastBooked: Period | null;
+  bookingCount: number;
+}
+
+export interface MaterializedItem {
+  templateId: string;
+  templateName: string;
+  comment: string;
+  amountCents: number;
+  kind: BookingKind;
+  status: string;
+  bookingId: string | null;
+  skippedReason: string | null;
+}
+
+export interface MaterializeResult {
+  year: number;
+  month: number;
+  monthName: string;
+  created: number;
+  skipped: number;
+  drafts: number;
+  dryRun: boolean;
+  items: MaterializedItem[];
+}
+
+export interface Receipt {
+  id: string;
+  bookingId: string | null;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+  uploadedAt: string;
+}
+
+export interface TaxEntry {
+  bookingId: string;
+  index: number;
+  month: number;
+  monthName: string;
+  comment: string;
+  categoryName: string | null;
+  incomeCents: number;
+  expenseCents: number;
+  hasReceipt: boolean;
+}
+
+export interface TaxCategorySummary {
+  categoryName: string;
+  expenseCents: number;
+  incomeCents: number;
+  netCents: number;
+  count: number;
+}
+
+export interface TaxReport {
+  year: number;
+  totalExpenseCents: number;
+  totalIncomeCents: number;
+  totalNetCents: number;
+  bookingCount: number;
+  receiptsPresent: number;
+  entries: TaxEntry[];
+  byCategory: TaxCategorySummary[];
+}

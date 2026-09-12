@@ -24,6 +24,11 @@ of it exactly.
   transfers excluded from consumption.
 - **Import** of both `.xlsx` and `.ods`, with a dry-run preview and a review queue
   for comments no rule matches.
+- **Recurring templates** with a per-month checklist and one *alle buchen* action.
+  Monthly, quarterly and annual; templates whose amount varies book as drafts.
+- **Receipts** photographed straight from the phone camera and attached to a booking.
+- **Exports**: the tax list as CSV and a printable PDF, and the whole account as
+  JSON (a restorable backup) or CSV.
 - **Multi-user** with local auth; the authenticator sits behind a trait so OIDC can
   be added without touching call sites.
 
@@ -104,6 +109,26 @@ fails when any future table grows a `user_id` without a policy.
 in German and stay German in the English interface. So do all amounts and dates: the
 money is euros and must match the bank statement. A test asserts no English string
 equals any category or type name.
+
+**Recurring bookings are idempotent by index, not by check.** One booking per
+template per month, ever, enforced by a partial unique index — so pressing *alle
+buchen* twice is a no-op rather than a double posting. A template whose amount
+varies (the gym is 29,00 / 31,50 / 34,50) materialises as a **draft**: drafts are
+outside `v_ledger`, so they move no total until confirmed with the real amount.
+
+**Receipts live on disk, never in the database.** `APP_DATA_DIR/receipts/<user
+id>/<uuid>.<ext>`, with the extension taken from the content type. The filename
+the browser sends is metadata and is never a path component. Backup is `pg_dump`
+plus that one directory; a 2 MB PDF per row in `bytea` would triple the dump and
+make it useless as a quick restore path.
+
+**Money is de-DE formatted in exactly one place outside the UI: the CSV and PDF
+exports.** Their reader is a German Excel and a tax office, and `1234,56` opens as
+a number there while `123456` opens as a six-figure line item. The JSON export
+keeps integer cents, because its reader is `POST /exports/restore` — and a
+round-trip through a formatted decimal is how a cent goes missing. A test exports
+an account, restores it into a fresh user and compares every report field by
+field.
 
 **Both savings rates ship.** The naive one (`balance / gross income`) reproduces the
 spreadsheet and is misleading on its own, because gross income includes cost-sharing

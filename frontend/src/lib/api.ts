@@ -124,3 +124,23 @@ export function errorMessage(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return 'Ein unbekannter Fehler ist aufgetreten.';
 }
+
+/**
+ * Fetches an export and hands it to the browser as a download.
+ *
+ * The object URL is revoked on the next frame rather than immediately: Safari
+ * cancels an in-flight download if the URL disappears in the same tick, which
+ * looks exactly like a server error and is not one.
+ */
+export async function downloadFile(path: string): Promise<string> {
+  const { blob, filename } = await apiBlob(path);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  return filename;
+}

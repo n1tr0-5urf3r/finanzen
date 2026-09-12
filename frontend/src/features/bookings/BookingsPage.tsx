@@ -1,11 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, Download, FileJson } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from '../../components/ui';
-import { api } from '../../lib/api';
+import {
+  Banner,
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  StatusPill,
+} from '../../components/ui';
+import { api, downloadFile } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
@@ -18,6 +27,12 @@ export function BookingsPage() {
   const year = Number(params.get('jahr')) || new Date().getFullYear();
   const search = params.get('suche') ?? '';
   const uncategorizedOnly = params.get('ohneKategorie') === '1';
+
+  const [downloaded, setDownloaded] = useState<string | null>(null);
+  const download = useMutation({
+    mutationFn: (path: string) => downloadFile(path),
+    onSuccess: setDownloaded,
+  });
 
   const filters = { year, search, uncategorized: uncategorizedOnly };
   const query = useQuery({
@@ -44,7 +59,34 @@ export function BookingsPage() {
 
   return (
     <>
-      <PageHeader title={t('bookings.title')} />
+      <PageHeader
+        title={t('bookings.title')}
+        actions={
+          <>
+            {/* The JSON keeps integer cents and is what /exports/restore reads back;
+                the CSV is de-DE formatted because its reader is Excel. */}
+            <Button
+              variant="secondary"
+              busy={download.isPending}
+              title={t('export.jsonHint')}
+              onClick={() => download.mutate(`/exports/bookings.json?year=${year}`)}
+            >
+              <FileJson size={15} aria-hidden="true" /> {t('export.json')}
+            </Button>
+            <Button
+              variant="secondary"
+              busy={download.isPending}
+              title={t('export.csvHint')}
+              onClick={() => download.mutate(`/exports/bookings.csv?year=${year}`)}
+            >
+              <Download size={15} aria-hidden="true" /> {t('export.csv')}
+            </Button>
+          </>
+        }
+      />
+
+      {downloaded && <Banner tone="info">{t('export.downloaded', { filename: downloaded })}</Banner>}
+      {download.isError && <ErrorState error={download.error} />}
 
       <div className="panel panel--pad" style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div className="field" style={{ minWidth: '8rem' }}>

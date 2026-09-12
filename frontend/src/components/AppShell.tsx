@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   ArrowDownUp, BarChart3, CalendarRange, FileSpreadsheet, LayoutDashboard,
-  Plus, Receipt, Settings, Tags,
+  Plus, Receipt, Repeat, Settings, Tags,
 } from 'lucide-react';
 
 import { useT } from '../lib/i18n';
@@ -13,6 +13,7 @@ const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] 
   { to: '/monate', labelKey: 'nav.months', icon: CalendarRange },
   { to: '/auswertung', labelKey: 'nav.analysis', icon: BarChart3 },
   { to: '/steuer', labelKey: 'nav.tax', icon: Receipt },
+  { to: '/vorlagen', labelKey: 'nav.recurring', icon: Repeat },
   { to: '/kategorien', labelKey: 'nav.categories', icon: Tags },
   { to: '/import', labelKey: 'nav.import', icon: FileSpreadsheet },
   { to: '/einstellungen', labelKey: 'nav.settings', icon: Settings },
