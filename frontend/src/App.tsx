@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage, SetupPage } from './features/auth/AuthPages';
+import { AnalysisPage } from './features/analysis/AnalysisPage';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/buchungen" element={<BookingsPage />} />
           <Route path="/monate" element={<MonthsPage />} />
+          <Route path="/auswertung" element={<AnalysisPage />} />
           <Route path="/vorlagen" element={<RecurringPage />} />
           {/* A proper name, so the slug stays the proper name in both languages. */}
           <Route path="/kitchenowl" element={<KitchenOwlPage />} />
