@@ -57,25 +57,66 @@
    the one thing the phone is used for. */
 .mobile-bar { display: none; }
 @media (max-width: 819px) {
-  .app-shell { flex-direction: column; }
+  .app-shell { flex-direction: column; min-height: 100dvh; }
   .sidebar { display: none; }
-  .main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  /* The bar is fixed and the ⊕ button lifts 0.6rem above it, so the space the
+     content must leave is the bar plus that lift plus the home indicator — not a
+     flat 64px. Reserving too little is what let the page end above the bar and
+     show a strip of background through the gap. */
+  .main { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
   .mobile-bar {
     display: flex; position: fixed; inset: auto 0 0 0; z-index: 30;
+    /* Paint through the home-indicator area rather than letting the page show
+       under a bar that is only padded away from it. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--surface-inverse); color: var(--on-inverse);
-    padding: .35rem .25rem calc(.35rem + env(safe-area-inset-bottom, 0px));
+    padding-top: .35rem; padding-inline: .25rem;
     justify-content: space-around; align-items: stretch;
     box-shadow: 0 -2px 12px rgba(0,0,0,.25);
   }
-  .mobile-bar a {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: .15rem;
-    padding: .4rem .2rem; color: var(--on-inverse-muted);
-    font-size: .68rem; text-decoration: none; border-radius: var(--r-md);
-    min-height: var(--tap); justify-content: center;
+  /* Anchors AND the "Mehr" button: selecting only `a` left the button unstyled
+     and collapsed the row. `min-width: 0` is what stops a long label — English
+     runs longer than German here — squeezing its neighbours out of existence. */
+  .mobile-bar a,
+  .mobile-bar__more {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .15rem; padding: .4rem .15rem;
+    background: transparent; border: 0;
+    color: var(--on-inverse-muted);
+    font-size: .66rem; line-height: 1.15; text-decoration: none;
+    border-radius: var(--r-md); min-height: var(--tap);
+  }
+  /* One line, ellipsised, rather than wrapping and pushing the bar taller. */
+  .mobile-bar a > :not(svg),
+  .mobile-bar__more > :not(svg) {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .mobile-bar a[aria-current='page'] { color: var(--on-inverse); }
+  .mobile-bar__more.is-open { color: var(--on-inverse); background: rgba(255,255,255,.1); }
+  /* The one fixed-width item; everything else shares what is left. */
   .mobile-bar .mobile-bar__add {
     color: var(--on-primary); background: var(--primary);
-    margin: -.6rem .25rem 0; border-radius: var(--r-lg); flex: 0 0 64px;
+    margin: -.6rem .2rem 0; border-radius: var(--r-lg);
+    flex: 0 0 58px; min-width: 58px;
   }
 }
+
+/* The "Mehr" sheet: the four screens that do not fit the bottom bar. Without it
+   Monate, Steuer, Kategorien and Import are unreachable on a phone, because
+   there is no sidebar to fall back to below 820px. */
+.sheet-scrim { position: fixed; inset: 0; z-index: 35; background: rgba(14,17,19,.5); }
+.mobile-more {
+  position: fixed; z-index: 36;
+  inset: auto .5rem calc(74px + env(safe-area-inset-bottom, 0px)) .5rem;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-3);
+  display: grid; padding: .35rem;
+}
+.mobile-more a {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .7rem .75rem; min-height: var(--tap);
+  color: var(--ink); text-decoration: none; border-radius: var(--r-md);
+  font-size: .9rem;
+}
+.mobile-more a[aria-current='page'] { background: var(--primary-soft); font-weight: 600; }

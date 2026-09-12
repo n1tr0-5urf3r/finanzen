@@ -116,14 +116,38 @@ export function usePrediction(comment: string, rules: Rule[] | undefined): Predi
 }
 
 /**
- * Suggestion tiles, ranked by recency-weighted frequency so `tanken` and `essen`
- * stay permanently visible while a December-only comment does not.
+ * Suggestion tiles, ranked by frequency so `tanken` and `essen` stay permanently
+ * visible while a once-a-year comment does not.
+ *
+ * A new account has no history, and a grid that is empty on first use makes the
+ * screen look broken — so the rule table stands in until real bookings exist.
+ * Its keys are the comments this user has told the app about, which is the best
+ * available guess at what they are about to type.
  */
-export function useSuggestions(comments: CommentSummary[] | undefined, limit = 5) {
+export function useSuggestions(
+  comments: CommentSummary[] | undefined,
+  rules: Rule[] | undefined,
+  limit = 5,
+): CommentSummary[] {
   return useMemo(() => {
-    if (!comments) return [];
-    return [...comments].sort((a, b) => b.count - a.count).slice(0, limit);
-  }, [comments, limit]);
+    const used = [...(comments ?? [])].sort((a, b) => b.count - a.count).slice(0, limit);
+    if (used.length >= limit && used.length > 0) return used;
+
+    const seen = new Set(used.map((c) => c.comment.toLocaleLowerCase('de')));
+    const fallback = (rules ?? [])
+      .filter((r) => r.categoryId && !seen.has(r.normalizedComment))
+      // A rule that has already matched something is a better guess than one
+      // that never has.
+      .sort((a, b) => b.matchCount - a.matchCount)
+      .slice(0, limit - used.length)
+      .map<CommentSummary>((r) => ({
+        comment: r.comment,
+        count: r.matchCount,
+        categoryName: r.categoryName,
+        isUncategorized: false,
+      }));
+    return [...used, ...fallback];
+  }, [comments, rules, limit]);
 }
 
 /** Routes hardware-keyboard input into the same reducer the pad uses. */

@@ -1,7 +1,8 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   ArrowDownUp, BarChart3, CalendarRange, FileSpreadsheet, LayoutDashboard,
-  Plus, Receipt, Repeat, Settings, Tags, WalletMinimal,
+  MoreHorizontal, Plus, Receipt, Repeat, Settings, Tags, WalletMinimal,
 } from 'lucide-react';
 
 import { useT } from '../lib/i18n';
@@ -20,11 +21,19 @@ const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] 
   { to: '/einstellungen', labelKey: 'nav.settings', icon: Settings },
 ];
 
-/** The four that matter on a phone, plus the reason the app exists. */
+/** The four that fit a bottom bar. The other four live behind "Mehr". */
 const MOBILE = ['/dashboard', '/buchungen', '/auswertung', '/einstellungen'];
 
 export function AppShell() {
   const t = useT();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const location = useLocation();
+
+  // Any route change closes the sheet, including a back gesture.
+  useEffect(() => setMoreOpen(false), [location.pathname]);
+
+  const primary = NAV.filter((n) => MOBILE.includes(n.to));
+  const secondary = NAV.filter((n) => !MOBILE.includes(n.to));
 
   return (
     <div className="app-shell">
@@ -59,27 +68,53 @@ export function AppShell() {
         </div>
       </main>
 
+      {/* Four entries fit a bottom bar; there are eight screens. Without the
+          "Mehr" sheet, Monate, Steuer, Kategorien and Import simply do not
+          exist on a phone — there is no sidebar to fall back to. */}
       <nav className="mobile-bar" aria-label={t('app.name')}>
-        {NAV.filter((n) => MOBILE.includes(n.to))
-          .slice(0, 2)
-          .map(({ to, labelKey, icon: Icon }) => (
-            <NavLink key={to} to={to}>
-              <Icon size={19} aria-hidden="true" />
-              {t(labelKey)}
-            </NavLink>
-          ))}
+        {primary.slice(0, 2).map(({ to, labelKey, icon: Icon }) => (
+          <NavLink key={to} to={to}>
+            <Icon size={19} aria-hidden="true" />
+            {t(labelKey)}
+          </NavLink>
+        ))}
         <NavLink to="/schnell" className="mobile-bar__add" aria-label={t('nav.quickAdd')}>
           <Plus size={24} aria-hidden="true" />
         </NavLink>
-        {NAV.filter((n) => MOBILE.includes(n.to))
-          .slice(2)
-          .map(({ to, labelKey, icon: Icon }) => (
-            <NavLink key={to} to={to}>
-              <Icon size={19} aria-hidden="true" />
-              {t(labelKey)}
-            </NavLink>
-          ))}
+        {primary.slice(2, 3).map(({ to, labelKey, icon: Icon }) => (
+          <NavLink key={to} to={to}>
+            <Icon size={19} aria-hidden="true" />
+            {t(labelKey)}
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          className={`mobile-bar__more ${moreOpen ? 'is-open' : ''}`}
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((v) => !v)}
+        >
+          <MoreHorizontal size={19} aria-hidden="true" />
+          {t('nav.more')}
+        </button>
       </nav>
+
+      {moreOpen && (
+        <>
+          <div
+            className="sheet-scrim"
+            onClick={() => setMoreOpen(false)}
+            aria-hidden="true"
+          />
+          <nav className="mobile-more" aria-label={t('nav.more')}>
+            {secondary.map(({ to, labelKey, icon: Icon }) => (
+              <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}>
+                <Icon size={18} aria-hidden="true" />
+                {t(labelKey)}
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      )}
     </div>
   );
 }

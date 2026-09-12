@@ -25,6 +25,7 @@ export const de = {
   'nav.categories': 'Kategorien',
   'nav.import': 'Import',
   'nav.settings': 'Einstellungen',
+  'nav.more': 'Mehr',
   'nav.quickAdd': 'Erfassen',
   'nav.uncategorizedBadge': '{count} ohne Kategorie',
 
@@ -168,6 +169,9 @@ export const de = {
   'quick.otherComment': 'Anderer Kommentar',
   'quick.commentSearch': 'Kommentar suchen oder neu eingeben',
   'quick.useAsNew': '„{comment}“ als neuen Kommentar verwenden',
+  'quick.categorySearch': 'Kategorie suchen',
+  'quick.categoryClear': 'Kategorie offen lassen (Regel entscheidet)',
+  'quick.categoryNoMatch': 'Keine Kategorie gefunden.',
   'quick.keypad': 'Ziffernblock',
   'quick.backspace': 'Letzte Ziffer löschen',
   'quick.saveWith': 'Speichern · {category}',

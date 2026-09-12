@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, Delete, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, Delete, X } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
 import { api, jsonBody } from '../../lib/api';
 import { formatEuro, monthName } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterBookingChange, qk } from '../../lib/queryKeys';
-import type { Booking, CommentSummary, Rule } from '../../lib/types';
+import type { Booking, Category, CommentSummary, Rule } from '../../lib/types';
+import { CategorySheet } from './CategorySheet';
 import { CommentSheet } from './CommentSheet';
 import { useKeyboardBridge, usePrediction, useQuickAdd, useSuggestions } from './useQuickAdd';
 
@@ -20,6 +21,11 @@ export function QuickAddPage() {
   const client = useQueryClient();
   const { state, dispatch } = useQuickAdd();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  // A category chosen by hand. The rule table predicts one from the comment, but
+  // a new account has no rules and some bookings simply do not follow one, so
+  // there has to be a way to say it outright.
+  const [override, setOverride] = useState<{ id: string; name: string } | null>(null);
   const [saved, setSaved] = useState<Booking | null>(null);
 
   const rules = useQuery({
@@ -32,9 +38,14 @@ export function QuickAddPage() {
     queryFn: () => api<CommentSummary[]>('/bookings/comments'),
     staleTime: 5 * 60_000,
   });
+  const categories = useQuery({
+    queryKey: qk.taxonomy.categories(),
+    queryFn: () => api<Category[]>('/categories'),
+    staleTime: 30 * 60_000,
+  });
 
   const prediction = usePrediction(state.comment, rules.data);
-  const tiles = useSuggestions(comments.data, 5);
+  const tiles = useSuggestions(comments.data, rules.data, 5);
 
   const onKey = useKeyboardBridge(dispatch);
   useEffect(() => {
@@ -52,21 +63,31 @@ export function QuickAddPage() {
           kind: state.kind,
           amountCents: state.cents,
           comment: state.comment.trim(),
+          // Sent only when chosen by hand; otherwise the server resolves it from
+          // the rule table and stays the authority.
+          ...(override ? { categoryId: override.id } : {}),
         }),
       }),
     onSuccess: (booking) => {
       invalidateAfterBookingChange(client, [booking.year]);
       client.invalidateQueries({ queryKey: qk.bookings.comments() });
       setSaved(booking);
+      setOverride(null);
       dispatch({ type: 'reset' });
     },
   });
 
   const ready = state.cents > 0 && state.comment.trim().length > 0;
-  const confirmTone =
-    prediction.status === 'rule' ? 'rule' : prediction.status === 'guess' ? 'guess' : 'unknown';
-  const confirmLabel =
-    prediction.status === 'rule'
+  const confirmTone = override
+    ? 'rule'
+    : prediction.status === 'rule'
+      ? 'rule'
+      : prediction.status === 'guess'
+        ? 'guess'
+        : 'unknown';
+  const confirmLabel = override
+    ? t('quick.saveWith', { category: override.name })
+    : prediction.status === 'rule'
       ? t('quick.saveWith', { category: prediction.categoryName })
       : prediction.status === 'guess'
         ? t('quick.saveGuess', { category: prediction.categoryName })
@@ -134,6 +155,27 @@ export function QuickAddPage() {
         ))}
       </div>
 
+      {/* The rule table predicts a category from the comment, but a fresh account
+          has no rules and some bookings follow none — so the category is always
+          visible here and always changeable, rather than only inferable. */}
+      <button
+        type="button"
+        className="quick__category"
+        onClick={() => setCategoryOpen(true)}
+      >
+        <span className="quick__category-label">{t('bookings.category')}</span>
+        <span className="quick__category-value">
+          {override ? (
+            <DataLabel>{override.name}</DataLabel>
+          ) : prediction.status === 'rule' || prediction.status === 'guess' ? (
+            <DataLabel>{prediction.categoryName}</DataLabel>
+          ) : (
+            <span className="quick__category-none">{t('bookings.sourceNone')}</span>
+          )}
+        </span>
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+
       <button
         className={`quick__confirm quick__confirm--${confirmTone}`}
         disabled={!ready || create.isPending}
@@ -151,6 +193,18 @@ export function QuickAddPage() {
             setSheetOpen(false);
           }}
           onClose={() => setSheetOpen(false)}
+        />
+      )}
+
+      {categoryOpen && (
+        <CategorySheet
+          categories={categories.data ?? []}
+          selectedId={override?.id ?? null}
+          onPick={(picked) => {
+            setOverride(picked);
+            setCategoryOpen(false);
+          }}
+          onClose={() => setCategoryOpen(false)}
         />
       )}
 

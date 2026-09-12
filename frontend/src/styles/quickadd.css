@@ -103,3 +103,23 @@
 .sheet__item:hover { background: var(--surface-2); }
 .sheet__item strong { font-size: .9rem; font-weight: 600; }
 .sheet__item span { margin-left: auto; font-size: .75rem; color: var(--muted); }
+
+/* The category row sits directly above the confirm bar, so the category is
+   always visible and always one tap from being changed — the rule table's
+   prediction is a convenience, not the only way to say what something is. */
+.quick__category {
+  display: flex; align-items: center; gap: .5rem;
+  width: calc(100% - 1.2rem); margin: 0 .6rem .4rem;
+  min-height: var(--tap);
+  padding: .5rem .7rem; border-radius: var(--r-md);
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09);
+  color: var(--on-inverse); text-align: left;
+}
+.quick__category-label { font-size: .72rem; color: var(--on-inverse-muted); }
+.quick__category-value { margin-left: auto; font-size: .85rem; font-weight: 600; }
+.quick__category-none { color: var(--amber-400); font-weight: 600; }
+.sheet__group {
+  padding: .5rem .75rem .25rem; font-size: .7rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+}
+.sheet__item[aria-pressed='true'] { background: var(--primary-soft); }
