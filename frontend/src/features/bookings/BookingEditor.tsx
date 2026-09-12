@@ -178,7 +178,10 @@ export function BookingEditor({
               onChange={(e) => setCategoryId(e.target.value)}
             >
               <option value="">{t('bookings.categoryFromRule')}</option>
-              {(categories.data ?? []).map((c) => (
+              {/* Defensive: a failed or in-flight categories fetch must leave the
+                  dialog usable rather than crashing it — everything else in the
+                  form still works without the list. */}
+              {(Array.isArray(categories.data) ? categories.data : []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} · {c.typeLabel}
                 </option>

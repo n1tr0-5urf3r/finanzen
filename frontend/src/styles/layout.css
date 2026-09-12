@@ -57,18 +57,38 @@
    the one thing the phone is used for. */
 .mobile-bar { display: none; }
 @media (max-width: 819px) {
-  .app-shell { flex-direction: column; min-height: 100dvh; }
+  /* `svh` — the SMALL viewport height — is the height with the browser's URL bar
+     SHOWN, and unlike `dvh` it does not change while that bar hides and reveals
+     on scroll. A `position: fixed` bar anchored to a height that moves mid-gesture
+     is what makes it jump up and fail to settle back on Android Chrome. The shell
+     must never be taller than the smallest viewport the user will see. */
+  .app-shell { flex-direction: column; min-height: 100svh; }
   .sidebar { display: none; }
   /* The bar is fixed and the ⊕ button lifts 0.6rem above it, so the space the
      content must leave is the bar plus that lift plus the home indicator — not a
      flat 64px. Reserving too little is what let the page end above the bar and
      show a strip of background through the gap. */
-  .main { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+  .main { padding-bottom: calc(78px + max(0px, env(safe-area-inset-bottom, 0px))); }
+  /* The page must be able to scroll past the bar without the bar moving. */
+  body { overscroll-behavior-y: none; }
   .mobile-bar {
-    display: flex; position: fixed; inset: auto 0 0 0; z-index: 30;
-    /* Paint through the home-indicator area rather than letting the page show
-       under a bar that is only padded away from it. */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: flex; z-index: 30;
+    /* Pinned to the visual viewport rather than the layout viewport, so the bar
+       rides with the browser chrome instead of being repositioned by it. Falls
+       back to `fixed` where `sticky`'s containing block would be wrong. */
+    position: fixed;
+    inset: auto 0 0 0;
+    /* Belt and braces: some Android builds leave a fixed element a pixel or two
+       adrift after the URL bar animates. Translating by zero promotes the bar to
+       its own compositor layer, which makes the browser reposition it as one
+       unit rather than re-laying it out. */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Only iOS reports a non-zero inset here; Android already reserves its
+       gesture area outside the viewport, so adding the inset unconditionally
+       left a dead strip below the bar. `max()` keeps the iOS home indicator
+       clear without padding where there is nothing to clear. */
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
     background: var(--surface-inverse); color: var(--on-inverse);
     padding-top: .35rem; padding-inline: .25rem;
     justify-content: space-around; align-items: stretch;

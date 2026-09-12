@@ -120,7 +120,7 @@ export const de = {
   'bookings.filterUncategorized': 'Nur ohne Kategorie',
   'bookings.search': 'Kommentar suchen',
   'bookings.empty': 'Keine Buchungen für diesen Filter.',
-  'bookings.summary': '{count} Buchungen · Einnahmen {income} · Ausgaben {expense} · Netto {net}',
+  'bookings.summary': '{count} Buchungen · Einnahmen {income} · Ausgaben {expense} · Saldo {net}',
   'bookings.summaryUncategorized': 'davon {count} ohne Kategorie',
   'bookings.sourceRule': 'Regel',
   'bookings.sourceManual': 'Manuell',
@@ -366,6 +366,7 @@ export const de = {
   'ko.basis.fullAmountNear': 'Gesamtbetrag bis auf zwei Cent',
   'ko.basis.ownShareNear': 'Anteil bis auf zwei Cent',
   'ko.matchScore': 'Übereinstimmung {score}',
+  'ko.push': 'Teilen',
   'ko.pushTitle': 'Nach KitchenOwl übertragen',
   'ko.pushIntro':
     'Legt in KitchenOwl eine Ausgabe an. Deine Buchung bleibt unverändert und behält ihren Betrag.',

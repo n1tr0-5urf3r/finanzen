@@ -106,7 +106,7 @@ export const en: Messages = {
   'bookings.filterUncategorized': 'Without a category only',
   'bookings.search': 'Search comments',
   'bookings.empty': 'No bookings match this filter.',
-  'bookings.summary': '{count} bookings · income {income} · expenses {expense} · net {net}',
+  'bookings.summary': '{count} bookings · income {income} · expenses {expense} · balance {net}',
   'bookings.summaryUncategorized': '{count} of them without a category',
   'bookings.sourceRule': 'Rule',
   'bookings.sourceManual': 'Manual',
@@ -331,6 +331,7 @@ export const en: Messages = {
   'ko.basis.fullAmountNear': 'Total within two cents',
   'ko.basis.ownShareNear': 'Share within two cents',
   'ko.matchScore': 'Match {score}',
+  'ko.push': 'Share',
   'ko.pushTitle': 'Send to KitchenOwl',
   'ko.pushIntro':
     'Creates an expense in KitchenOwl. Your booking is untouched and keeps its amount.',

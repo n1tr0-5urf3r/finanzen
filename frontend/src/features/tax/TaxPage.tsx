@@ -15,6 +15,7 @@ import {
   StatusPill,
 } from '../../components/ui';
 import { api, apiUpload, downloadFile } from '../../lib/api';
+import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { Receipt, TaxReport } from '../../lib/types';
@@ -93,24 +94,16 @@ export function TaxPage() {
         className="panel panel--pad"
         style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
       >
-        <div className="field" style={{ minWidth: '7rem' }}>
-          <label htmlFor="tax-year">{t('common.year')}</label>
-          <input
-            id="tax-year"
-            className="input"
-            type="number"
-            value={year}
-            onChange={(e) =>
-              setParams(
-                (prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.set('jahr', e.target.value);
-                  return next;
-                },
-                { replace: true },
-              )
-            }
-          />
+        <div style={{ minWidth: '7rem' }}>
+          <YearPicker id="tax-year" value={year} onChange={(next) =>
+            setParams(
+              (prev) => {
+                const p = new URLSearchParams(prev);
+                p.set('jahr', String(next));
+                return p;
+              },
+              { replace: true },
+            )} />
         </div>
         <p className="kpi__scope" style={{ margin: 0 }}>
           {t('tax.exportHint')}

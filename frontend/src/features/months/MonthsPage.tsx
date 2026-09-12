@@ -7,6 +7,7 @@ import { Money, ScopeNote } from '../../components/Money';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
+import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { CategoryTypeSummary, MonthlyOverview, MonthlyRow } from '../../lib/types';
@@ -51,24 +52,16 @@ export function MonthsPage() {
         className="panel panel--pad"
         style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
       >
-        <div className="field" style={{ minWidth: '8rem' }}>
-          <label htmlFor="months-year">{t('common.year')}</label>
-          <input
-            id="months-year"
-            className="input"
-            type="number"
-            value={year}
-            onChange={(e) =>
-              setParams(
-                (prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.set('jahr', e.target.value);
-                  return next;
-                },
-                { replace: true },
-              )
-            }
-          />
+        <div style={{ minWidth: '8rem' }}>
+          <YearPicker id="months-year" value={year} onChange={(next) =>
+            setParams(
+              (prev) => {
+                const p = new URLSearchParams(prev);
+                p.set('jahr', String(next));
+                return p;
+              },
+              { replace: true },
+            )} />
         </div>
         <p className="kpi__scope" style={{ margin: 0, maxWidth: '38rem' }}>
           {t('months.perTypeNote')}

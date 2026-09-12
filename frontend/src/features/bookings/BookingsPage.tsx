@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Download, FileJson, Link2, Send } from 'lucide-react';
+import { ArrowLeftRight, Download, FileJson, Link2, Send, Users2 } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
@@ -17,6 +17,7 @@ import {
 import { api, downloadFile } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { YearPicker } from '../../components/YearPicker';
 import { qk } from '../../lib/queryKeys';
 import { BookingEditor } from './BookingEditor';
 import type { Booking, BookingPage, KoStatus } from '../../lib/types';
@@ -118,12 +119,8 @@ export function BookingsPage() {
       {download.isError && <ErrorState error={download.error} />}
 
       <div className="panel panel--pad" style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div className="field" style={{ minWidth: '8rem' }}>
-          <label htmlFor="f-year">{t('common.year')}</label>
-          <input
-            id="f-year" className="input" type="number" value={year}
-            onChange={(e) => update('jahr', e.target.value)}
-          />
+        <div style={{ minWidth: '8rem' }}>
+          <YearPicker id="f-year" value={year} onChange={(next) => update('jahr', String(next))} />
         </div>
         <div className="field" style={{ flex: 1, minWidth: '12rem' }}>
           <label htmlFor="f-search">{t('bookings.search')}</label>
@@ -171,7 +168,11 @@ export function BookingsPage() {
               count: query.data.total,
               income: formatEuro(query.data.sumIncomeCents),
               expense: formatEuro(query.data.sumExpenseCents),
-              net: formatEuro(query.data.sumNetCents),
+              // The per-category convention is expense-positive, which is right
+              // for "what did Miete cost me". Summed over a whole filter it is
+              // the balance, and showing +9.000,00 gained as "-9.000,00" reads
+              // as a loss — so the sign is flipped and shown explicitly here.
+              net: formatEuro(-query.data.sumNetCents, { showSign: true }),
             })}
             {query.data.uncategorizedCount > 0 && (
               <>
@@ -345,6 +346,33 @@ export function BookingsPage() {
                       <StatusPill tone="danger">{t('bookings.tax')}</StatusPill>
                     )}
                   </div>
+
+                  {/* The push action lived only in the desktop table, which is
+                      hidden below 820px — so on the device the feature is for,
+                      there was no way to share a booking at all. */}
+                  {koReady && (
+                    <div className="bcard__actions">
+                      {b.externalSource === 'kitchenowl' ? (
+                        <span className="ko-link">
+                          <Link2 size={14} aria-hidden="true" /> {t('ko.linked')}
+                        </span>
+                      ) : b.kind === 'transfer' || b.status !== 'confirmed' ? null : (
+                        <button
+                          type="button"
+                          className="button button--secondary"
+                          aria-label={`${t('ko.pushTitle')}: ${b.comment}`}
+                          onClick={(e) => {
+                            // The card itself opens the editor, so this must not
+                            // bubble or sharing would also start an edit.
+                            e.stopPropagation();
+                            setPushing(b);
+                          }}
+                        >
+                          <Users2 size={15} aria-hidden="true" /> {t('ko.push')}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </article>
               ))}
             </div>

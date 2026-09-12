@@ -7,6 +7,7 @@ import { Money, NetBreakdown, ScopeNote } from '../../components/Money';
 import { Banner, EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
+import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { MessageKey } from '../../lib/messages/de';
@@ -72,24 +73,16 @@ export function AnalysisPage() {
         className="panel panel--pad"
         style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
       >
-        <div className="field" style={{ minWidth: '8rem' }}>
-          <label htmlFor="analysis-year">{t('common.year')}</label>
-          <input
-            id="analysis-year"
-            className="input"
-            type="number"
-            value={year}
-            onChange={(e) =>
-              setParams(
-                (prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.set('jahr', e.target.value);
-                  return next;
-                },
-                { replace: true },
-              )
-            }
-          />
+        <div style={{ minWidth: '8rem' }}>
+          <YearPicker id="analysis-year" value={year} onChange={(next) =>
+            setParams(
+              (prev) => {
+                const p = new URLSearchParams(prev);
+                p.set('jahr', String(next));
+                return p;
+              },
+              { replace: true },
+            )} />
         </div>
         <ScopeNote transfersIncluded={false} />
       </div>
