@@ -384,6 +384,193 @@ export const de = {
   'error.title': 'Da ist etwas schiefgelaufen',
   'error.offline': 'Keine Verbindung zum Server.',
   'empty.title': 'Nichts zu sehen',
+  'common.apply': 'Anwenden',
+  'common.edit': 'Bearbeiten',
+  'common.add': 'Hinzufügen',
+  'common.none': 'keine',
+  'common.search': 'Suchen',
+  'common.all': 'Alle',
+  'common.open': 'Öffnen',
+  'common.empty': 'Leer',
+
+  'months.empty': 'Für dieses Jahr gibt es noch keine Buchungen.',
+  'months.noBookings': 'keine Buchungen',
+  'months.emptyRowNote':
+    'Monate ohne Buchungen bleiben als leere Zeile stehen — ein fehlender Monat und ein Monat mit Null sind nicht dasselbe.',
+  'months.cumulativeHint':
+    'Läuft nur über Monate mit Buchungen. Wo nichts gebucht ist, steht hier nichts: eine Null wäre ein Absturz im Kontostand, den es nie gab.',
+  'months.perTypeNote':
+    'Die vier Typspalten sind Nettowerte. Ein negativer Wert bedeutet, dass in diesem Typ unter dem Strich Geld hereinkam — etwa durch eine Erstattung.',
+  'months.bookings': 'Buchungen',
+  'months.savingsRateHint': 'Saldo geteilt durch die Einnahmen des Monats.',
+
+  'analysis.empty': 'Für dieses Jahr gibt es noch keine Buchungen.',
+  'analysis.uncategorized': '{count} Buchungen sind keiner Kategorie zugeordnet.',
+  'analysis.monthlyColumns': 'Monatswerte, netto',
+  'analysis.sortBy': 'Nach {column} sortieren',
+  'analysis.creditNote':
+    'Eine Gutschrift ist keine Ausgabe: die Kategorie hat mehr eingebracht als gekostet. Solche Zeilen haben deshalb keinen Anteil an den Kosten.',
+  'analysis.totalRow': 'Summe',
+
+  'categories.intro':
+    'Kategorien ordnen das Geld, Regeln ordnen die Kommentare den Kategorien zu. Beide wirken rückwirkend auf alle Jahre.',
+  'categories.newCategory': 'Neue Kategorie',
+  'categories.editCategory': 'Kategorie bearbeiten',
+  'categories.name': 'Name',
+  'categories.type': 'Typ',
+  'categories.bookings': 'Buchungen',
+  'categories.net': 'Netto',
+  'categories.empty': 'Noch keine Kategorien angelegt.',
+  'categories.saved': 'Kategorie gespeichert.',
+  'categories.created': 'Kategorie angelegt.',
+  'categories.deleted': 'Kategorie gelöscht.',
+  'categories.deleteConfirm': 'Kategorie „{name}“ löschen?',
+  'categories.deleteInUse': 'Diese Kategorie wird noch von Buchungen verwendet.',
+  'categories.reassignTo': 'Buchungen umhängen nach',
+  'categories.reassignHint':
+    'Die Kategorie kann erst gelöscht werden, wenn ihre Buchungen eine andere Kategorie haben. Wähle das Ziel; die Buchungen selbst bleiben unverändert.',
+  'categories.reassignConfirm': 'Umhängen und löschen',
+  'categories.reassigned': 'Buchungen umgehängt und Kategorie gelöscht.',
+  'categories.ruleComment': 'Kommentar',
+  'categories.ruleSearch': 'Regel oder Kategorie suchen',
+  'categories.ruleKind': 'Buchungsart erzwingen',
+  'categories.ruleKindNone': 'nicht ändern',
+  'categories.ruleOnlyUnused': 'Nur ungenutzte',
+  'categories.ruleEmpty': 'Keine Regel passt zu dieser Suche.',
+  'categories.ruleNoCategory': 'ohne Kategorie',
+  'categories.editRule': 'Regel bearbeiten',
+  'categories.ruleDeleteConfirm':
+    'Regel „{comment}“ löschen? Die betroffenen Buchungen sind danach wieder ohne Kategorie.',
+  'categories.ruleDeleted': 'Regel gelöscht. Betroffene Buchungen sind wieder ohne Kategorie.',
+  'categories.ruleRetroactive':
+    'Regeln wirken rückwirkend: {count} Buchungen tragen diesen Kommentar und sind jetzt {category}.',
+  'categories.ruleRetroactiveNone':
+    'Regel gespeichert. Zurzeit trägt keine Buchung diesen Kommentar.',
+  'categories.ruleManualUntouched': 'Von Hand gesetzte Kategorien bleiben davon unberührt.',
+  'categories.ruleNormalized': 'verglichen wird „{key}“',
+  'categories.applyRules': 'Regeln erneut anwenden',
+  'categories.applyPreview': 'Vorschau',
+  'categories.applyResult':
+    '{count} Buchungen neu zugeordnet · {open} weiterhin ohne Kategorie.',
+  'categories.applyPreviewResult':
+    'Vorschau: {count} von {examined} Buchungen würden neu zugeordnet. Es wurde nichts geändert.',
+  'categories.retroWarning':
+    'Eine Regeländerung ordnet auch vergangene Jahre neu zu. Steuerlich gesperrte Jahre bleiben unangetastet.',
+
+  'import.tabImport': 'Import',
+  'import.tabReview': 'Prüfliste',
+  'import.intro':
+    'Hochladen erzeugt nur eine Vorschau. Gebucht wird erst mit „Übernehmen“.',
+  'import.choose': 'Datei auswählen',
+  'import.uploading': 'Wird hochgeladen … {percent} %',
+  'import.previousImports': 'Bisherige Importe',
+  'import.noPreviousImports': 'Noch nichts importiert.',
+  'import.statusPreview': 'Vorschau',
+  'import.statusApplied': 'Übernommen',
+  'import.counts': 'Zeilen',
+  'import.categorized': 'mit Kategorie',
+  'import.uncategorized': 'ohne Kategorie',
+  'import.taxRelevant': 'steuerrelevant',
+  'import.transfers': 'Umbuchungen',
+  'import.openReview': 'offene Prüfpunkte',
+  'import.yearTotals': 'Je Jahr',
+  'import.monthCount': 'Monate',
+  'import.blocks': 'Monatsblöcke',
+  'import.blocksIntro':
+    'Der Altbestand hat keine Monatsspalte. Die Monate stammen aus den Saldo-Markern der Tabelle; abweichende Blöcke werden vermerkt und nicht korrigiert.',
+  'import.blockLabel': 'Beschriftung',
+  'import.blockRows': 'Zeilen',
+  'import.blockMarker': 'Saldo-Marker',
+  'import.blockComputed': 'Summe der Zeilen',
+  'import.blockDelta': 'Abweichung',
+  'import.blockMismatch': 'weicht ab',
+  'import.markerTotal': 'Summe der Marker',
+  'import.rowTotal': 'Summe der Zeilen',
+  'import.gap': 'Lücke',
+  'import.gapHint':
+    'Die Differenz wird nicht durch erfundene Buchungen geschlossen. Der Vortrag des Folgejahres ist stattdessen ein eingetragener Wert.',
+  'import.alreadyApplied': 'Dieser Import wurde bereits übernommen.',
+  'import.reviewOpenCount': '{count} offen',
+  'import.reviewProgress': '{done} von {total} erledigt',
+  'import.reviewOf': 'Eintrag {index} von {total}',
+  'import.reviewPick': 'Kategorie wählen',
+  'import.reviewSearch': 'Kategorie suchen',
+  'import.reviewSuggestions': 'Vorschläge',
+  'import.reviewConfirm': 'Übernehmen',
+  'import.reviewBulk': '{count} sichere Vorschläge übernehmen',
+  'import.reviewBulkHint':
+    'Nur Vorschläge aus einer Textübereinstimmung. Die grauen Hinweise sind nie dabei.',
+  'import.reviewResolved':
+    '{resolved} zugeordnet · {rules} Regeln angelegt · {open} noch offen.',
+  'import.reviewKeys':
+    'Tastatur: Ziffern wählen einen Vorschlag, Eingabetaste übernimmt, Esc überspringt.',
+  'import.reviewNoSuggestion':
+    'Kein Vorschlag — ein Händler, den die Regeltabelle noch nicht kennt.',
+  'import.reviewSelected': 'Gewählt:',
+  'import.reviewQueue': 'Warteschlange',
+  'import.reviewNoBatch': 'Es gibt keinen Import mit offenen Prüfpunkten.',
+  'import.reviewCreateRuleHint':
+    'Legt zugleich eine Regel an, damit derselbe Händler nie ein zweites Mal gefragt wird.',
+  'import.reviewSkipped': 'Übersprungen',
+  'import.reviewKindHint':
+    'Sieht nach einer Umbuchung aus. Die Buchungsart wird an der Regel gesetzt, nicht hier.',
+  'import.reviewMatched': 'wegen „{rule}“',
+  'import.reviewConfidence': '{percent} sicher',
+
+  'settings.intro': 'Alles, was selten geändert wird, aber geändert werden können muss.',
+  'settings.tabYears': 'Jahre',
+  'settings.tabRecurring': 'Vorlagen',
+  'settings.tabKitchenOwl': 'KitchenOwl',
+  'settings.tabExport': 'Export',
+  'settings.tabAppearance': 'Darstellung',
+  'settings.tabAccount': 'Konto',
+  'settings.tabUsers': 'Benutzer',
+  'settings.yearsIntro':
+    'Der Vortrag ist der Kontostand zu Jahresbeginn. Er wird eingetragen und nicht aus dem Altbestand errechnet.',
+  'settings.openingSource': 'Quelle',
+  'settings.openingConfigured': 'eingetragen',
+  'settings.openingDerived': 'aus dem Vorjahr',
+  'settings.locked': 'Steuerlich gesperrt',
+  'settings.lockedHint':
+    'Ein gesperrtes Jahr wird von Regeländerungen nicht mehr neu zugeordnet — eine abgegebene Erklärung darf sich nicht bewegen.',
+  'settings.carryoverGapLabel': 'Abweichung',
+  'settings.carryoverGapHint':
+    'Der eingetragene Vortrag weicht um {amount} vom Abschluss des Vorjahres ab. Das ist bekannt: die Monatsmarker des Altbestands summieren sich auf mehr als seine Zeilen. Die Zeilen bleiben unverändert, statt die Differenz durch erfundene Buchungen zu schließen.',
+  'settings.addYear': 'Jahr anlegen',
+  'settings.yearSaved': 'Vortrag für {year} gespeichert.',
+  'settings.recurringIntro':
+    'Wiederkehrende Buchungen haben einen eigenen Bildschirm mit der Monatscheckliste.',
+  'settings.openRecurring': 'Vorlagen öffnen',
+  'settings.kitchenOwlIntro':
+    'Zugangsdaten stehen in der Umgebung des Servers und lassen sich hier nicht ändern. Sichtbar ist, ob die Verbindung steht und wann zuletzt synchronisiert wurde.',
+  'settings.kitchenOwlOpen': 'Haushaltskasse öffnen',
+  'settings.kitchenOwlState': 'Verbindung',
+  'settings.kitchenOwlReachable': 'erreichbar',
+  'settings.kitchenOwlUnreachable': 'nicht erreichbar',
+  'settings.kitchenOwlUnknown': 'noch nicht geprüft',
+  'settings.exportIntro':
+    'Die JSON-Sicherung enthält ganze Cent und lässt sich wieder einspielen. Die CSV-Datei ist für Excel gedacht und deutsch formatiert.',
+  'settings.exportYear': 'Jahr',
+  'settings.exportAllYears': 'Alle Jahre',
+  'settings.currentPassword': 'Aktuelles Passwort',
+  'settings.newPassword': 'Neues Passwort',
+  'settings.repeatPassword': 'Neues Passwort wiederholen',
+  'settings.changePassword': 'Passwort ändern',
+  'settings.passwordChanged': 'Passwort geändert. Alle anderen Sitzungen wurden beendet.',
+  'settings.passwordMismatch': 'Die beiden Eingaben stimmen nicht überein.',
+  'settings.usersIntro':
+    'Die Registrierung ist geschlossen. Weitere Konten legt ein Administrator hier an.',
+  'settings.newUser': 'Konto anlegen',
+  'settings.userCreated': 'Konto „{username}“ angelegt.',
+  'settings.userIsAdmin': 'Administrator',
+  'settings.usersAdminOnly': 'Benutzerverwaltung ist Administratoren vorbehalten.',
+
+  'chart.monthly': 'Einnahmen und Ausgaben je Monat',
+  'chart.cumulative': 'Kumulierter Saldo',
+  'chart.byType': 'Netto je Typ',
+  'chart.dataTable': 'Werte zum Diagramm',
+  'chart.stopsAtLastMonth': 'Die Linie endet beim letzten Monat mit Buchungen.',
+  'chart.empty': 'Nichts darzustellen.',
 } as const;
 
 export type MessageKey = keyof typeof de;

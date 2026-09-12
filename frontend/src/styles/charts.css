@@ -1,0 +1,41 @@
+/* ── charts ──────────────────────────────────────────────────────────────────
+   Hand-rolled SVG, so every colour is a token and dark mode costs nothing. The
+   data table beside each chart is sr-only on a wide screen and VISIBLE on a
+   narrow one: twelve bands on a 400px phone are decoration, the numbers are not. */
+
+.chart { margin: 0; }
+.chart__title { font-size: .9rem; font-weight: 650; margin-bottom: .35rem; }
+.chart__svg { width: 100%; height: auto; overflow: visible; }
+.chart__note { font-size: .72rem; color: var(--muted); margin-top: .3rem; }
+
+.chart__grid { stroke: var(--line); stroke-width: 1; }
+.chart__baseline { stroke: var(--line-strong); stroke-width: 1.5; }
+.chart__tick { font-size: 10px; fill: var(--muted); }
+.chart__tick--dim { opacity: .45; }
+
+.chart__bar--income  { fill: var(--income); }
+.chart__bar--expense { fill: var(--expense); }
+.chart__bar--einkommen { fill: var(--type-einkommen); }
+.chart__bar--fixkosten { fill: var(--type-fixkosten); }
+.chart__bar--variabel  { fill: var(--type-variabel); }
+.chart__bar--sparen    { fill: var(--type-sparen); }
+.chart__bar--sonstiges { fill: var(--type-sonstiges); }
+
+.chart__line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart__dot { fill: var(--accent); }
+
+/* The default: present to a screen reader, absent to the eye. */
+.chart__data {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+@media (max-width: 559px) {
+  .chart__svg { display: none; }
+  .chart__data {
+    position: static; width: auto; height: auto; margin: 0;
+    overflow-x: auto; clip: auto; white-space: normal;
+  }
+}
+
+.chart-grid { display: grid; gap: 1rem; }
+@media (min-width: 1120px) { .chart-grid--pair { grid-template-columns: 3fr 2fr; } }

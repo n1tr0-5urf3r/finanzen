@@ -472,3 +472,134 @@ export interface KoSyncResult {
   metadata: KoSyncRun | null;
   error: string | null;
 }
+
+/* ── Import ───────────────────────────────────────────────────────────────────
+   The dry-run preview, the commit result, and the review queue. Nothing here has
+   touched the ledger until `/imports/{id}/commit` returns. */
+
+export interface ImportCounts {
+  dataRows: number;
+  newBookings: number;
+  duplicates: number;
+  income: number;
+  expense: number;
+  transfer: number;
+  categorized: number;
+  uncategorized: number;
+  taxRelevant: number;
+  openReviewItems: number;
+}
+
+export interface ImportYearTotals {
+  year: number;
+  months: number;
+  incomeCents: number;
+  expenseCents: number;
+  balanceCents: number;
+  bookingCount: number;
+}
+
+/**
+ * One inferred month block of the legacy sheet. `deltaCents` is non-null where the
+ * block's own saldo marker disagrees with its rows — recorded, never adjusted.
+ */
+export interface MonthBlockInfo {
+  index: number;
+  year: number;
+  month: number;
+  rowCount: number;
+  labelSource: string;
+  rawLabel: string | null;
+  markerCents: number | null;
+  computedCents: number;
+  deltaCents: number | null;
+}
+
+export interface ImportPreview {
+  id: string;
+  fileName: string;
+  sheet: string;
+  source: string;
+  /** `preview` until committed, then `applied`. */
+  status: string;
+  counts: ImportCounts;
+  yearTotals: ImportYearTotals[];
+  blocks: MonthBlockInfo[];
+  /** The legacy sheet's own month-end markers; the authoritative carry-over. */
+  markerTotalCents: number | null;
+  rowTotalCents: number | null;
+  warnings: string[];
+}
+
+export interface ImportBatchSummary {
+  id: string;
+  fileName: string;
+  sheet: string | null;
+  source: string;
+  status: string;
+  rowCount: number;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export interface CommitResult {
+  inserted: number;
+  skipped: number;
+  yearsTouched: number[];
+  uncategorizedRemaining: number;
+}
+
+/**
+ * A suggested category for an unknown comment.
+ *
+ * `isSuggestion` is the whole distinction: containment matches are precise enough
+ * to preselect, edit-distance hints are not and are the source of every
+ * confidently wrong answer (`trinken` → `tanken`, `Malve` → `Mafit`). The weak
+ * ones arrive in `weakHints` and must stay greyed and unselected.
+ */
+export interface ReviewSuggestion {
+  categoryId: string;
+  categoryName: string;
+  matchedRule: string;
+  confidence: number;
+  tier: string;
+  isSuggestion: boolean;
+}
+
+/** Keyed by DISTINCT comment, sorted by frequency: ~240 decisions, not ~362 rows. */
+export interface ReviewItem {
+  id: string;
+  comment: string;
+  normalizedComment: string;
+  rowCount: number;
+  expenseCents: number;
+  incomeCents: number;
+  suggestions: ReviewSuggestion[];
+  weakHints: ReviewSuggestion[];
+  /** Two rules claim this comment equally — a human has to choose. */
+  ambiguous: boolean;
+  suggestedKind: BookingKind | null;
+  status: string;
+}
+
+export interface Resolution {
+  itemId: string;
+  categoryId?: string | null;
+  /** Default true on the wire, and default checked in the UI. */
+  createRule?: boolean;
+  skip?: boolean;
+}
+
+export interface ResolveResult {
+  resolved: number;
+  skipped: number;
+  rulesCreated: number;
+  remainingOpen: number;
+}
+
+export interface ApplyRulesResult {
+  examined: number;
+  recategorized: number;
+  stillUncategorized: number;
+  dryRun: boolean;
+}

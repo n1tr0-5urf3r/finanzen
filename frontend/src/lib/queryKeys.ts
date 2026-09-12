@@ -54,6 +54,9 @@ export const qk = {
     drafts: (status: string) => ['kitchenowl', 'drafts', status] as const,
     push: () => ['kitchenowl', 'push'] as const,
   },
+  admin: {
+    users: () => ['admin', 'users'] as const,
+  },
   imports: {
     root: ['imports'] as const,
     list: () => ['imports', 'list'] as const,

@@ -1,0 +1,122 @@
+/* ── the wide report screens ─────────────────────────────────────────────────
+   Monatsübersicht and Auswertung are eleven and nineteen columns wide. Neither
+   can be made to work one-handed, so below the sidebar breakpoint the table is
+   replaced outright by a card list rather than squeezed, scrolled or hidden.
+   Both are rendered; CSS picks. */
+
+.screen-cards { display: none; }
+@media (max-width: 819px) {
+  .screen-table { display: none; }
+  .screen-cards { display: grid; gap: .6rem; }
+}
+
+.mcard {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: .75rem .85rem;
+}
+.mcard > header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .5rem; margin-bottom: .5rem;
+}
+.mcard--empty { opacity: .6; border-style: dashed; }
+.mcard__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .4rem .8rem; }
+.mcard__grid dt { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.mcard__grid dd { margin: 0; font-size: .9rem; }
+
+/* A month with no bookings is present and visibly empty — never dropped, because
+   a missing row reads as "not yet loaded" rather than "nothing happened". */
+.row--empty td, .row--empty th { color: var(--muted); }
+.row--empty th[scope='row'] { font-weight: 500; }
+
+/* ── sortable headers ───────────────────────────────────────────────────────── */
+.th-sort {
+  background: none; border: 0; padding: 0; font: inherit; color: inherit;
+  text-transform: inherit; letter-spacing: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: .25rem;
+}
+.th-sort[aria-sort='ascending'], .th-sort[aria-sort='descending'] { color: var(--ink); }
+.th-sort__arrow { font-size: .7em; }
+
+.month-cell { min-width: 3.6rem; }
+.footnote { font-size: .75rem; color: var(--muted); margin-top: .5rem; max-width: 46rem; }
+
+/* ── tabs, shared by Kategorien, Import and Einstellungen ────────────────────── */
+.tabs { margin-bottom: 1rem; flex-wrap: wrap; }
+
+/* ── categories ─────────────────────────────────────────────────────────────── */
+.cat-group { margin-bottom: 1.25rem; }
+.cat-group > h2 { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+.cat-row__actions { display: flex; gap: .2rem; justify-content: flex-end; }
+
+.rule-row__key { font-size: .72rem; color: var(--muted); }
+.rule-list { display: grid; gap: .3rem; }
+
+/* ── import ─────────────────────────────────────────────────────────────────── */
+.dropzone {
+  border: 2px dashed var(--line-strong); border-radius: var(--r-lg);
+  padding: 1.75rem 1rem; text-align: center; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: .6rem;
+  background: var(--surface);
+}
+.dropzone--over { border-color: var(--accent); background: var(--accent-soft); }
+.progress {
+  width: 100%; height: 6px; border-radius: var(--r-pill);
+  background: var(--surface-2); overflow: hidden;
+}
+.progress > span { display: block; height: 100%; background: var(--accent); }
+
+/* ── the review queue ────────────────────────────────────────────────────────
+   ~238 decisions in one sitting, so the card is sized for the keyboard and the
+   queue beside it exists to show progress, not to be clicked through. */
+.review { display: grid; gap: 1rem; }
+@media (min-width: 1000px) { .review { grid-template-columns: 1fr 20rem; } }
+
+.review-card { display: flex; flex-direction: column; gap: .85rem; }
+.review-card__comment { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
+.review-card__meta { display: flex; flex-wrap: wrap; gap: .4rem .9rem; font-size: .8rem; color: var(--muted); }
+
+.suggestions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.suggestion {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .4rem .6rem; border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); background: var(--surface);
+  font-size: .85rem; min-height: var(--tap);
+}
+.suggestion[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); }
+.suggestion__key {
+  font-size: .68rem; font-weight: 700; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 .25rem;
+}
+/* Edit-distance hints. Greyed, never preselected, and visibly a lesser thing than
+   a suggestion — this is where `trinken → tanken` would otherwise look confident. */
+.suggestion--hint { opacity: .6; border-style: dashed; font-style: italic; }
+
+.picker { position: relative; }
+.picker__list {
+  display: grid; gap: .15rem; max-height: 15rem; overflow-y: auto;
+  margin-top: .35rem; padding: .2rem;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface);
+}
+.picker__option {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .4rem .5rem; border-radius: var(--r-sm); border: 0;
+  background: transparent; text-align: left; font-size: .85rem; min-height: var(--tap);
+}
+.picker__option[aria-selected='true'] { background: var(--accent-soft); }
+.picker__option:hover { background: var(--surface-2); }
+
+.queue { display: grid; gap: .15rem; max-height: 26rem; overflow-y: auto; }
+.queue__item {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .35rem .5rem; border-radius: var(--r-sm); border: 0;
+  background: transparent; text-align: left; font-size: .82rem; width: 100%;
+}
+.queue__item[aria-current='true'] { background: var(--accent-soft); font-weight: 600; }
+.queue__item:hover { background: var(--surface-2); }
+.queue__count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── settings ───────────────────────────────────────────────────────────────── */
+.settings-section { margin-bottom: 1.25rem; }
+.settings-section > h2 { margin-bottom: .4rem; }
+.settings-section > p { color: var(--muted); font-size: .85rem; margin-bottom: .75rem; max-width: 46rem; }
+.settings-form { display: grid; gap: .75rem; max-width: 26rem; }
