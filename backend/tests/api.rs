@@ -26,6 +26,9 @@ const ORIGIN: &str = "http://localhost:3100";
 struct TestApp {
     router: Router,
     cookie: Option<String>,
+    /// A per-test APP_DATA_DIR, so the receipt tests can assert that nothing was
+    /// written outside the tenant's own subtree.
+    data_dir: std::path::PathBuf,
 }
 
 impl TestApp {
@@ -58,6 +61,8 @@ impl TestApp {
 
         let mut config = Config::test(target.as_str());
         config.public_url = ORIGIN.to_string();
+        let data_dir = std::env::temp_dir().join(format!("finanzen-test-{}", Uuid::new_v4()));
+        config.data_dir = data_dir.clone();
         // The app owns its tables so it can migrate; FORCE ROW LEVEL SECURITY means
         // policies still apply to it.
         let db = finanzen::db::connect(&config)
@@ -74,7 +79,136 @@ impl TestApp {
         Some(Self {
             router: finanzen::router(state),
             cookie: None,
+            data_dir,
         })
+    }
+
+    /// Sends as a specific session, so one test can drive two tenants.
+    async fn send_as(
+        &self,
+        cookie: Option<&str>,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(format!("/api/v1{path}"))
+            .header(header::ORIGIN, ORIGIN);
+        if let Some(c) = cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        let req = match body {
+            Some(v) => req
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(v.to_string()))
+                .unwrap(),
+            None => req.body(Body::empty()).unwrap(),
+        };
+        let response = self.router.clone().oneshot(req).await.expect("request");
+        let status = response.status();
+        let bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes();
+        let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        (status, value)
+    }
+
+    /// A GET whose body is not JSON — the CSV, the PDF and a receipt.
+    async fn get_raw(&self, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+        let req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1{path}"))
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::COOKIE, self.cookie.clone().expect("session"))
+            .body(Body::empty())
+            .unwrap();
+        let response = self.router.clone().oneshot(req).await.expect("request");
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, headers, bytes.to_vec())
+    }
+
+    /// Multipart upload of arbitrary bytes, so a receipt test can choose the
+    /// filename and the declared content type — which is the whole attack surface.
+    async fn upload_bytes(
+        &self,
+        path: &str,
+        filename: &str,
+        content_type: &str,
+        bytes: &[u8],
+    ) -> (StatusCode, Value) {
+        let boundary = "----finanzen-test-boundary";
+        let mut body = Vec::new();
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; \
+                 filename=\"{filename}\"\r\nContent-Type: {content_type}\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("/api/v1{path}"))
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::COOKIE, self.cookie.clone().expect("session"))
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(body))
+            .unwrap();
+        let response = self.router.clone().oneshot(req).await.expect("upload");
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    /// Creates a second account and returns its session cookie. The round-trip test
+    /// needs a genuinely separate tenant, not a second view of the same rows.
+    async fn create_second_user(&self, username: &str) -> String {
+        let (status, _) = self
+            .send(
+                "POST",
+                "/admin/users",
+                Some(json!({
+                    "username": username,
+                    "displayName": username,
+                    "password": "ein-anderes-langes-passwort"
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "zweiter Benutzer");
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/auth/login")
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"username": username, "password": "ein-anderes-langes-passwort"})
+                    .to_string(),
+            ))
+            .unwrap();
+        let response = self.router.clone().oneshot(req).await.expect("login");
+        assert_eq!(response.status(), StatusCode::OK);
+        response
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .map(str::to_string)
+            .expect("session cookie")
     }
 
     async fn send(&self, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
@@ -759,4 +893,1073 @@ async fn an_unknown_api_path_is_a_json_404() {
     let (status, body) = app.send("POST", "/bookings/not-a-uuid/nope", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["code"], "not_found");
+}
+
+// ----------------------------------------------------------------- recurring
+
+/// Creates a template and returns its id.
+async fn make_template(app: &TestApp, body: Value) -> String {
+    let (status, created) = app.send("POST", "/recurring", Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED, "Vorlage: {created}");
+    created["id"].as_str().expect("template id").to_string()
+}
+
+/// Materialising twice must create nothing the second time.
+///
+/// This is the property that decides whether the "alle buchen" button is safe to
+/// press. It is guaranteed by the partial unique index, not by the handler — which is
+/// why the assertion is made through the API rather than by unit-testing a guard.
+#[tokio::test]
+async fn materialising_a_month_twice_creates_nothing_the_second_time() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let miete = app.category_id("Miete").await;
+
+    make_template(
+        &app,
+        json!({
+            "name": "Miete", "comment": "Miete", "kind": "expense",
+            "amountCents": 110000, "categoryId": miete, "dayOfMonth": 1,
+            "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    make_template(
+        &app,
+        json!({
+            "name": "Spotify", "comment": "Spotify", "kind": "expense",
+            "amountCents": 300, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+
+    let (status, first) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 3})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["created"], 2);
+    assert_eq!(first["skipped"], 0);
+
+    let (_, second) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 3})),
+        )
+        .await;
+    assert_eq!(second["created"], 0, "ein zweiter Lauf legt nichts an");
+    assert_eq!(second["skipped"], 2);
+    for item in second["items"].as_array().unwrap() {
+        assert_eq!(item["skippedReason"], "alreadyBooked");
+    }
+
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(bookings["total"], 2, "keine Doppelbuchungen");
+
+    // A different month is a different period, so it is not a duplicate.
+    let (_, april) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 4})),
+        )
+        .await;
+    assert_eq!(april["created"], 2);
+}
+
+/// A dry run reports exactly what a real run would do, and writes nothing.
+#[tokio::test]
+async fn a_dry_run_reports_the_same_counts_and_writes_nothing() {
+    let mut app = app!();
+    app.setup_admin().await;
+    make_template(
+        &app,
+        json!({
+            "name": "Internet", "comment": "Internet", "kind": "expense",
+            "amountCents": 4500, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+
+    let (_, dry) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 5, "dryRun": true})),
+        )
+        .await;
+    assert_eq!(dry["created"], 1);
+    assert_eq!(dry["dryRun"], true);
+    assert!(dry["items"][0]["bookingId"].is_null());
+
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(bookings["total"], 0, "ein Probelauf bucht nichts");
+
+    let (_, wet) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 5})),
+        )
+        .await;
+    assert_eq!(wet["created"], dry["created"]);
+}
+
+/// A quarterly template is due in four months of the year and in no others, and an
+/// annual one in exactly one. Getting this wrong is invisible until a quarter is
+/// double-booked or silently skipped.
+#[tokio::test]
+async fn a_quarterly_template_is_due_only_in_the_right_months() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    make_template(
+        &app,
+        json!({
+            "name": "Versicherung", "comment": "Versicherung", "kind": "expense",
+            "amountCents": 32000, "intervalMonths": 3,
+            "anchor": {"year": 2026, "month": 2},
+            "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    make_template(
+        &app,
+        json!({
+            "name": "Domain", "comment": "Domain", "kind": "expense",
+            "amountCents": 1500, "intervalMonths": 12,
+            "anchor": {"year": 2026, "month": 9},
+            "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+
+    let mut due_quarterly = Vec::new();
+    let mut due_annual = Vec::new();
+    for month in 1..=12u8 {
+        let (status, list) = app
+            .send("GET", &format!("/recurring?year=2026&month={month}"), None)
+            .await;
+        assert_eq!(status, StatusCode::OK, "{list}");
+        for t in list.as_array().unwrap() {
+            if t["dueInPeriod"] == json!(true) {
+                if t["name"] == "Versicherung" {
+                    due_quarterly.push(month);
+                } else {
+                    due_annual.push(month);
+                }
+            }
+        }
+    }
+    assert_eq!(due_quarterly, vec![2, 5, 8, 11]);
+    assert_eq!(due_annual, vec![9]);
+
+    // And the materialiser agrees with the listing.
+    let (_, march) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 3})),
+        )
+        .await;
+    assert_eq!(march["created"], 0, "im März ist nichts fällig");
+    let (_, may) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 5})),
+        )
+        .await;
+    assert_eq!(may["created"], 1);
+    assert_eq!(may["items"][0]["templateName"], "Versicherung");
+}
+
+/// The whole reason `amount_is_estimate` exists: the gym costs 29,00 / 31,50 / 34,50
+/// depending on the month, so materialising it as a confirmed 29,00 would put a wrong
+/// figure into the year's total and nothing would ever flag it.
+#[tokio::test]
+async fn an_estimate_materialises_as_a_draft_that_moves_no_total_until_confirmed() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let sport = app.category_id("Sport").await;
+
+    app.send(
+        "POST",
+        "/bookings",
+        Some(json!({
+            "year": 2026, "month": 2, "kind": "expense",
+            "amountCents": 50000, "comment": "Anker"
+        })),
+    )
+    .await;
+    let (_, before) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(before["expenseCents"], 50000);
+
+    make_template(
+        &app,
+        json!({
+            "name": "Mafit", "comment": "Mafit", "kind": "expense",
+            "amountCents": 2900, "amountIsEstimate": true, "categoryId": sport,
+            "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+
+    let (_, run) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 2})),
+        )
+        .await;
+    assert_eq!(run["created"], 1);
+    assert_eq!(run["drafts"], 1);
+    assert_eq!(run["items"][0]["status"], "draft");
+    let draft_id = run["items"][0]["bookingId"].as_str().unwrap().to_string();
+
+    // Nothing moved. Not the totals, not the category, not the month.
+    let (_, after) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(after["expenseCents"], 50000, "ein Entwurf zählt nicht mit");
+    assert_eq!(after["balanceCents"], before["balanceCents"]);
+    let (_, cats) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    assert!(
+        !cats["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["categoryName"] == "Sport"),
+        "Sport darf vor der Bestätigung nirgends auftauchen"
+    );
+    // ... and it is not in the ordinary listing either.
+    let (_, listed) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(listed["total"], 1);
+    let (_, drafts) = app
+        .send("GET", "/bookings?year=2026&status=draft", None)
+        .await;
+    assert_eq!(drafts["total"], 1, "aber die Prüfliste findet ihn");
+
+    // Confirming with the month's real amount is the whole workflow.
+    let (status, confirmed) = app
+        .send(
+            "POST",
+            &format!("/bookings/{draft_id}/confirm"),
+            Some(json!({"amountCents": 3450})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{confirmed}");
+    assert_eq!(confirmed["status"], "confirmed");
+    assert_eq!(confirmed["amountCents"], 3450);
+
+    let (_, final_state) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(final_state["expenseCents"], 53450);
+
+    // Confirming again is harmless.
+    let (status, _) = app
+        .send("POST", &format!("/bookings/{draft_id}/confirm"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, unchanged) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(unchanged["expenseCents"], 53450);
+}
+
+/// A template with no explicit category resolves through the rule table at
+/// materialisation time, so a rule fixed today reaches next month's booking.
+#[tokio::test]
+async fn a_template_without_a_category_still_goes_through_the_rule_table() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let strom = app.category_id("Strom").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Stromabschlag", "categoryId": strom})),
+    )
+    .await;
+
+    make_template(
+        &app,
+        json!({
+            "name": "Strom", "comment": "Stromabschlag", "kind": "expense",
+            "amountCents": 8200, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/recurring/materialize",
+        Some(json!({"year": 2026, "month": 6})),
+    )
+    .await;
+
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    let booking = &bookings["items"][0];
+    assert_eq!(booking["categoryName"], "Strom");
+    assert_eq!(booking["categorySource"], "rule");
+    assert_eq!(booking["origin"], "recurring");
+    assert_eq!(booking["bookedOn"], "2026-06-01");
+}
+
+/// A template whose day does not exist in a given month must clamp, not explode: a
+/// single badly-configured template must not fail the whole "alle buchen" run.
+#[tokio::test]
+async fn a_template_day_past_the_end_of_the_month_is_clamped() {
+    let mut app = app!();
+    app.setup_admin().await;
+    make_template(
+        &app,
+        json!({
+            "name": "Rate", "comment": "Rate", "kind": "expense",
+            "amountCents": 5000, "dayOfMonth": 31,
+            "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    let (status, run) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 2})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{run}");
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(bookings["items"][0]["bookedOn"], "2026-02-28");
+}
+
+/// Deleting a template must not delete the money it already booked.
+#[tokio::test]
+async fn deleting_a_template_leaves_its_bookings_alone() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let id = make_template(
+        &app,
+        json!({
+            "name": "Miete", "comment": "Miete", "kind": "expense",
+            "amountCents": 110000, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/recurring/materialize",
+        Some(json!({"year": 2026, "month": 1})),
+    )
+    .await;
+
+    let (status, _) = app.send("DELETE", &format!("/recurring/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, dashboard) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(dashboard["expenseCents"], 110000, "die Buchung bleibt");
+}
+
+// ------------------------------------------------------------------ receipts
+
+const ONE_PIXEL_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+async fn make_booking(app: &TestApp, comment: &str, amount: i64, tax: bool) -> String {
+    let (status, booking) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({
+                "year": 2026, "month": 4, "kind": "expense",
+                "amountCents": amount, "comment": comment, "taxRelevant": tax
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{booking}");
+    booking["id"].as_str().expect("booking id").to_string()
+}
+
+/// The filename a phone or a browser sends is attacker-controlled. It is stored as
+/// metadata and is never a path component — so a name full of `../` produces a file
+/// in exactly the same place an ordinary name does.
+#[tokio::test]
+async fn a_receipt_filename_containing_dot_dot_cannot_escape_its_directory() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let booking = make_booking(&app, "Kaufland", 1907, true).await;
+
+    let (status, receipt) = app
+        .upload_bytes(
+            &format!("/bookings/{booking}/receipt"),
+            "../../../../etc/passwd",
+            "image/png",
+            ONE_PIXEL_PNG,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{receipt}");
+    assert_eq!(
+        receipt["filename"], "passwd",
+        "der Pfadanteil wird verworfen"
+    );
+
+    // Exactly one file, and it lives under the tenant's own uuid-named directory.
+    let root = app.data_dir.join("receipts");
+    let mut found: Vec<std::path::PathBuf> = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                stack.push(entry.path());
+            } else {
+                found.push(entry.path());
+            }
+        }
+    }
+    assert_eq!(found.len(), 1, "genau eine Datei: {found:?}");
+    let path = &found[0];
+    assert!(
+        path.starts_with(&root),
+        "die Datei liegt unter {root:?}, nicht {path:?}"
+    );
+    assert_eq!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("png"),
+        "die Endung kommt aus dem Content-Type, nicht aus dem Dateinamen"
+    );
+    assert!(
+        !path.to_string_lossy().contains("passwd"),
+        "der Dateiname taucht im Pfad nicht auf"
+    );
+    // Nothing was written next to the data directory either.
+    assert!(!app.data_dir.join("etc").exists());
+
+    // The bytes come back unchanged, under the sanitised name.
+    let (status, headers, bytes) = app.get_raw(&format!("/bookings/{booking}/receipt")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, ONE_PIXEL_PNG);
+    let disposition = headers
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(disposition.contains("attachment"));
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+
+    // The tax report sees it.
+    let (_, tax) = app.send("GET", "/tax?year=2026", None).await;
+    assert_eq!(tax["receiptsPresent"], 1);
+    assert_eq!(tax["entries"][0]["hasReceipt"], true);
+
+    let (status, _) = app
+        .send("DELETE", &format!("/bookings/{booking}/receipt"), None)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(!path.exists(), "die Datei wird mitgelöscht");
+    let (status, _, _) = app.get_raw(&format!("/bookings/{booking}/receipt")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Only images and PDFs. Anything else is refused before a byte reaches the disk.
+#[tokio::test]
+async fn a_receipt_that_is_not_an_image_or_a_pdf_is_refused() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let booking = make_booking(&app, "Kaufland", 1907, true).await;
+
+    for (name, content_type) in [
+        ("beleg.html", "text/html"),
+        ("beleg.sh", "application/x-sh"),
+        ("beleg.pdf", "application/octet-stream"),
+        ("beleg.png", ""),
+    ] {
+        let (status, body) = app
+            .upload_bytes(
+                &format!("/bookings/{booking}/receipt"),
+                name,
+                content_type,
+                b"<script>alert(1)</script>",
+            )
+            .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "{content_type} muss abgelehnt werden: {body}"
+        );
+    }
+    assert!(
+        !app.data_dir.join("receipts").exists()
+            || std::fs::read_dir(app.data_dir.join("receipts"))
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(true),
+        "eine abgelehnte Datei landet nicht auf der Platte"
+    );
+
+    // A receipt for a booking that does not exist is a 404, never a 403: a 403 would
+    // confirm the id exists in somebody else's account.
+    let (status, _) = app
+        .upload_bytes(
+            &format!("/bookings/{}/receipt", Uuid::new_v4()),
+            "beleg.png",
+            "image/png",
+            ONE_PIXEL_PNG,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// `receipts_dedupe` is UNIQUE (user_id, sha256), so the same bytes exist once per
+/// user. The documented consequence: re-uploading to the same booking is a no-op, and
+/// attaching the same file to a second booking is refused with the first booking
+/// named — rather than silently moving the receipt off the booking it belongs to.
+#[tokio::test]
+async fn the_same_file_twice_is_a_no_op_once_and_a_conflict_on_another_booking() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let first = make_booking(&app, "Kaufland", 1907, true).await;
+    let second = make_booking(&app, "Edeka", 2210, true).await;
+
+    let (status, one) = app
+        .upload_bytes(
+            &format!("/bookings/{first}/receipt"),
+            "beleg.png",
+            "image/png",
+            ONE_PIXEL_PNG,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, again) = app
+        .upload_bytes(
+            &format!("/bookings/{first}/receipt"),
+            "beleg.png",
+            "image/png",
+            ONE_PIXEL_PNG,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "derselbe Beleg, dieselbe Buchung");
+    assert_eq!(again["id"], one["id"], "kein zweiter Datensatz");
+
+    let (status, conflict) = app
+        .upload_bytes(
+            &format!("/bookings/{second}/receipt"),
+            "beleg.png",
+            "image/png",
+            ONE_PIXEL_PNG,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        conflict["message"].as_str().unwrap().contains("Kaufland"),
+        "die Meldung nennt die andere Buchung: {conflict}"
+    );
+}
+
+// ------------------------------------------------------------------- exports
+
+/// German Excel needs the BOM and the semicolon, and a German filename needs
+/// RFC 5987. All three are silent failures: without the BOM every umlaut is
+/// mojibake, without the semicolon every amount splits in half at its decimal comma,
+/// without `filename*` the file lands as `export.csv`.
+#[tokio::test]
+async fn the_tax_csv_is_readable_by_a_german_excel() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let booking = make_booking(&app, "Uni Gebühren", 39000, true).await;
+    app.upload_bytes(
+        &format!("/bookings/{booking}/receipt"),
+        "beleg.pdf",
+        "application/pdf",
+        b"%PDF-1.4 fake",
+    )
+    .await;
+    make_booking(&app, "Spotify", 2994, true).await;
+
+    let (status, headers, bytes) = app.get_raw("/tax/export.csv?year=2026").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(&bytes[..3], &[0xEF, 0xBB, 0xBF], "UTF-8 BOM");
+    let text = String::from_utf8(bytes[3..].to_vec()).expect("utf-8");
+
+    assert!(text.starts_with("Nr.;Monat;"), "Semikolon-getrennt: {text}");
+    assert!(text.contains("390,00"), "de-DE formatiert: {text}");
+    assert!(!text.contains("39000"), "keine Cents in der CSV: {text}");
+    assert!(text.contains("Uni Gebühren"), "Umlaute unverfälscht");
+    assert!(text.contains(";ja"), "die Belegspalte");
+    assert!(text.contains("Summe"), "eine Summenzeile");
+    // 390,00 + 29,94
+    assert!(text.contains("419,94"), "die Summe stimmt: {text}");
+
+    let disposition = headers
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(disposition.starts_with("attachment;"));
+    assert!(disposition.contains("filename*=UTF-8''Steuer_2026.csv"));
+    assert_eq!(
+        headers.get(header::CONTENT_TYPE).unwrap(),
+        "text/csv; charset=utf-8"
+    );
+}
+
+/// The PDF only has to be correct and printable. What is asserted is that it is a
+/// real PDF, that it carries the data, and that its German filename survives — the
+/// layout is a judgement call, the bytes are not.
+#[tokio::test]
+async fn the_tax_pdf_is_a_real_pdf_with_a_german_filename() {
+    let mut app = app!();
+    app.setup_admin().await;
+    // More rows than fit on one page, so pagination is exercised rather than assumed.
+    for i in 0..60 {
+        make_booking(&app, &format!("Beleg {i}"), 1000 + i, true).await;
+    }
+
+    let (status, headers, bytes) = app.get_raw("/tax/export.pdf?year=2026").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(&bytes[..5], b"%PDF-", "ein echtes PDF");
+    assert!(bytes.len() > 1500, "nicht leer: {} Bytes", bytes.len());
+    let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(1024)..]);
+    assert!(tail.contains("%%EOF"), "vollständig geschrieben");
+
+    assert_eq!(
+        headers.get(header::CONTENT_TYPE).unwrap(),
+        "application/pdf"
+    );
+    let disposition = headers
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(
+        disposition.contains("filename*=UTF-8''Beleg%C3%BCbersicht_2026.pdf"),
+        "{disposition}"
+    );
+    // The ASCII fallback must still be a usable name.
+    assert!(disposition.contains("filename=\"Belegubersicht_2026.pdf\""));
+
+    // An empty year still produces a valid document rather than a 500.
+    let (status, _, bytes) = app.get_raw("/tax/export.pdf?year=1999").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(&bytes[..5], b"%PDF-");
+}
+
+/// Cents on the JSON side, de-DE on the CSV side. The exception is deliberate and
+/// this is the test that would catch someone "fixing" it in either direction.
+#[tokio::test]
+async fn the_json_export_keeps_cents_and_the_csv_export_does_not() {
+    let mut app = app!();
+    app.setup_admin().await;
+    make_booking(&app, "Miete", 110000, false).await;
+
+    let (_, _, bytes) = app.get_raw("/exports/bookings.json?year=2026").await;
+    let doc: Value = serde_json::from_slice(&bytes).expect("json");
+    assert_eq!(doc["formatVersion"], 1);
+    assert_eq!(doc["bookings"][0]["amountCents"], 110000);
+
+    let (_, headers, bytes) = app.get_raw("/exports/bookings.csv?year=2026").await;
+    assert_eq!(&bytes[..3], &[0xEF, 0xBB, 0xBF]);
+    let text = String::from_utf8(bytes[3..].to_vec()).unwrap();
+    assert!(text.contains("1.100,00"), "{text}");
+    assert!(!text.contains("110000"), "{text}");
+    assert!(
+        headers
+            .get(header::CONTENT_DISPOSITION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Buchungen_2026.csv")
+    );
+}
+
+/// Strips every identifier so two accounts holding the same ledger compare equal.
+/// Ids are per-user by design — two users' "Miete" are different rows — so comparing
+/// them would only prove that uuids differ.
+fn strip_ids(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .filter(|(k, _)| {
+                    !matches!(
+                        k.as_str(),
+                        "id" | "categoryId" | "bookingId" | "templateId" | "exportedAt"
+                    )
+                })
+                .map(|(k, v)| (k.clone(), strip_ids(v)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(strip_ids).collect()),
+        other => other.clone(),
+    }
+}
+
+/// The strongest single test available: a full account is exported as JSON, restored
+/// into a genuinely separate tenant, and every report is compared field by field.
+///
+/// It exercises the schema, the netting rule, the categorisation state machine, the
+/// engine and both export paths at once — and it is the test that fails if a future
+/// column is added to `bookings` and forgotten in the export.
+#[tokio::test]
+async fn the_export_round_trip_preserves_every_figure() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    // A deliberately awkward ledger: netting on both sides of one category, a
+    // transfer that must not touch consumption, a manual override that must survive
+    // as an override, a tax-relevant row, a draft that must stay a draft, and a
+    // recurring template.
+    let miete = app.category_id("Miete").await;
+    let dienstreisen = app.category_id("Dienstreisen").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Miete", "categoryId": miete})),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "to ING", "kindOverride": "transfer"})),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/years",
+        Some(json!({"year": 2026, "openingBalanceCents": 4000000})),
+    )
+    .await;
+
+    for (month, kind, amount, comment, tax) in [
+        (1u8, "expense", 110000i64, "Miete", false),
+        (1, "income", 55000, "Miete", false),
+        (1, "income", 300000, "Gehalt", false),
+        (2, "expense", 4250, "Lebensmittel", false),
+        (2, "expense", 39000, "Uni Gebühren", true),
+        (3, "transfer", 100000, "to ING", false),
+        (3, "income", 600000, "Freelancing", true),
+    ] {
+        let (status, body) = app
+            .send(
+                "POST",
+                "/bookings",
+                Some(json!({
+                    "year": 2026, "month": month, "kind": kind,
+                    "amountCents": amount, "comment": comment, "taxRelevant": tax
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+    }
+    // A manual override: the rule table says nothing about this comment, the user does.
+    let (_, override_booking) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({
+                "year": 2026, "month": 4, "kind": "expense", "amountCents": 20000,
+                "comment": "Hotel Wien", "categoryId": dienstreisen
+            })),
+        )
+        .await;
+    assert_eq!(override_booking["categorySource"], "manual");
+
+    make_template(
+        &app,
+        json!({
+            "name": "Mafit", "comment": "Mafit", "kind": "expense",
+            "amountCents": 2900, "amountIsEstimate": true,
+            "intervalMonths": 1, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+    let (_, run) = app
+        .send(
+            "POST",
+            "/recurring/materialize",
+            Some(json!({"year": 2026, "month": 5})),
+        )
+        .await;
+    assert_eq!(run["drafts"], 1, "der Entwurf gehört mit in den Export");
+
+    let (status, _, bytes) = app.get_raw("/exports/bookings.json").await;
+    assert_eq!(status, StatusCode::OK);
+    let document: Value = serde_json::from_slice(&bytes).expect("export json");
+    assert_eq!(document["bookings"].as_array().unwrap().len(), 9);
+    assert_eq!(document["recurringTemplates"].as_array().unwrap().len(), 1);
+
+    // ---- into a fresh, genuinely separate tenant ----
+    let other = app.create_second_user("zweitkonto").await;
+    let (status, empty) = app
+        .send_as(Some(&other), "GET", "/dashboard?year=2026", None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(empty["bookingCount"], 0, "das Zielkonto ist leer");
+
+    let (status, restored) = app
+        .send_as(Some(&other), "POST", "/exports/restore", Some(document))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{restored}");
+    assert_eq!(restored["bookingsCreated"], 9);
+    assert_eq!(restored["templatesCreated"], 1);
+    assert_eq!(
+        restored["ruleLinksDowngraded"], 0,
+        "jede Regel wurde wiedergefunden"
+    );
+
+    // ---- and every report agrees, field by field ----
+    for path in [
+        "/dashboard?year=2026",
+        "/overview/months?year=2026",
+        "/analysis/categories?year=2026",
+        "/tax?year=2026",
+        "/years",
+    ] {
+        let (_, mine) = app.send("GET", path, None).await;
+        let (_, theirs) = app.send_as(Some(&other), "GET", path, None).await;
+        assert_eq!(
+            strip_ids(&mine),
+            strip_ids(&theirs),
+            "{path} weicht nach dem Round-Trip ab"
+        );
+    }
+
+    // The properties that would be silently wrong if only the totals matched.
+    let (_, theirs) = app
+        .send_as(Some(&other), "GET", "/dashboard?year=2026", None)
+        .await;
+    assert_eq!(
+        theirs["openingBalanceCents"], 4000000,
+        "der Vortrag reist mit"
+    );
+    assert_eq!(
+        theirs["balanceCents"], 781750,
+        "1.191.000 ein − 173.510 aus"
+    );
+    assert_eq!(theirs["bookingCount"], 8, "der Entwurf zählt nicht mit");
+    assert_eq!(theirs["taxRelevantCount"], 2);
+
+    let (_, their_bookings) = app
+        .send_as(
+            Some(&other),
+            "GET",
+            "/bookings?year=2026&status=draft",
+            None,
+        )
+        .await;
+    assert_eq!(their_bookings["total"], 1, "ein Entwurf bleibt ein Entwurf");
+
+    let (_, their_list) = app
+        .send_as(
+            Some(&other),
+            "GET",
+            "/bookings?year=2026&search=Hotel",
+            None,
+        )
+        .await;
+    assert_eq!(
+        their_list["items"][0]["categorySource"], "manual",
+        "eine manuelle Zuordnung bleibt manuell"
+    );
+    assert_eq!(their_list["items"][0]["categoryName"], "Dienstreisen");
+
+    let (_, their_transfer) = app
+        .send_as(
+            Some(&other),
+            "GET",
+            "/bookings?year=2026&kind=transfer",
+            None,
+        )
+        .await;
+    assert_eq!(their_transfer["total"], 1);
+    assert_eq!(
+        their_transfer["sumNetCents"], 0,
+        "eine Umbuchung nettet zu null"
+    );
+
+    // Restoring over an account that already has bookings is refused rather than
+    // merged: merge semantics for two ledgers that both claim to be true would be an
+    // invention, and inventing one quietly is how money goes missing.
+    let (_, _, bytes) = app.get_raw("/exports/bookings.json").await;
+    let again: Value = serde_json::from_slice(&bytes).unwrap();
+    let (status, _) = app
+        .send_as(Some(&other), "POST", "/exports/restore", Some(again))
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+/// A second tenant must not see the first tenant's templates or receipts, and must
+/// not be able to reach them by id. 404, not 403 — a 403 confirms the id exists.
+#[tokio::test]
+async fn recurring_templates_and_receipts_are_tenant_scoped() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let booking = make_booking(&app, "Kaufland", 1907, true).await;
+    app.upload_bytes(
+        &format!("/bookings/{booking}/receipt"),
+        "beleg.png",
+        "image/png",
+        ONE_PIXEL_PNG,
+    )
+    .await;
+    let template = make_template(
+        &app,
+        json!({
+            "name": "Miete", "comment": "Miete", "kind": "expense",
+            "amountCents": 110000, "activeFrom": {"year": 2026, "month": 1}
+        }),
+    )
+    .await;
+
+    let other = app.create_second_user("fremder").await;
+    let (_, list) = app.send_as(Some(&other), "GET", "/recurring", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
+
+    for (method, path) in [
+        ("PUT", format!("/recurring/{template}")),
+        ("DELETE", format!("/recurring/{template}")),
+        ("DELETE", format!("/bookings/{booking}/receipt")),
+        ("GET", format!("/bookings/{booking}/receipt")),
+    ] {
+        let body = (method == "PUT").then(|| {
+            json!({
+                "name": "Gekapert", "comment": "Gekapert", "kind": "expense",
+                "amountCents": 1, "activeFrom": {"year": 2026, "month": 1}
+            })
+        });
+        let (status, _) = app.send_as(Some(&other), method, &path, body).await;
+        assert_eq!(
+            status,
+            StatusCode::NOT_FOUND,
+            "{method} {path} muss 404 sein, nicht 403"
+        );
+    }
+
+    // And the first tenant's data is untouched.
+    let (_, mine) = app.send("GET", "/recurring", None).await;
+    assert_eq!(mine[0]["name"], "Miete");
+}
+
+/// The same round trip, against the real 2026 workbook, asserting the acceptance
+/// numbers come back out the other side.
+///
+/// The synthetic round-trip above proves the mechanism; this one proves it on 474
+/// real bookings with 192 rules, three manual overrides and the netting that makes
+/// Miete read 4.800,00. Skips when the workbook is absent — it carries personal
+/// financial data and is deliberately not in the repository.
+#[tokio::test]
+async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
+    let Ok(_) = std::fs::metadata("../konten_2026_auswertung.xlsx") else {
+        eprintln!("SKIP: source workbook not present");
+        return;
+    };
+    let mut app = app!();
+    app.setup_admin().await;
+
+    let taxonomy = {
+        let bytes = std::fs::read("../konten_2026_auswertung.xlsx").unwrap();
+        finanzen::sheets::read_xlsx_taxonomy(&bytes).unwrap()
+    };
+    let (_, cats) = app.send("GET", "/categories", None).await;
+    let ids: std::collections::BTreeMap<String, String> = cats
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["name"].as_str().unwrap().to_string(),
+                c["id"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    for (pattern, category) in &taxonomy.rules {
+        // Mafit is the gym, not the pet shop — the one correction applied at import.
+        let category = match pattern.as_str() {
+            "mapet" | "mapet guthaben" => "Sport",
+            _ => category.as_str(),
+        };
+        if let Some(id) = ids.get(category) {
+            app.send(
+                "POST",
+                "/rules",
+                Some(json!({"comment": pattern, "categoryId": id})),
+            )
+            .await;
+        }
+    }
+
+    let import_id = app.upload_workbook("../konten_2026_auswertung.xlsx").await;
+    app.send(
+        "POST",
+        &format!("/imports/{import_id}/commit"),
+        Some(json!({})),
+    )
+    .await;
+    app.send(
+        "PUT",
+        "/years/2026",
+        Some(json!({"year": 2026, "openingBalanceCents": 4000000})),
+    )
+    .await;
+
+    let (_, mine) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(mine["balanceCents"], 900000, "Bilanz 2026");
+    assert_eq!(mine["closingBalanceCents"], 4900000, "Bilanz gesamt");
+
+    let (_, _, bytes) = app.get_raw("/exports/bookings.json").await;
+    let document: Value = serde_json::from_slice(&bytes).expect("export json");
+    assert_eq!(document["bookings"].as_array().unwrap().len(), 474);
+
+    let other = app.create_second_user("wiederhergestellt").await;
+    let (status, restored) = app
+        .send_as(Some(&other), "POST", "/exports/restore", Some(document))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{restored}");
+    assert_eq!(restored["bookingsCreated"], 474);
+    assert_eq!(restored["ruleLinksDowngraded"], 0);
+
+    let (_, theirs) = app
+        .send_as(Some(&other), "GET", "/dashboard?year=2026", None)
+        .await;
+    assert_eq!(theirs["incomeCents"], 3600000, "Einnahmen");
+    assert_eq!(theirs["expenseCents"], 2700000, "Ausgaben");
+    assert_eq!(theirs["balanceCents"], 900000, "Bilanz");
+    assert_eq!(theirs["openingBalanceCents"], 4000000, "Vortrag");
+    assert_eq!(theirs["closingBalanceCents"], 4900000, "Bilanz gesamt");
+    assert_eq!(theirs["taxRelevantCount"], 20);
+    assert_eq!(theirs["uncategorizedCount"], 0);
+
+    for path in [
+        "/dashboard?year=2026",
+        "/overview/months?year=2026",
+        "/analysis/categories?year=2026",
+        "/tax?year=2026",
+    ] {
+        let (_, mine) = app.send("GET", path, None).await;
+        let (_, theirs) = app.send_as(Some(&other), "GET", path, None).await;
+        assert_eq!(
+            strip_ids(&mine),
+            strip_ids(&theirs),
+            "{path} weicht nach dem Round-Trip ab"
+        );
+    }
+
+    // Juni's negative variable-cost figure is the single best regression test for
+    // netting; it has to survive the export too.
+    let (_, months) = app
+        .send_as(Some(&other), "GET", "/overview/months?year=2026", None)
+        .await;
+    let juni = months["months"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["month"] == 6)
+        .expect("Juni");
+    assert_eq!(juni["variableCostsNetCents"], -30000);
 }

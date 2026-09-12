@@ -6,9 +6,12 @@ pub mod categories;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod export;
 pub mod importer;
 pub mod locale;
 pub mod models;
+pub mod receipts;
+pub mod recurring;
 pub mod rules;
 pub mod sheets;
 pub mod suggest;
@@ -109,6 +112,13 @@ pub fn router(state: AppState) -> Router {
                 .delete(bookings::delete),
         )
         .route("/bookings/bulk", post(bookings::bulk))
+        .route("/bookings/{id}/confirm", post(bookings::confirm))
+        .route(
+            "/bookings/{id}/receipt",
+            post(receipts::upload)
+                .get(receipts::download)
+                .delete(receipts::delete),
+        )
         .route(
             "/categories",
             get(categories::list).post(categories::create),
@@ -125,6 +135,17 @@ pub fn router(state: AppState) -> Router {
         .route("/overview/months", get(analysis::monthly))
         .route("/analysis/categories", get(analysis::categories))
         .route("/tax", get(analysis::tax))
+        .route("/tax/export.csv", get(export::tax_csv))
+        .route("/tax/export.pdf", get(export::tax_pdf))
+        .route("/exports/bookings.json", get(export::bookings_json))
+        .route("/exports/bookings.csv", get(export::bookings_csv))
+        .route("/exports/restore", post(export::restore))
+        .route("/recurring", get(recurring::list).post(recurring::create))
+        .route(
+            "/recurring/{id}",
+            put(recurring::update).delete(recurring::delete),
+        )
+        .route("/recurring/materialize", post(recurring::materialize))
         .route("/imports", get(importer::list).post(importer::upload))
         .route("/imports/{id}", get(importer::get))
         .route("/imports/{id}/commit", post(importer::commit))

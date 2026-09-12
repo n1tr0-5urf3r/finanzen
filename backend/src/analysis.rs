@@ -238,6 +238,15 @@ pub async fn categories(
     Ok(Json(out))
 }
 
+/// The tax report, whose running number ends up on a printed list handed to a tax
+/// office — so the ordering has to be a function of the DATA, not of storage.
+///
+/// `created_at` defaults to `now()`, which inside a transaction is the transaction's
+/// timestamp: every row of one import commit carries the identical value, so it
+/// breaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,
+/// which made `Nr.` arbitrary within a month and reshuffled it on any re-import.
+/// `comment, amount_cents` restore determinism from the booking's own content; `id`
+/// stays last only to keep the sort total for genuinely identical rows.
 pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxReport>> {
     let rows = sqlx::query(
         "SELECT b.id, b.period_month, b.comment, c.name AS category_name, b.kind, \
@@ -245,7 +254,7 @@ pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxRep
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
            FROM bookings b LEFT JOIN categories c ON c.id = b.category_id \
           WHERE b.tax_relevant AND b.status = 'confirmed' AND b.period_year = $1::smallint \
-          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.id",
+          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id",
     )
     .bind(q.year)
     .fetch_all(ctx.tenant.conn())

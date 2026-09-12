@@ -405,3 +405,281 @@ pub struct TaxReport {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DateTimeWrapper(pub DateTime<Utc>);
+
+// -------------------------------------------------------------- recurring
+
+/// A year/month pair on the wire. `period_ord` is an internal encoding —
+/// `year*12 + month - 1` — and leaking it into the API would force every client to
+/// reimplement the arithmetic to show a month name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Period {
+    pub year: i32,
+    pub month: u8,
+}
+
+impl Period {
+    pub fn from_ord(ord: i32) -> Self {
+        let (year, month) = crate::locale::ord_to_year_month(ord);
+        Self { year, month }
+    }
+    pub fn ord(self) -> i32 {
+        crate::locale::period_ord(self.year, self.month)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurringTemplate {
+    pub id: Uuid,
+    pub name: String,
+    pub comment: String,
+    pub kind: BookingKind,
+    pub amount_cents: i64,
+    /// The amount varies month to month (the gym is 29,00 / 31,50 / 34,50), so
+    /// materialising must produce a **draft** the user confirms with the real figure.
+    pub amount_is_estimate: bool,
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    pub category_type: Option<String>,
+    pub tax_relevant: bool,
+    pub day_of_month: Option<u8>,
+    /// 1 = monthly, 3 = quarterly, 12 = annual.
+    pub interval_months: u8,
+    /// The month the cycle is measured from; due months are `anchor + n*interval`.
+    pub anchor: Period,
+    pub active_from: Period,
+    pub active_to: Option<Period>,
+    pub active: bool,
+    pub sort_order: i16,
+    /// Whether the template falls due in the period the request asked about, and
+    /// whether a booking for it already exists there. Both are `null` when the
+    /// request named no period.
+    pub due_in_period: Option<bool>,
+    pub booked_in_period: Option<bool>,
+    pub last_booked: Option<Period>,
+    pub booking_count: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurringTemplateInput {
+    pub name: String,
+    pub comment: String,
+    pub kind: BookingKind,
+    pub amount_cents: i64,
+    #[serde(default)]
+    pub amount_is_estimate: bool,
+    /// A manual override, exactly as on a booking. Omit to let the rule table decide
+    /// at materialisation time, so a rule change still reaches future bookings.
+    pub category_id: Option<Uuid>,
+    #[serde(default)]
+    pub tax_relevant: bool,
+    pub day_of_month: Option<u8>,
+    #[serde(default = "one")]
+    pub interval_months: u8,
+    /// Defaults to `active_from`, which is what makes a plain monthly template a
+    /// two-field affair.
+    pub anchor: Option<Period>,
+    pub active_from: Period,
+    pub active_to: Option<Period>,
+    #[serde(default = "yes")]
+    pub active: bool,
+    #[serde(default)]
+    pub sort_order: i16,
+}
+
+fn one() -> u8 {
+    1
+}
+fn yes() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializeRequest {
+    pub year: i32,
+    pub month: u8,
+    /// Restricts the run to a subset — the month checklist's individual ticks.
+    /// Omitted means every template due in that month.
+    pub template_ids: Option<Vec<Uuid>>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializedItem {
+    pub template_id: Uuid,
+    pub template_name: String,
+    pub comment: String,
+    pub amount_cents: i64,
+    pub kind: BookingKind,
+    /// `draft` for estimate templates, `confirmed` otherwise.
+    pub status: String,
+    pub booking_id: Option<Uuid>,
+    /// Set when nothing was created. `alreadyBooked` is the normal, expected case.
+    pub skipped_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializeResult {
+    pub year: i32,
+    pub month: u8,
+    pub month_name: String,
+    pub created: i64,
+    pub skipped: i64,
+    pub drafts: i64,
+    pub dry_run: bool,
+    pub items: Vec<MaterializedItem>,
+}
+
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmBookingInput {
+    /// Confirming is also where an estimate's real amount is entered, because that
+    /// is the only reason the draft existed.
+    pub amount_cents: Option<i64>,
+}
+
+// --------------------------------------------------------------- receipts
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Receipt {
+    pub id: Uuid,
+    pub booking_id: Option<Uuid>,
+    /// The user's own filename, kept as metadata only. It is never a path component.
+    pub filename: String,
+    pub content_type: String,
+    pub byte_size: i64,
+    pub sha256: String,
+    pub uploaded_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------- exports
+
+/// The full-export document.
+///
+/// Money here stays **integer cents**, because this file is the account's backup and
+/// the input to `POST /exports/restore`. The CSV sibling is the one place de-DE
+/// formatting is applied to exported money, and only because its reader is Excel.
+///
+/// Nothing references a uuid across the document except where it is internal to it:
+/// categories, rules and templates are joined by NAME, because ids are per-user and
+/// a restore into a different account must still resolve them.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDocument {
+    /// Bumped when the shape changes incompatibly; `restore` refuses what it cannot
+    /// read rather than guessing.
+    pub format_version: i32,
+    pub exported_at: DateTime<Utc>,
+    pub app: String,
+    /// `null` for a whole-account export.
+    pub year: Option<i32>,
+    pub category_types: Vec<ExportCategoryType>,
+    pub categories: Vec<ExportCategory>,
+    pub rules: Vec<ExportRule>,
+    pub years: Vec<ExportYear>,
+    pub recurring_templates: Vec<ExportTemplate>,
+    pub bookings: Vec<ExportBooking>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCategoryType {
+    pub code: String,
+    pub label: String,
+    pub sort_order: i16,
+    pub is_income: bool,
+    pub is_savings: bool,
+    pub in_consumption: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCategory {
+    pub name: String,
+    pub type_code: String,
+    pub sort_order: i16,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportRule {
+    pub comment: String,
+    pub category_name: Option<String>,
+    pub kind_override: Option<BookingKind>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportYear {
+    pub year: i32,
+    pub opening_balance_cents: i64,
+    pub opening_source: String,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportTemplate {
+    pub name: String,
+    pub comment: String,
+    pub kind: BookingKind,
+    pub amount_cents: i64,
+    pub amount_is_estimate: bool,
+    pub category_name: Option<String>,
+    pub tax_relevant: bool,
+    pub day_of_month: Option<u8>,
+    pub interval_months: u8,
+    pub anchor: Period,
+    pub active_from: Period,
+    pub active_to: Option<Period>,
+    pub active: bool,
+    pub sort_order: i16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportBooking {
+    pub year: i32,
+    pub month: u8,
+    pub booked_on: Option<NaiveDate>,
+    pub kind: BookingKind,
+    pub amount_cents: i64,
+    pub comment: String,
+    pub tax_relevant: bool,
+    pub category_name: Option<String>,
+    pub category_source: CategorySource,
+    pub status: String,
+    pub origin: String,
+    pub shared: bool,
+    pub external_source: Option<String>,
+    pub external_id: Option<String>,
+    /// Carried so a restore of an imported account stays idempotent against a later
+    /// re-import of the same workbook.
+    pub import_fingerprint: Option<String>,
+    pub template_name: Option<String>,
+    pub has_receipt: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreResult {
+    pub categories_created: i64,
+    pub rules_created: i64,
+    pub years_created: i64,
+    pub templates_created: i64,
+    pub bookings_created: i64,
+    /// Bookings whose export said `rule` but whose rule is absent from the document.
+    /// They are restored as manual overrides so the figure never moves; the count
+    /// makes that visible instead of silent.
+    pub rule_links_downgraded: i64,
+    pub warnings: Vec<String>,
+}

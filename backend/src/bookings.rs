@@ -13,7 +13,9 @@ use crate::{
     auth::Ctx,
     error::{AppError, Result},
     locale::month_name_de,
-    models::{Booking, BookingInput, BookingKind, BookingPage, CategorySource},
+    models::{
+        Booking, BookingInput, BookingKind, BookingPage, CategorySource, ConfirmBookingInput,
+    },
 };
 
 const SELECT_BOOKING: &str = "\
@@ -66,6 +68,10 @@ pub struct BookingQuery {
     /// visible in the normal listing too.
     pub uncategorized: Option<bool>,
     pub search: Option<String>,
+    /// `confirmed` (the default), `draft`, or `all`. Drafts are excluded everywhere
+    /// by default — that is the point of the status — but the recurring screen has to
+    /// be able to list the ones waiting for their real amount.
+    pub status: Option<String>,
     pub page: Option<u32>,
     pub page_size: Option<u32>,
 }
@@ -73,7 +79,13 @@ pub struct BookingQuery {
 /// Builds the shared WHERE clause. Note there is no `user_id` predicate anywhere:
 /// row-level security supplies it, which is why forgetting one here cannot leak.
 fn filter_sql(q: &BookingQuery) -> (String, Vec<String>) {
-    let mut clauses = vec!["b.status = 'confirmed'".to_string()];
+    let mut clauses = match q.status.as_deref() {
+        // `true` rather than an empty clause list: the callers join with " AND " and
+        // build `WHERE {…}`, so an empty string would be a syntax error.
+        Some("all") => vec!["true".to_string()],
+        Some("draft") => vec!["b.status = 'draft'".to_string()],
+        _ => vec!["b.status = 'confirmed'".to_string()],
+    };
     let mut binds = Vec::new();
     let mut n = 0;
     let mut next = |binds: &mut Vec<String>, value: String| {
@@ -124,7 +136,7 @@ pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<Bo
 
     let list_sql = format!(
         "{SELECT_BOOKING} WHERE {where_sql} \
-         ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.id \
+         ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id \
          LIMIT {page_size} OFFSET {}",
         page as i64 * page_size as i64
     );
@@ -191,7 +203,7 @@ fn validate(body: &BookingInput) -> Result<()> {
     Ok(())
 }
 
-async fn assert_year_unlocked(conn: &mut PgConnection, year: i32) -> Result<()> {
+pub(crate) async fn assert_year_unlocked(conn: &mut PgConnection, year: i32) -> Result<()> {
     let locked: Option<bool> = sqlx::query_scalar(
         "SELECT tax_locked_at IS NOT NULL FROM fiscal_years WHERE year = $1::smallint",
     )
@@ -209,14 +221,14 @@ async fn assert_year_unlocked(conn: &mut PgConnection, year: i32) -> Result<()> 
 /// Resolves the category for a new or edited booking: an explicit `categoryId` is a
 /// manual override and wins; otherwise the rule table decides; otherwise unresolved.
 /// The outcome of resolving a comment against the rule table.
-struct Resolution {
-    category_id: Option<Uuid>,
-    source: &'static str,
-    rule_id: Option<Uuid>,
-    kind_override: Option<BookingKind>,
+pub(crate) struct Resolution {
+    pub(crate) category_id: Option<Uuid>,
+    pub(crate) source: &'static str,
+    pub(crate) rule_id: Option<Uuid>,
+    pub(crate) kind_override: Option<BookingKind>,
 }
 
-async fn resolve_category(
+pub(crate) async fn resolve_category(
     conn: &mut PgConnection,
     comment: &str,
     explicit: Option<Uuid>,
@@ -366,6 +378,58 @@ pub async fn update(
     if affected == 0 {
         return Err(AppError::NotFound("Buchung".into()));
     }
+
+    let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
+        .bind(id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+    let booking = row_to_booking(&row);
+    ctx.tenant.commit().await?;
+    Ok(Json(booking))
+}
+
+/// Confirms a draft booking, optionally correcting its amount.
+///
+/// A separate endpoint rather than a `status` field on `PUT /bookings/{id}`, for two
+/// reasons. The PUT body is a full `BookingInput`, so a status field there would
+/// travel on every ordinary edit and any client that forgot to echo it back would
+/// silently re-draft — or silently confirm — a booking; and draft→confirmed is the
+/// one transition that moves money into every total, so it deserves a request that
+/// cannot be made by accident.
+///
+/// Correcting the amount belongs here because it is the entire reason the draft
+/// exists: an `amountIsEstimate` template books 29,00 and the real invoice says
+/// 34,50. Confirming twice is harmless — the second call finds it already confirmed
+/// and changes nothing else.
+pub async fn confirm(
+    mut ctx: Ctx,
+    Path(id): Path<Uuid>,
+    body: Option<Json<ConfirmBookingInput>>,
+) -> Result<Json<Booking>> {
+    let input = body.map(|Json(v)| v).unwrap_or_default();
+    if let Some(amount) = input.amount_cents
+        && amount <= 0
+    {
+        return Err(AppError::Validation("Der Betrag muss positiv sein".into()));
+    }
+
+    let year: Option<i16> = sqlx::query_scalar("SELECT period_year FROM bookings WHERE id = $1")
+        .bind(id)
+        .fetch_optional(ctx.tenant.conn())
+        .await?;
+    let year = year.ok_or_else(|| AppError::NotFound("Buchung".into()))?;
+    assert_year_unlocked(ctx.tenant.conn(), year as i32).await?;
+
+    sqlx::query(
+        "UPDATE bookings SET status = 'confirmed', \
+                amount_cents = COALESCE($2, amount_cents), updated_at = now() \
+          WHERE id = $1",
+    )
+    .bind(id)
+    .bind(input.amount_cents)
+    .execute(ctx.tenant.conn())
+    .await
+    .map_err(|e| AppError::from_db(e, "Buchung konnte nicht bestätigt werden"))?;
 
     let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
         .bind(id)
