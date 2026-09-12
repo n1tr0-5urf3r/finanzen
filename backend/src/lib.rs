@@ -6,10 +6,12 @@ pub mod categories;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod importer;
 pub mod locale;
 pub mod models;
 pub mod rules;
 pub mod sheets;
+pub mod suggest;
 pub mod tenant;
 pub mod years;
 
@@ -123,6 +125,13 @@ pub fn router(state: AppState) -> Router {
         .route("/overview/months", get(analysis::monthly))
         .route("/analysis/categories", get(analysis::categories))
         .route("/tax", get(analysis::tax))
+        .route("/imports", get(importer::list).post(importer::upload))
+        .route("/imports/{id}", get(importer::get))
+        .route("/imports/{id}/commit", post(importer::commit))
+        .route(
+            "/imports/{id}/review",
+            get(importer::review).post(importer::resolve),
+        )
         .route("/years", get(years::list).post(years::create))
         .route("/years/{year}", put(years::update))
         .layer(middleware::from_fn_with_state(state.clone(), csrf))

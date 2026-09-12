@@ -762,3 +762,73 @@ fn fixtures_match_the_source_workbooks() {
     assert_eq!(legacy.marker_total_cents, 4_000_000);
     assert_eq!(legacy.row_total_cents, 4_485_541);
 }
+
+// ----------------------------------------------------------- the suggester
+
+/// Measures the suggester against the real unknown comments, so the coverage claim
+/// in the design is a number this repo keeps honest rather than an assertion in a
+/// document. If a future change to the matcher moves these, that is worth noticing.
+#[test]
+fn suggester_coverage_on_the_real_unknown_comments() {
+    require_fixtures!();
+    use finanzen::suggest::{self, KnownRule};
+
+    let rules_map = rules();
+    let types = category_types();
+    let known: Vec<KnownRule> = rules_map
+        .iter()
+        .map(|(key, category)| KnownRule {
+            match_key: key.clone(),
+            category_id: uuid::Uuid::nil(),
+            category_name: category.clone(),
+        })
+        .collect();
+    assert!(types.contains_key("Lebensmittel"));
+
+    let legacy: serde_json::Value = serde_json::from_str(&fix_legacy()).unwrap();
+    let mut unknown: BTreeMap<String, i64> = BTreeMap::new();
+    for b in legacy["bookings"].as_array().unwrap() {
+        let comment = b["comment"].as_str().unwrap();
+        if resolve(comment, None, &rules_map).is_none() {
+            *unknown.entry(comment.trim().to_string()).or_insert(0) += 1;
+        }
+    }
+
+    let (mut suggested_distinct, mut suggested_rows) = (0i64, 0i64);
+    let total_rows: i64 = unknown.values().sum();
+    for (comment, count) in &unknown {
+        let (suggestions, _, _) = suggest::suggest(comment, &known, 0.92);
+        if !suggestions.is_empty() {
+            suggested_distinct += 1;
+            suggested_rows += count;
+        }
+    }
+
+    let distinct_pct = suggested_distinct * 100 / unknown.len() as i64;
+    let row_pct = suggested_rows * 100 / total_rows;
+    eprintln!(
+        "suggester: {suggested_distinct}/{} distinct ({distinct_pct}%), \
+         {suggested_rows}/{total_rows} rows ({row_pct}%)",
+        unknown.len()
+    );
+
+    // The measured figure is ~39% of distinct comments. Held as a band: the point is
+    // that most unknowns are new merchants no string algorithm can recover, so the
+    // review queue — not the matcher — has to make the work fast.
+    assert!(
+        (25..=55).contains(&distinct_pct),
+        "suggester coverage moved to {distinct_pct}% of distinct comments"
+    );
+
+    // The ones that matter: high-frequency unknowns are merchants, not typos, and
+    // must not receive an invented category.
+    for comment in ["Malve", "Hofladen Brinkmann", "Burgerbude", "Vela"] {
+        if unknown.contains_key(comment) {
+            let (s, _, _) = suggest::suggest(comment, &known, 0.92);
+            assert!(
+                s.is_empty(),
+                "{comment} darf keinen Vorschlag bekommen: {s:?}"
+            );
+        }
+    }
+}
