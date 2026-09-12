@@ -243,3 +243,51 @@ describe('the import review queue', () => {
     expect(screen.getByText(/107,29/)).toBeInTheDocument();
   });
 });
+
+describe('the keyboard loop', () => {
+  /**
+   * ~154 of the 238 items have no suggestion, so the filter IS the decision for
+   * most of the queue. Walking it needs arrow keys, and backing out of a typo
+   * must not cost the item.
+   */
+  it('walks the matches with the arrow keys and takes the highlighted one', async () => {
+    const user = userEvent.setup();
+    renderQueue();
+    await screen.findAllByText('Malve');
+
+    const filter = screen.getByLabelText(/Kategorie wählen/i);
+    await user.type(filter, 'e');
+
+    const options = await screen.findAllByRole('option');
+    expect(options.length).toBeGreaterThan(1);
+    expect(options[0].className).toContain('is-highlighted');
+
+    await user.keyboard('{ArrowDown}');
+    const after = screen.getAllByRole('option');
+    expect(after[1].className).toContain('is-highlighted');
+    expect(after[0].className).not.toContain('is-highlighted');
+
+    // Wrapping means holding the key never dead-ends.
+    await user.keyboard('{ArrowUp}{ArrowUp}');
+    const wrapped = screen.getAllByRole('option');
+    expect(wrapped[wrapped.length - 1].className).toContain('is-highlighted');
+  });
+
+  it('clears the filter on Escape rather than skipping the item', async () => {
+    const user = userEvent.setup();
+    renderQueue();
+    // The first item is the most frequent unknown comment; losing it to a typo
+    // would be losing your place.
+    const before = await screen.findAllByText('Malve');
+    expect(before.length).toBeGreaterThan(0);
+
+    const filter = screen.getByLabelText(/Kategorie wählen/i);
+    await user.type(filter, 'leb');
+    expect((filter as HTMLInputElement).value).toBe('leb');
+
+    await user.keyboard('{Escape}');
+    expect((filter as HTMLInputElement).value).toBe('');
+    // Still the same item: Escape backed out of the search, not the decision.
+    expect(screen.getAllByText('Malve').length).toBeGreaterThan(0);
+  });
+});

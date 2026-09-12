@@ -1963,3 +1963,100 @@ async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
         .expect("Juni");
     assert_eq!(juni["variableCostsNetCents"], -30000);
 }
+
+/// A ledger is read from the end: the bookings someone is most likely to be fixing
+/// are the ones they just made. Ascending order also means the default page shows
+/// January while the user is looking for last week.
+#[tokio::test]
+async fn bookings_are_newest_first_unless_asked_otherwise() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    for (month, comment) in [
+        (1, "Januar-Buchung"),
+        (6, "Juni-Buchung"),
+        (9, "September-Buchung"),
+    ] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":month,"kind":"expense",
+                        "amountCents":1000,"comment":comment})),
+        )
+        .await;
+    }
+
+    let (_, newest) = app.send("GET", "/bookings?year=2026", None).await;
+    let order: Vec<&str> = newest["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["comment"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        order,
+        vec!["September-Buchung", "Juni-Buchung", "Januar-Buchung"],
+        "die Standardsortierung muss die neueste Buchung zuerst zeigen"
+    );
+
+    let (_, oldest) = app
+        .send("GET", "/bookings?year=2026&direction=asc", None)
+        .await;
+    let order: Vec<&str> = oldest["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["comment"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        order,
+        vec!["Januar-Buchung", "Juni-Buchung", "September-Buchung"]
+    );
+}
+
+/// Paging must partition the rows: every booking appears on exactly one page, and
+/// none appears on two. A reversed first column with un-reversed tiebreakers is the
+/// classic way to break this without it being visible on page one.
+#[tokio::test]
+async fn paging_partitions_the_rows_in_both_directions() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    // Same month and same amount, so only the tiebreakers separate them.
+    for i in 0..7 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":3,"kind":"expense",
+                        "amountCents":500,"comment":format!("Buchung {i}")})),
+        )
+        .await;
+    }
+
+    for direction in ["desc", "asc"] {
+        let mut seen: Vec<String> = Vec::new();
+        for page in 0..3 {
+            let (_, body) = app
+                .send(
+                    "GET",
+                    &format!("/bookings?year=2026&pageSize=3&page={page}&direction={direction}"),
+                    None,
+                )
+                .await;
+            for item in body["items"].as_array().unwrap() {
+                seen.push(item["id"].as_str().unwrap().to_string());
+            }
+        }
+        let unique: std::collections::BTreeSet<&String> = seen.iter().collect();
+        assert_eq!(
+            seen.len(),
+            7,
+            "{direction}: alle sieben Buchungen über drei Seiten"
+        );
+        assert_eq!(
+            unique.len(),
+            7,
+            "{direction}: keine Buchung auf zwei Seiten"
+        );
+    }
+}

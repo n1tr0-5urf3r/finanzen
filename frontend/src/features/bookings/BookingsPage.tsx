@@ -18,6 +18,7 @@ import { api, downloadFile } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
+import { BookingEditor } from './BookingEditor';
 import type { Booking, BookingPage, KoStatus } from '../../lib/types';
 
 import { PushDialog } from '../kitchenowl/PushDialog';
@@ -47,11 +48,23 @@ export function BookingsPage() {
     onSuccess: setDownloaded,
   });
 
-  const filters = { year, search, uncategorized: uncategorizedOnly };
+  const page = Number(params.get('seite')) || 0;
+  const direction = params.get('richtung') === 'asc' ? 'asc' : 'desc';
+  const [editing, setEditing] = useState<Booking | null>(null);
+  // 474 bookings in one page is a long scroll and 200 of them silently truncated
+  // the year at August; a hundred at a time with an explicit pager is honest.
+  const PAGE_SIZE = 100;
+
+  const filters = { year, search, uncategorized: uncategorizedOnly, page, direction };
   const query = useQuery({
     queryKey: qk.bookings.list(filters),
     queryFn: () => {
-      const qs = new URLSearchParams({ year: String(year), pageSize: '200' });
+      const qs = new URLSearchParams({
+        year: String(year),
+        pageSize: String(PAGE_SIZE),
+        page: String(page),
+        direction,
+      });
       if (search) qs.set('search', search);
       if (uncategorizedOnly) qs.set('uncategorized', 'true');
       return api<BookingPage>(`/bookings?${qs}`);
@@ -64,6 +77,9 @@ export function BookingsPage() {
         const next = new URLSearchParams(prev);
         if (value === null || value === '') next.delete(key);
         else next.set(key, value);
+        // Narrowing the filter while on page 4 of the old result lands on an
+        // empty page that looks like "no bookings" rather than a paging artefact.
+        if (key !== 'seite') next.delete('seite');
         return next;
       },
       { replace: true },
@@ -130,6 +146,26 @@ export function BookingsPage() {
 
       {query.data && (
         <>
+          <div className="bookings-toolbar">
+            <div className="segmented" role="group" aria-label={t('bookings.newest')}>
+              <button
+                type="button"
+                aria-pressed={direction === 'desc'}
+                onClick={() => update('richtung', null)}
+              >
+                {t('bookings.newest')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={direction === 'asc'}
+                onClick={() => update('richtung', 'asc')}
+              >
+                {t('bookings.oldest')}
+              </button>
+            </div>
+            <span className="footnote">{t('bookings.editHint')}</span>
+          </div>
+
           <p style={{ fontSize: '.85rem', color: 'var(--muted)', marginBottom: '.6rem' }}>
             {t('bookings.summary', {
               count: query.data.total,
@@ -176,14 +212,25 @@ export function BookingsPage() {
                             : undefined
                       }
                     >
-                      <td>
+                      <td
+                        className="booking-row__open"
+                        onClick={() => setEditing(b)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setEditing(b);
+                          }
+                        }}
+                      >
                         {/* The month is data; imported history has no day at all. */}
                         <DataLabel>{b.monthName}</DataLabel>
                         {!b.bookedOn && (
                           <span className="kpi__scope" title={t('bookings.noDay')}> ·</span>
                         )}
                       </td>
-                      <td>
+                      <td className="booking-row__open" onClick={() => setEditing(b)}>
                         <DataLabel>{b.comment}</DataLabel>
                         {b.kind === 'transfer' && (
                           <ArrowLeftRight
@@ -252,7 +299,16 @@ export function BookingsPage() {
               {query.data.items.map((b) => (
                 <article
                   key={b.id}
-                  className={`mcard bcard ${
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setEditing(b)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setEditing(b);
+                    }
+                  }}
+                  className={`mcard bcard bcard--clickable ${
                     b.categorySource === 'unresolved' && b.kind !== 'transfer'
                       ? 'bcard--uncategorized'
                       : b.kind === 'transfer'
@@ -293,8 +349,37 @@ export function BookingsPage() {
               ))}
             </div>
           )}
+
+          {/* 474 bookings do not fit one request. Without a pager the year simply
+              stopped in August with nothing saying so. */}
+          {query.data.total > PAGE_SIZE && (
+            <nav className="pager" aria-label={t('bookings.title')}>
+              <Button
+                variant="secondary"
+                disabled={page === 0}
+                onClick={() => update('seite', page > 1 ? String(page - 1) : null)}
+              >
+                ←
+              </Button>
+              <span>
+                {t('bookings.page', {
+                  page: page + 1,
+                  pages: Math.ceil(query.data.total / PAGE_SIZE),
+                })}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={(page + 1) * PAGE_SIZE >= query.data.total}
+                onClick={() => update('seite', String(page + 1))}
+              >
+                →
+              </Button>
+            </nav>
+          )}
         </>
       )}
+
+      {editing && <BookingEditor booking={editing} onClose={() => setEditing(null)} />}
 
       {pushNotice && <Banner tone="info">{pushNotice}</Banner>}
 

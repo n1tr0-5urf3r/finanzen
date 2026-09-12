@@ -113,13 +113,12 @@ export function ReviewQueue({
     function onKey(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'Enter') {
+        const inFilter = (event.target as HTMLElement | null)?.id === 'review-category';
+        // The filter's own handler decides what Enter means there — take the
+        // highlighted match — and only falls through once nothing is typed.
+        if (inFilter) return;
         event.preventDefault();
         confirmCurrent();
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        skipCurrent();
         return;
       }
       const target = event.target as HTMLElement | null;
@@ -127,6 +126,16 @@ export function ReviewQueue({
         target instanceof HTMLInputElement ||
         target instanceof HTMLSelectElement ||
         target instanceof HTMLTextAreaElement;
+
+      if (event.key === 'Escape') {
+        // Escape while typing clears the filter; it only skips the item once
+        // there is nothing to back out of. Skipping an item because someone
+        // wanted to undo three characters loses their place in 238 decisions.
+        if (typing) return;
+        event.preventDefault();
+        skipCurrent();
+        return;
+      }
       if (typing) return;
       if (/^[1-9]$/.test(event.key)) {
         const all = [...(current?.suggestions ?? []), ...(current?.weakHints ?? [])];
@@ -385,6 +394,7 @@ function CategoryFilterPicker({
   onSelect: (id: string) => void;
 }) {
   const t = useT();
+  const [highlight, setHighlight] = useState(0);
   const needle = search.trim().toLowerCase();
   const matches = categories.filter(
     (c) =>
@@ -404,15 +414,47 @@ function CategoryFilterPicker({
           lang="de"
           placeholder={t('import.reviewSearch')}
           value={search}
-          onChange={(e) => onSearch(e.target.value)}
+          role="combobox"
+          aria-expanded={Boolean(needle) && matches.length > 0}
+          aria-controls="review-category-list"
+          aria-activedescendant={
+            needle && matches[highlight] ? `review-option-${matches[highlight].id}` : undefined
+          }
+          autoComplete="off"
+          onChange={(e) => {
+            onSearch(e.target.value);
+            setHighlight(0);
+          }}
           onKeyDown={(e) => {
-            // Enter in the filter takes the single remaining match, which is what
-            // "type three letters and carry on" needs to mean.
-            if (e.key === 'Enter' && matches.length > 0 && needle) {
+            const visible = needle ? matches.slice(0, 40) : [];
+            // Arrow keys walk the list without the hand leaving the keyboard,
+            // which is the whole point of this screen: ~154 of the 238 items
+            // have no suggestion, so this control IS the decision.
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              if (visible.length === 0) return;
               e.preventDefault();
               e.stopPropagation();
-              onSelect(matches[0].id);
+              setHighlight((h) => {
+                const next = e.key === 'ArrowDown' ? h + 1 : h - 1;
+                return (next + visible.length) % visible.length;
+              });
+              return;
+            }
+            if (e.key === 'Enter' && visible.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(visible[Math.min(highlight, visible.length - 1)].id);
               onSearch('');
+              setHighlight(0);
+              return;
+            }
+            if (e.key === 'Escape' && needle) {
+              // Clear the filter rather than letting the window handler skip the
+              // item — backing out of a search is not backing out of a decision.
+              e.preventDefault();
+              e.stopPropagation();
+              onSearch('');
+              setHighlight(0);
             }
           }}
         />
@@ -424,16 +466,20 @@ function CategoryFilterPicker({
         </p>
       )}
       {needle && (
-        <div className="picker__list">
-          {matches.slice(0, 40).map((c) => (
+        <div className="picker__list" id="review-category-list" role="listbox">
+          {matches.slice(0, 40).map((c, index) => (
             <button
               key={c.id}
+              id={`review-option-${c.id}`}
               type="button"
-              className="picker__option"
+              role="option"
+              className={`picker__option ${index === highlight ? 'is-highlighted' : ''}`}
               aria-selected={c.id === selected}
+              onMouseEnter={() => setHighlight(index)}
               onClick={() => {
                 onSelect(c.id);
                 onSearch('');
+                setHighlight(0);
               }}
             >
               <DataLabel>{c.name}</DataLabel>

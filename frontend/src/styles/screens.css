@@ -142,3 +142,28 @@
 }
 .bcard--transfer { border-left: 3px solid var(--transfer); }
 .bcard__actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
+
+/* ── Buchungen: editing, sorting, paging ─────────────────────────────────── */
+.bookings-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem;
+  margin-bottom: .6rem;
+}
+.bookings-toolbar .footnote { margin: 0; }
+/* The month and comment cells open the editor; the rest of the row stays
+   selectable so an amount can still be copied. */
+.booking-row__open { cursor: pointer; }
+.booking-row__open:hover { text-decoration: underline; text-underline-offset: 2px; }
+.bcard--clickable { cursor: pointer; }
+.bcard--clickable:active { background: var(--surface-2); }
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: .75rem;
+  margin-top: .75rem; font-size: .85rem; color: var(--muted);
+}
+.booking-editor { max-width: min(94vw, 34rem); }
+.booking-editor__row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.booking-editor__tax { cursor: pointer; align-self: flex-start; }
+.booking-editor footer { display: flex; gap: .5rem; align-items: center; }
+@media (max-width: 520px) { .booking-editor__row { grid-template-columns: 1fr; } }
+/* The highlighted option in the review picker. Distinct from `aria-selected`,
+   which marks the category already chosen for this item. */
+.picker__option.is-highlighted { background: var(--primary-soft); }

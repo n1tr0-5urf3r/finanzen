@@ -411,6 +411,15 @@
               "format": "int32",
               "minimum": 0
             }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "description": "desc (neueste zuerst, Standard) | asc",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

@@ -74,6 +74,10 @@ pub struct BookingQuery {
     pub status: Option<String>,
     pub page: Option<u32>,
     pub page_size: Option<u32>,
+    /// `asc` (oldest first) or `desc` (newest first, the default for a ledger
+    /// someone is reading rather than auditing). The tiebreakers reverse with it,
+    /// so the order is a total reversal and not merely a flipped first column.
+    pub direction: Option<String>,
 }
 
 /// Builds the shared WHERE clause. Note there is no `user_id` predicate anywhere:
@@ -129,6 +133,22 @@ fn filter_sql(q: &BookingQuery) -> (String, Vec<String>) {
     (clauses.join(" AND "), binds)
 }
 
+/// The full ordering, in one place because the list query and the count query have
+/// to agree or paging silently shuffles rows between pages.
+fn order_clause(direction: Option<&str>) -> &'static str {
+    match direction {
+        Some("asc") => {
+            "b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id"
+        }
+        // Newest first by default: a ledger is read from the end, and the user's
+        // most recent bookings are the ones they are most likely to be fixing.
+        _ => {
+            "b.period_ord DESC, b.booked_on DESC NULLS LAST, b.created_at DESC, \
+             b.comment DESC, b.amount_cents DESC, b.id DESC"
+        }
+    }
+}
+
 /// Confirms a draft booking, optionally correcting its amount.
 ///
 /// A separate endpoint rather than a `status` field on `PUT /bookings/{id}`, for two
@@ -146,7 +166,7 @@ fn filter_sql(q: &BookingQuery) -> (String, Vec<String>) {
     get,
     path = "/api/v1/bookings",
     tag = "bookings",
-    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("categoryId" = Option<Uuid>, Query, description = "Kategorie"), ("categoryType" = Option<String>, Query, description = "Typ-Code"), ("kind" = Option<String>, Query, description = "income | expense | transfer"), ("taxRelevant" = Option<bool>, Query, description = "Nur steuerrelevante"), ("uncategorized" = Option<bool>, Query, description = "Nur ohne Kategorie"), ("search" = Option<String>, Query, description = "Kommentar enthält"), ("status" = Option<String>, Query, description = "confirmed (Standard) | draft | all"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..500, Standard 100")),
+    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("categoryId" = Option<Uuid>, Query, description = "Kategorie"), ("categoryType" = Option<String>, Query, description = "Typ-Code"), ("kind" = Option<String>, Query, description = "income | expense | transfer"), ("taxRelevant" = Option<bool>, Query, description = "Nur steuerrelevante"), ("uncategorized" = Option<bool>, Query, description = "Nur ohne Kategorie"), ("search" = Option<String>, Query, description = "Kommentar enthält"), ("status" = Option<String>, Query, description = "confirmed (Standard) | draft | all"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..500, Standard 100"), ("direction" = Option<String>, Query, description = "desc (neueste zuerst, Standard) | asc")),
     responses((status = 200, description = "Gefilterte Buchungen samt Summen der aktuellen Filterung", body = BookingPage)),
 )]
 pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<BookingPage>> {
@@ -154,9 +174,10 @@ pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<Bo
     let page_size = q.page_size.unwrap_or(100).clamp(1, 500);
     let (where_sql, binds) = filter_sql(&q);
 
+    let order = order_clause(q.direction.as_deref());
     let list_sql = format!(
         "{SELECT_BOOKING} WHERE {where_sql} \
-         ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id \
+         ORDER BY {order} \
          LIMIT {page_size} OFFSET {}",
         page as i64 * page_size as i64
     );
