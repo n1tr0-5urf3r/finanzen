@@ -6,6 +6,7 @@ import { LoginPage, SetupPage } from './features/auth/AuthPages';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
+import { MonthsPage } from './features/months/MonthsPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
 import { RecurringPage } from './features/recurring/RecurringPage';
 import { TaxPage } from './features/tax/TaxPage';
@@ -27,6 +28,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/buchungen" element={<BookingsPage />} />
+          <Route path="/monate" element={<MonthsPage />} />
           <Route path="/vorlagen" element={<RecurringPage />} />
           {/* A proper name, so the slug stays the proper name in both languages. */}
           <Route path="/kitchenowl" element={<KitchenOwlPage />} />
