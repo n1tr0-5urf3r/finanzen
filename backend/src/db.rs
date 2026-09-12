@@ -21,7 +21,8 @@ impl Db {
         SystemDb(&self.0)
     }
 
-    #[cfg(test)]
+    /// Wraps an existing pool. Used by the integration tests, which manage their
+    /// own per-test database and role.
     pub fn from_pool(pool: PgPool) -> Self {
         Self(pool)
     }

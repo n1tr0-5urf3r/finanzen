@@ -40,10 +40,18 @@ pub struct SheetBooking {
 
 impl SheetBooking {
     pub fn kind(&self) -> &'static str {
-        if self.income_cents > 0 { "income" } else { "expense" }
+        if self.income_cents > 0 {
+            "income"
+        } else {
+            "expense"
+        }
     }
     pub fn amount_cents(&self) -> i64 {
-        if self.income_cents > 0 { self.income_cents } else { self.expense_cents }
+        if self.income_cents > 0 {
+            self.income_cents
+        } else {
+            self.expense_cents
+        }
     }
     pub fn net_cents(&self) -> i64 {
         self.expense_cents - self.income_cents
@@ -66,9 +74,9 @@ fn cell_f64(cell: &Data) -> Option<f64> {
     match cell {
         Data::Float(f) => Some(*f),
         Data::Int(i) => Some(*i as f64),
-        Data::String(s) if !s.trim().is_empty() => locale::cents_from_de_str(s)
-            .ok()
-            .map(|c| c as f64 / 100.0),
+        Data::String(s) if !s.trim().is_empty() => {
+            locale::cents_from_de_str(s).ok().map(|c| c as f64 / 100.0)
+        }
         _ => None,
     }
 }
@@ -142,18 +150,19 @@ pub fn read_xlsx_bookings(bytes: &[u8]) -> Result<Vec<SheetBooking>> {
         if monat.is_none() && income.is_none() && expense.is_none() && comment.is_none() {
             continue;
         }
-        let monat = monat.ok_or_else(|| {
-            AppError::Validation(format!("Zeile {sheet_row}: Monat fehlt"))
-        })?;
+        let monat =
+            monat.ok_or_else(|| AppError::Validation(format!("Zeile {sheet_row}: Monat fehlt")))?;
         let month = month_from_de(&monat).ok_or_else(|| {
             AppError::Validation(format!("Zeile {sheet_row}: unbekannter Monat '{monat}'"))
         })?;
-        let comment = comment.ok_or_else(|| {
-            AppError::Validation(format!("Zeile {sheet_row}: Kommentar fehlt"))
-        })?;
+        let comment = comment
+            .ok_or_else(|| AppError::Validation(format!("Zeile {sheet_row}: Kommentar fehlt")))?;
 
         let income_cents = income.map(locale::cents_from_f64).transpose()?.unwrap_or(0);
-        let expense_cents = expense.map(locale::cents_from_f64).transpose()?.unwrap_or(0);
+        let expense_cents = expense
+            .map(locale::cents_from_f64)
+            .transpose()?
+            .unwrap_or(0);
         if (income_cents > 0) == (expense_cents > 0) {
             return Err(AppError::Validation(format!(
                 "Zeile {sheet_row}: genau eine von Einnahmen/Ausgaben muss gesetzt sein"
@@ -273,9 +282,7 @@ fn read_ods_table(bytes: &[u8], table_name: &str) -> Result<Vec<Vec<OdsCell>>> {
                         row_repeat = 1;
                         for a in e.attributes().flatten() {
                             if a.key.local_name().as_ref() == b"number-rows-repeated" {
-                                row_repeat = String::from_utf8_lossy(&a.value)
-                                    .parse()
-                                    .unwrap_or(1);
+                                row_repeat = String::from_utf8_lossy(&a.value).parse().unwrap_or(1);
                             }
                         }
                     }
@@ -309,7 +316,10 @@ fn read_ods_table(bytes: &[u8], table_name: &str) -> Result<Vec<Vec<OdsCell>>> {
                     in_cell = false;
                     let repeat = if cell_repeat > 4096 { 1 } else { cell_repeat };
                     for _ in 0..repeat {
-                        current_row.push(OdsCell { value: cell_value, text: None });
+                        current_row.push(OdsCell {
+                            value: cell_value,
+                            text: None,
+                        });
                     }
                 }
                 if is_empty && local == "table-row" && in_row {
@@ -337,7 +347,11 @@ fn read_ods_table(bytes: &[u8], table_name: &str) -> Result<Vec<Vec<OdsCell>>> {
                         let text = cell_text.trim();
                         let cell = OdsCell {
                             value: cell_value,
-                            text: if text.is_empty() { None } else { Some(text.to_string()) },
+                            text: if text.is_empty() {
+                                None
+                            } else {
+                                Some(text.to_string())
+                            },
                         };
                         // A huge repeat count is the trailing padding of the sheet.
                         let repeat = if cell_repeat > 4096 { 1 } else { cell_repeat };
@@ -456,7 +470,10 @@ pub fn read_ods_legacy(
                 continue;
             };
             let income_cents = income.map(locale::cents_from_f64).transpose()?.unwrap_or(0);
-            let expense_cents = expense.map(locale::cents_from_f64).transpose()?.unwrap_or(0);
+            let expense_cents = expense
+                .map(locale::cents_from_f64)
+                .transpose()?
+                .unwrap_or(0);
             if (income_cents > 0) == (expense_cents > 0) {
                 continue;
             }
@@ -492,7 +509,11 @@ pub fn read_ods_legacy(
             first_row: start,
             last_row: end,
             row_count: end - start + 1,
-            label_source: if raw_label.is_some() { "label" } else { "inferred" },
+            label_source: if raw_label.is_some() {
+                "label"
+            } else {
+                "inferred"
+            },
             raw_label,
             marker_cents,
             computed_cents: computed,

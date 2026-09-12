@@ -94,7 +94,10 @@ pub fn totals(rows: &[LedgerRow]) -> Totals {
             Kind::Expense => t.expense_cents += r.amount_cents,
             Kind::Transfer => t.transfer_count += 1,
         }
-        if r.category_id.is_none() {
+        // A transfer legitimately has no category — it is money moving, not money
+        // consumed. Counting it as "uncategorised" would put a permanent non-zero
+        // badge on the dashboard that the user can never clear.
+        if r.category_id.is_none() && r.kind != Kind::Transfer {
             t.uncategorized_count += 1;
             t.uncategorized_net_cents += r.net_cents();
         }
@@ -162,7 +165,11 @@ pub fn by_category(rows: &[LedgerRow]) -> Vec<CategoryNet> {
         }
     }
     let mut out: Vec<_> = acc.into_values().collect();
-    out.sort_by(|a, b| b.net_cents.cmp(&a.net_cents).then(a.category_name.cmp(&b.category_name)));
+    out.sort_by(|a, b| {
+        b.net_cents
+            .cmp(&a.net_cents)
+            .then(a.category_name.cmp(&b.category_name))
+    });
     out
 }
 

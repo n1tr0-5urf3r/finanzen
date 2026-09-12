@@ -1,0 +1,523 @@
+//! Booking CRUD, filtering and bulk edits.
+
+use axum::{
+    Json,
+    extract::{Path, Query},
+    http::StatusCode,
+};
+use chrono::NaiveDate;
+use sqlx::{PgConnection, Row};
+use uuid::Uuid;
+
+use crate::{
+    auth::Ctx,
+    error::{AppError, Result},
+    locale::month_name_de,
+    models::{Booking, BookingInput, BookingKind, BookingPage, CategorySource},
+};
+
+const SELECT_BOOKING: &str = "\
+    SELECT b.id, b.period_year, b.period_month, b.booked_on, b.kind, b.amount_cents, \
+           b.net_cents, b.comment, b.tax_relevant, b.category_id, c.name AS category_name, \
+           t.label AS category_type, b.category_source, b.shared, b.external_source, \
+           b.external_id, b.status, b.origin, \
+           EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
+      FROM bookings b \
+      LEFT JOIN categories c ON c.id = b.category_id \
+      LEFT JOIN category_types t ON t.id = c.type_id";
+
+fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
+    let month: i16 = r.get("period_month");
+    Booking {
+        id: r.get("id"),
+        year: r.get::<i16, _>("period_year") as i32,
+        month: month as u8,
+        month_name: month_name_de(month as u8).to_string(),
+        booked_on: r.get("booked_on"),
+        kind: BookingKind::parse(r.get::<String, _>("kind").as_str())
+            .unwrap_or(BookingKind::Expense),
+        amount_cents: r.get("amount_cents"),
+        net_cents: r.get("net_cents"),
+        comment: r.get("comment"),
+        tax_relevant: r.get("tax_relevant"),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        category_type: r.get("category_type"),
+        category_source: CategorySource::parse(r.get::<String, _>("category_source").as_str()),
+        shared: r.get("shared"),
+        external_source: r.get("external_source"),
+        external_id: r.get("external_id"),
+        has_receipt: r.get("has_receipt"),
+        status: r.get("status"),
+        origin: r.get("origin"),
+    }
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookingQuery {
+    pub year: Option<i32>,
+    pub month: Option<u8>,
+    pub category_id: Option<Uuid>,
+    pub category_type: Option<String>,
+    pub kind: Option<String>,
+    pub tax_relevant: Option<bool>,
+    /// Lists only bookings no rule matched. Never a default — uncategorised rows are
+    /// visible in the normal listing too.
+    pub uncategorized: Option<bool>,
+    pub search: Option<String>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+/// Builds the shared WHERE clause. Note there is no `user_id` predicate anywhere:
+/// row-level security supplies it, which is why forgetting one here cannot leak.
+fn filter_sql(q: &BookingQuery) -> (String, Vec<String>) {
+    let mut clauses = vec!["b.status = 'confirmed'".to_string()];
+    let mut binds = Vec::new();
+    let mut n = 0;
+    let mut next = |binds: &mut Vec<String>, value: String| {
+        binds.push(value);
+        n += 1;
+        format!("${n}")
+    };
+    if let Some(v) = q.year {
+        let p = next(&mut binds, v.to_string());
+        clauses.push(format!("b.period_year = {p}::smallint"));
+    }
+    if let Some(v) = q.month {
+        let p = next(&mut binds, v.to_string());
+        clauses.push(format!("b.period_month = {p}::smallint"));
+    }
+    if let Some(v) = q.category_id {
+        let p = next(&mut binds, v.to_string());
+        clauses.push(format!("b.category_id = {p}::uuid"));
+    }
+    if let Some(v) = &q.category_type {
+        let p = next(&mut binds, v.clone());
+        clauses.push(format!("t.code = {p}"));
+    }
+    if let Some(v) = &q.kind {
+        let p = next(&mut binds, v.clone());
+        clauses.push(format!("b.kind = {p}"));
+    }
+    if let Some(v) = q.tax_relevant {
+        let p = next(&mut binds, v.to_string());
+        clauses.push(format!("b.tax_relevant = {p}::boolean"));
+    }
+    if q.uncategorized == Some(true) {
+        clauses.push("b.category_id IS NULL".into());
+    }
+    if let Some(v) = &q.search
+        && !v.trim().is_empty()
+    {
+        let p = next(&mut binds, format!("%{}%", v.trim()));
+        clauses.push(format!("b.comment ILIKE {p}"));
+    }
+    (clauses.join(" AND "), binds)
+}
+
+pub async fn list(mut ctx: Ctx, Query(q): Query<BookingQuery>) -> Result<Json<BookingPage>> {
+    let page = q.page.unwrap_or(0);
+    let page_size = q.page_size.unwrap_or(100).clamp(1, 500);
+    let (where_sql, binds) = filter_sql(&q);
+
+    let list_sql = format!(
+        "{SELECT_BOOKING} WHERE {where_sql} \
+         ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.id \
+         LIMIT {page_size} OFFSET {}",
+        page as i64 * page_size as i64
+    );
+    let mut query = sqlx::query(&list_sql);
+    for b in &binds {
+        query = query.bind(b);
+    }
+    let rows = query.fetch_all(ctx.tenant.conn()).await?;
+
+    let totals_sql = format!(
+        "SELECT count(*)::bigint AS total, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'income'), 0)::bigint AS inc, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'expense'), 0)::bigint AS exp, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
+                count(*) FILTER (WHERE b.category_id IS NULL AND b.kind <> 'transfer')::bigint AS uncat \
+           FROM bookings b \
+           LEFT JOIN categories c ON c.id = b.category_id \
+           LEFT JOIN category_types t ON t.id = c.type_id \
+          WHERE {where_sql}"
+    );
+    let mut tq = sqlx::query(&totals_sql);
+    for b in &binds {
+        tq = tq.bind(b);
+    }
+    let totals = tq.fetch_one(ctx.tenant.conn()).await?;
+
+    let out = BookingPage {
+        items: rows.iter().map(row_to_booking).collect(),
+        total: totals.get("total"),
+        page,
+        page_size,
+        sum_income_cents: totals.get("inc"),
+        sum_expense_cents: totals.get("exp"),
+        sum_net_cents: totals.get("net"),
+        uncategorized_count: totals.get("uncat"),
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+pub async fn get_one(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<Booking>> {
+    let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
+        .bind(id)
+        .fetch_optional(ctx.tenant.conn())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Buchung".into()))?;
+    let booking = row_to_booking(&row);
+    ctx.tenant.commit().await?;
+    Ok(Json(booking))
+}
+
+fn validate(body: &BookingInput) -> Result<()> {
+    if body.amount_cents <= 0 {
+        return Err(AppError::Validation("Der Betrag muss positiv sein".into()));
+    }
+    if body.comment.trim().is_empty() {
+        return Err(AppError::Validation("Kommentar fehlt".into()));
+    }
+    if !(1..=12).contains(&body.month) {
+        return Err(AppError::Validation(
+            "Monat muss zwischen 1 und 12 liegen".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn assert_year_unlocked(conn: &mut PgConnection, year: i32) -> Result<()> {
+    let locked: Option<bool> = sqlx::query_scalar(
+        "SELECT tax_locked_at IS NOT NULL FROM fiscal_years WHERE year = $1::smallint",
+    )
+    .bind(year)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if locked == Some(true) {
+        return Err(AppError::Conflict(format!(
+            "Das Jahr {year} ist für die Steuer gesperrt"
+        )));
+    }
+    Ok(())
+}
+
+/// Resolves the category for a new or edited booking: an explicit `categoryId` is a
+/// manual override and wins; otherwise the rule table decides; otherwise unresolved.
+/// The outcome of resolving a comment against the rule table.
+struct Resolution {
+    category_id: Option<Uuid>,
+    source: &'static str,
+    rule_id: Option<Uuid>,
+    kind_override: Option<BookingKind>,
+}
+
+async fn resolve_category(
+    conn: &mut PgConnection,
+    comment: &str,
+    explicit: Option<Uuid>,
+) -> Result<Resolution> {
+    if let Some(id) = explicit {
+        return Ok(Resolution {
+            category_id: Some(id),
+            source: "manual",
+            rule_id: None,
+            kind_override: None,
+        });
+    }
+    let row = sqlx::query(
+        "SELECT id, category_id, kind_override FROM category_rules \
+          WHERE match_key = lower(btrim($1))",
+    )
+    .bind(comment)
+    .fetch_optional(&mut *conn)
+    .await?;
+    match row {
+        Some(r) => {
+            let category_id: Option<Uuid> = r.get("category_id");
+            let kind = r
+                .get::<Option<String>, _>("kind_override")
+                .and_then(|k| BookingKind::parse(&k));
+            if category_id.is_some() {
+                Ok(Resolution {
+                    category_id,
+                    source: "rule",
+                    rule_id: Some(r.get("id")),
+                    kind_override: kind,
+                })
+            } else {
+                Ok(Resolution {
+                    category_id: None,
+                    source: "unresolved",
+                    rule_id: None,
+                    kind_override: kind,
+                })
+            }
+        }
+        None => Ok(Resolution {
+            category_id: None,
+            source: "unresolved",
+            rule_id: None,
+            kind_override: None,
+        }),
+    }
+}
+
+pub async fn create(
+    mut ctx: Ctx,
+    Json(body): Json<BookingInput>,
+) -> Result<(StatusCode, Json<Booking>)> {
+    validate(&body)?;
+    assert_year_unlocked(ctx.tenant.conn(), body.year).await?;
+
+    let resolved = resolve_category(ctx.tenant.conn(), &body.comment, body.category_id).await?;
+    // A rule may force the booking kind — that is how `to ING` and `from Volksbank`
+    // become transfers without a hard-coded list in the binary.
+    let kind = resolved.kind_override.unwrap_or(body.kind);
+
+    // Bookings created through the API always carry a day; the schema enforces it for
+    // every origin except imported history.
+    let booked_on = body
+        .booked_on
+        .or_else(|| NaiveDate::from_ymd_opt(body.year, body.month as u32, 1));
+
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO bookings (id, user_id, period_year, period_month, booked_on, kind, \
+                               amount_cents, comment, tax_relevant, category_id, \
+                               category_source, resolved_rule_id, origin) \
+         VALUES ($1,$2,$3::smallint,$4::smallint,$5,$6,$7,$8,$9,$10,$11,$12,'manual')",
+    )
+    .bind(id)
+    .bind(ctx.tenant.user_id())
+    .bind(body.year)
+    .bind(body.month as i16)
+    .bind(booked_on)
+    .bind(kind.as_db())
+    .bind(body.amount_cents)
+    .bind(body.comment.trim())
+    .bind(body.tax_relevant)
+    .bind(resolved.category_id)
+    .bind(resolved.source)
+    .bind(resolved.rule_id)
+    .execute(ctx.tenant.conn())
+    .await
+    .map_err(|e| AppError::from_db(e, "Buchung konnte nicht gespeichert werden"))?;
+
+    let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
+        .bind(id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+    let booking = row_to_booking(&row);
+    ctx.tenant.commit().await?;
+    Ok((StatusCode::CREATED, Json(booking)))
+}
+
+pub async fn update(
+    mut ctx: Ctx,
+    Path(id): Path<Uuid>,
+    Json(body): Json<BookingInput>,
+) -> Result<Json<Booking>> {
+    validate(&body)?;
+    assert_year_unlocked(ctx.tenant.conn(), body.year).await?;
+
+    let resolved = if body.clear_category_override {
+        resolve_category(ctx.tenant.conn(), &body.comment, None).await?
+    } else {
+        resolve_category(ctx.tenant.conn(), &body.comment, body.category_id).await?
+    };
+
+    // booked_on is preserved when the client omits it, and re-clamped when the
+    // booking moves to a different month — otherwise the day would fall outside its
+    // own period. Imported history legitimately keeps no day at all.
+    let affected = sqlx::query(
+        "UPDATE bookings SET period_year = $2::smallint, period_month = $3::smallint, \
+                booked_on = CASE \
+                  WHEN $4::date IS NOT NULL THEN $4::date \
+                  WHEN origin = 'legacy_month_only' THEN NULL \
+                  WHEN booked_on IS NOT NULL \
+                       AND date_part('year', booked_on) = $2 \
+                       AND date_part('month', booked_on) = $3 THEN booked_on \
+                  ELSE make_date($2::int, $3::int, 1) END, \
+                kind = $5, amount_cents = $6, comment = $7, \
+                tax_relevant = $8, category_id = $9, category_source = $10, \
+                resolved_rule_id = $11, updated_at = now() \
+          WHERE id = $1",
+    )
+    .bind(id)
+    .bind(body.year)
+    .bind(body.month as i16)
+    .bind(body.booked_on)
+    .bind(body.kind.as_db())
+    .bind(body.amount_cents)
+    .bind(body.comment.trim())
+    .bind(body.tax_relevant)
+    .bind(resolved.category_id)
+    .bind(resolved.source)
+    .bind(resolved.rule_id)
+    .execute(ctx.tenant.conn())
+    .await
+    .map_err(|e| AppError::from_db(e, "Buchung konnte nicht gespeichert werden"))?
+    .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Buchung".into()));
+    }
+
+    let row = sqlx::query(&format!("{SELECT_BOOKING} WHERE b.id = $1"))
+        .bind(id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+    let booking = row_to_booking(&row);
+    ctx.tenant.commit().await?;
+    Ok(Json(booking))
+}
+
+pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
+    let linked: Option<String> =
+        sqlx::query_scalar("SELECT external_source FROM bookings WHERE id = $1")
+            .bind(id)
+            .fetch_optional(ctx.tenant.conn())
+            .await?
+            .flatten();
+    if linked.is_some() {
+        return Err(AppError::Conflict(
+            "Die Buchung ist mit KitchenOwl verknüpft. Bitte zuerst die Verknüpfung lösen.".into(),
+        ));
+    }
+    let affected = sqlx::query("DELETE FROM bookings WHERE id = $1")
+        .bind(id)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Buchung".into()));
+    }
+    ctx.tenant.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkRequest {
+    pub booking_ids: Vec<Uuid>,
+    pub set_category_id: Option<Uuid>,
+    pub clear_category: Option<bool>,
+    pub set_tax_relevant: Option<bool>,
+    pub set_kind: Option<BookingKind>,
+    pub delete: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkResult {
+    pub affected: i64,
+}
+
+pub async fn bulk(mut ctx: Ctx, Json(body): Json<BulkRequest>) -> Result<Json<BulkResult>> {
+    if body.booking_ids.is_empty() {
+        return Err(AppError::Validation("Keine Buchungen ausgewählt".into()));
+    }
+    // Exactly one mutation per request, so a partially-specified bulk edit cannot do
+    // something the caller did not intend.
+    let chosen = [
+        body.set_category_id.is_some(),
+        body.clear_category == Some(true),
+        body.set_tax_relevant.is_some(),
+        body.set_kind.is_some(),
+        body.delete == Some(true),
+    ]
+    .iter()
+    .filter(|c| **c)
+    .count();
+    if chosen != 1 {
+        return Err(AppError::Validation(
+            "Genau eine Änderung pro Massenaktion angeben".into(),
+        ));
+    }
+
+    let affected = if body.delete == Some(true) {
+        sqlx::query("DELETE FROM bookings WHERE id = ANY($1) AND external_source IS NULL")
+            .bind(&body.booking_ids)
+            .execute(ctx.tenant.conn())
+            .await?
+            .rows_affected()
+    } else if let Some(category_id) = body.set_category_id {
+        sqlx::query(
+            "UPDATE bookings SET category_id = $2, category_source = 'manual', \
+                    resolved_rule_id = NULL, updated_at = now() WHERE id = ANY($1)",
+        )
+        .bind(&body.booking_ids)
+        .bind(category_id)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected()
+    } else if body.clear_category == Some(true) {
+        sqlx::query(
+            "UPDATE bookings SET category_id = NULL, category_source = 'unresolved', \
+                    resolved_rule_id = NULL, updated_at = now() WHERE id = ANY($1)",
+        )
+        .bind(&body.booking_ids)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected()
+    } else if let Some(tax) = body.set_tax_relevant {
+        sqlx::query("UPDATE bookings SET tax_relevant = $2, updated_at = now() WHERE id = ANY($1)")
+            .bind(&body.booking_ids)
+            .bind(tax)
+            .execute(ctx.tenant.conn())
+            .await?
+            .rows_affected()
+    } else {
+        let kind = body.set_kind.expect("checked above");
+        sqlx::query("UPDATE bookings SET kind = $2, updated_at = now() WHERE id = ANY($1)")
+            .bind(&body.booking_ids)
+            .bind(kind.as_db())
+            .execute(ctx.tenant.conn())
+            .await?
+            .rows_affected()
+    };
+
+    ctx.tenant.commit().await?;
+    Ok(Json(BulkResult {
+        affected: affected as i64,
+    }))
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSummary {
+    pub comment: String,
+    pub count: i64,
+    pub category_name: Option<String>,
+    pub is_uncategorized: bool,
+}
+
+/// Distinct comments, most used first. Feeds the Quick Add suggestion tiles and the
+/// filter-by-comment view.
+pub async fn comments(mut ctx: Ctx) -> Result<Json<Vec<CommentSummary>>> {
+    let rows = sqlx::query(
+        "SELECT b.comment, count(*)::bigint AS n, \
+                max(c.name) AS category_name, \
+                bool_and(b.category_id IS NULL) AS uncategorized \
+           FROM bookings b LEFT JOIN categories c ON c.id = b.category_id \
+          WHERE b.status = 'confirmed' \
+          GROUP BY b.comment ORDER BY n DESC, b.comment LIMIT 500",
+    )
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+    let out = rows
+        .iter()
+        .map(|r| CommentSummary {
+            comment: r.get("comment"),
+            count: r.get::<i64, _>("n"),
+            category_name: r.get("category_name"),
+            is_uncategorized: r.get("uncategorized"),
+        })
+        .collect();
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}

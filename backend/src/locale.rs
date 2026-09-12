@@ -50,9 +50,11 @@ pub fn split_month_label(raw: &str) -> (&str, Option<u16>) {
     let trimmed = raw.trim();
     for sep in ['\u{2018}', '\u{2019}', '\'', '`', '\u{00B4}'] {
         if let Some((head, tail)) = trimmed.split_once(sep) {
-            let year = tail.trim().parse::<u16>().ok().map(|y| {
-                if y < 100 { 2000 + y } else { y }
-            });
+            let year = tail
+                .trim()
+                .parse::<u16>()
+                .ok()
+                .map(|y| if y < 100 { 2000 + y } else { y });
             return (head.trim(), year);
         }
     }
@@ -129,7 +131,7 @@ pub fn format_de(cents: i64) -> String {
     let digits = whole.to_string();
     let mut grouped = String::with_capacity(digits.len() + digits.len() / 3 + 4);
     for (i, ch) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             grouped.push('.');
         }
         grouped.push(ch);
@@ -145,7 +147,11 @@ pub fn div_round_half_up(numerator: i64, denominator: i64) -> i64 {
     }
     let (q, r) = (numerator / denominator, numerator % denominator);
     if r.abs() * 2 >= denominator.abs() {
-        q + if (numerator < 0) != (denominator < 0) { -1 } else { 1 }
+        q + if (numerator < 0) != (denominator < 0) {
+            -1
+        } else {
+            1
+        }
     } else {
         q
     }
@@ -181,10 +187,17 @@ mod tests {
         // only the ASCII form loses two month labels and shifts the sequence.
         assert_eq!(split_month_label("Mai \u{2018}25"), ("Mai", Some(2025)));
         assert_eq!(split_month_label("Juni '25"), ("Juni", Some(2025)));
-        assert_eq!(split_month_label("Oktober \u{2019}25"), ("Oktober", Some(2025)));
+        assert_eq!(
+            split_month_label("Oktober \u{2019}25"),
+            ("Oktober", Some(2025))
+        );
         assert_eq!(split_month_label("Dezember"), ("Dezember", None));
     }
 
+    // The excess digits are the entire point of this test: they are the exact
+    // IEEE-754 artifacts stored in the two source workbooks, and trimming them to
+    // what clippy considers representable would stop the test proving anything.
+    #[allow(clippy::excessive_precision)]
     #[test]
     fn absorbs_the_float_artifacts_present_in_both_source_files() {
         // Verbatim values observed in the raw XML of konten_2026_auswertung.xlsx

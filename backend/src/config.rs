@@ -81,7 +81,10 @@ impl Config {
             } else {
                 session_secret
             },
-            session_ttl: Duration::from_secs(read_u64("APP_SESSION_TTL_SECONDS", 60 * 60 * 24 * 30)),
+            session_ttl: Duration::from_secs(read_u64(
+                "APP_SESSION_TTL_SECONDS",
+                60 * 60 * 24 * 30,
+            )),
             session_idle_refresh: Duration::from_secs(read_u64("APP_SESSION_IDLE_REFRESH", 3600)),
             max_upload_bytes: read_u64("APP_MAX_UPLOAD_BYTES", 26_214_400) as usize,
 
@@ -108,8 +111,10 @@ impl Config {
             ),
             kitchenowl_push_retry_seconds: read_u64("KITCHENOWL_PUSH_RETRY_SECONDS", 300),
             kitchenowl_sync_on_start: read_bool("KITCHENOWL_SYNC_ON_START", true),
-            kitchenowl_metadata_stale_seconds: read_u64("KITCHENOWL_METADATA_STALE_SECONDS", 172_800)
-                as i64,
+            kitchenowl_metadata_stale_seconds: read_u64(
+                "KITCHENOWL_METADATA_STALE_SECONDS",
+                172_800,
+            ) as i64,
             kitchenowl_max_pull_pages: read_u64("KITCHENOWL_MAX_PULL_PAGES", 40) as u32,
             kitchenowl_push_max_attempts: read_u64("KITCHENOWL_PUSH_MAX_ATTEMPTS", 10) as i32,
             kitchenowl_push_marker_in_name: read_bool("KITCHENOWL_PUSH_MARKER_IN_NAME", false),
@@ -174,11 +179,15 @@ fn optional(name: &str) -> Option<String> {
 }
 
 fn read_u64(name: &str, default: u64) -> u64 {
-    optional(name).and_then(|v| v.parse().ok()).unwrap_or(default)
+    optional(name)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn read_f64(name: &str, default: f64) -> f64 {
-    optional(name).and_then(|v| v.parse().ok()).unwrap_or(default)
+    optional(name)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn read_bool(name: &str, default: bool) -> bool {

@@ -202,7 +202,10 @@ async fn every_user_scoped_table_has_forced_rls() {
     );
 
     let protected = tenant_scoped_tables(&pool).await.len() - SYSTEM_SCOPE.len();
-    assert!(protected >= 15, "nur {protected} geschützte Tabellen gefunden");
+    assert!(
+        protected >= 15,
+        "nur {protected} geschützte Tabellen gefunden"
+    );
 }
 
 /// Table-driven cross-tenant probe. Every tenant-scoped table is queried with SQL
@@ -217,7 +220,10 @@ async fn another_tenant_can_neither_read_nor_write_any_table() {
     let tables = tenant_scoped_tables(&pool).await;
     let mut tx = tenant_tx(&pool, bob).await;
 
-    for table in tables.iter().filter(|t| !SYSTEM_SCOPE.contains(&t.as_str())) {
+    for table in tables
+        .iter()
+        .filter(|t| !SYSTEM_SCOPE.contains(&t.as_str()))
+    {
         // Bob's own rows are excluded so any row seen belongs to Alice.
         let visible: i64 = sqlx::query_scalar(&format!(
             "SELECT count(*) FROM {table} WHERE user_id <> '{bob}'"
@@ -288,7 +294,10 @@ async fn queries_without_a_tenant_context_see_nothing() {
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-        assert_eq!(n, 0, "{table} ohne Mandantenkontext sichtbar — RLS greift nicht");
+        assert_eq!(
+            n, 0,
+            "{table} ohne Mandantenkontext sichtbar — RLS greift nicht"
+        );
     }
 }
 

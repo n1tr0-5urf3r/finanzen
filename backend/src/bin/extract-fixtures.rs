@@ -3,7 +3,11 @@
 //!
 //!     cargo run --bin extract-fixtures -- <xlsx> <ods> <out-dir>
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use finanzen::sheets;
 
@@ -68,7 +72,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn write<T: serde::Serialize>(dir: &PathBuf, name: &str, value: &T) -> anyhow::Result<()> {
+fn write<T: serde::Serialize>(dir: &Path, name: &str, value: &T) -> anyhow::Result<()> {
     fs::write(dir.join(name), serde_json::to_vec_pretty(value)?)?;
     Ok(())
 }

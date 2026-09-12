@@ -25,9 +25,14 @@ fn fixture(name: &str) -> Option<String> {
 }
 
 fn fixtures_present() -> bool {
-    ["golden_2026.json", "golden_legacy.json", "rules.json", "taxonomy.json"]
-        .iter()
-        .all(|f| fixture(f).is_some())
+    [
+        "golden_2026.json",
+        "golden_legacy.json",
+        "rules.json",
+        "taxonomy.json",
+    ]
+    .iter()
+    .all(|f| fixture(f).is_some())
 }
 
 /// Early-returns the test when fixtures are absent, naming the command that creates
@@ -45,8 +50,12 @@ macro_rules! require_fixtures {
     };
 }
 
-fn fix_2026() -> String { fixture("golden_2026.json").expect("checked") }
-fn fix_legacy() -> String { fixture("golden_legacy.json").expect("checked") }
+fn fix_2026() -> String {
+    fixture("golden_2026.json").expect("checked")
+}
+fn fix_legacy() -> String {
+    fixture("golden_legacy.json").expect("checked")
+}
 
 fn rules() -> BTreeMap<String, String> {
     serde_json::from_str(&fixture("rules.json").expect("checked")).expect("rules fixture")
@@ -69,7 +78,11 @@ fn type_code(label: &str) -> &'static str {
 
 /// Resolves a booking exactly as the application does: manual override wins, then an
 /// exact case-insensitive rule lookup, then unresolved.
-fn resolve(comment: &str, manual: Option<&str>, rules: &BTreeMap<String, String>) -> Option<String> {
+fn resolve(
+    comment: &str,
+    manual: Option<&str>,
+    rules: &BTreeMap<String, String>,
+) -> Option<String> {
     if let Some(m) = manual.filter(|m| !m.trim().is_empty()) {
         return Some(m.trim().to_string());
     }
@@ -305,28 +318,94 @@ fn monthly_rows_2026() {
     require_fixtures!();
     let rows = ledger_2026();
     let months = calc::by_month(&rows);
-    // month, income, expense, saldo, cumulative, fix, variable, sparen, sonstiges
-    let expected: &[(u8, i64, i64, i64, i64, i64, i64, i64, i64)] = &[
-        (1, 300_000, 250_000, 50_000, 50_000, 90_000, 80_000, 66_000, 5_500),
-        (2, 300_000, 280_000, 20_000, 70_000, 122_303, 85_100, 76_000, 5_000),
-        (3, 1_040_000, 280_000, 760_000, 830_000, 79_671, 109_991, 76_000, 5_000),
-        (4, 300_000, 400_000, -100_000, 730_000, 82_020, 247_840, 76_000, 5_000),
-        (5, 300_000, 380_000, -80_000, 650_000, 80_618, 216_616, 86_000, 11_000),
-        (6, 500_000, 300_000, 200_000, 850_000, 94_391, -30_000, 86_000, 5_500),
-        (7, 300_000, 310_000, -10_000, 840_000, 109_231, 117_343, 86_000, 3_559),
-        (8, 260_000, 300_000, -40_000, 800_000, 170_715, 74_533, 86_000, 356),
-        (9, 300_000, 200_000, 100_000, 900_000, 78_147, 64_268, 86_000, 0),
+
+    /// One expected row of the `Monate` tab. A named struct rather than a nine-wide
+    /// tuple, so a transposed column is a compile error instead of a puzzle.
+    struct Expected {
+        month: u8,
+        income: i64,
+        expense: i64,
+        saldo: i64,
+        cumulative: i64,
+        fixed: i64,
+        variable: i64,
+        savings: i64,
+        other: i64,
+    }
+    // Nine arguments because the Monate tab has nine columns; naming them at each
+    // call site would triple the length of the table and hide the shape.
+    #[allow(clippy::too_many_arguments)]
+    const fn row(
+        month: u8,
+        income: i64,
+        expense: i64,
+        saldo: i64,
+        cumulative: i64,
+        fixed: i64,
+        variable: i64,
+        savings: i64,
+        other: i64,
+    ) -> Expected {
+        Expected {
+            month,
+            income,
+            expense,
+            saldo,
+            cumulative,
+            fixed,
+            variable,
+            savings,
+            other,
+        }
+    }
+
+    let expected = [
+        row(
+            1, 300_000, 250_000, 50_000, 50_000, 90_000, 80_000, 66_000, 5_500,
+        ),
+        row(
+            2, 300_000, 280_000, 20_000, 70_000, 122_303, 85_100, 76_000, 5_000,
+        ),
+        row(
+            3, 1_040_000, 280_000, 760_000, 830_000, 79_671, 109_991, 76_000, 5_000,
+        ),
+        row(
+            4, 300_000, 400_000, -100_000, 730_000, 82_020, 247_840, 76_000, 5_000,
+        ),
+        row(
+            5, 300_000, 380_000, -80_000, 650_000, 80_618, 216_616, 86_000, 11_000,
+        ),
+        row(
+            6, 500_000, 300_000, 200_000, 850_000, 94_391, -30_000, 86_000, 5_500,
+        ),
+        row(
+            7, 300_000, 310_000, -10_000, 840_000, 109_231, 117_343, 86_000, 3_559,
+        ),
+        row(
+            8, 260_000, 300_000, -40_000, 800_000, 170_715, 74_533, 86_000, 356,
+        ),
+        row(
+            9, 300_000, 200_000, 100_000, 900_000, 78_147, 64_268, 86_000, 0,
+        ),
     ];
-    for (m, inc, exp, saldo, cum, fix, var, sav, oth) in expected {
-        let row = &months[(*m - 1) as usize];
-        assert_eq!(row.income_cents, *inc, "Monat {m} Einnahmen");
-        assert_eq!(row.expense_cents, *exp, "Monat {m} Ausgaben");
-        assert_eq!(row.saldo_cents, *saldo, "Monat {m} Saldo");
-        assert_eq!(row.cumulative_cents, Some(*cum), "Monat {m} kumuliert");
-        assert_eq!(row.fixed_net_cents, *fix, "Monat {m} Fixkosten");
-        assert_eq!(row.variable_net_cents, *var, "Monat {m} Variable Kosten");
-        assert_eq!(row.savings_net_cents, *sav, "Monat {m} Sparen");
-        assert_eq!(row.other_net_cents, *oth, "Monat {m} Sonstiges");
+    for e in &expected {
+        let m = e.month;
+        let actual = &months[(m - 1) as usize];
+        assert_eq!(actual.income_cents, e.income, "Monat {m} Einnahmen");
+        assert_eq!(actual.expense_cents, e.expense, "Monat {m} Ausgaben");
+        assert_eq!(actual.saldo_cents, e.saldo, "Monat {m} Saldo");
+        assert_eq!(
+            actual.cumulative_cents,
+            Some(e.cumulative),
+            "Monat {m} kumuliert"
+        );
+        assert_eq!(actual.fixed_net_cents, e.fixed, "Monat {m} Fixkosten");
+        assert_eq!(
+            actual.variable_net_cents, e.variable,
+            "Monat {m} Variable Kosten"
+        );
+        assert_eq!(actual.savings_net_cents, e.savings, "Monat {m} Sparen");
+        assert_eq!(actual.other_net_cents, e.other, "Monat {m} Sonstiges");
     }
     // Months with no data carry no cumulative value — the sheet's NA(). Zero-filling
     // would draw a cliff in the chart that does not exist.
@@ -362,7 +441,11 @@ fn both_savings_rates() {
     let r = calc::savings_rates(&ledger_2026());
     assert_eq!(r.naive_numerator_cents, 900_000);
     assert_eq!(r.naive_denominator_cents, 3_600_000);
-    assert!((r.naive_rate - 0.25).abs() < 0.0001, "naiv {}", r.naive_rate);
+    assert!(
+        (r.naive_rate - 0.25).abs() < 0.0001,
+        "naiv {}",
+        r.naive_rate
+    );
 
     assert_eq!(r.income_base_cents, 2_880_000);
     assert_eq!(r.consumption_cents, 1_332_000);
@@ -452,8 +535,16 @@ fn transfers_are_excluded_from_consumption_but_not_from_the_balance() {
     });
 
     assert_eq!(calc::by_type(&rows), before_types, "Typ-Netto unverändert");
-    assert_eq!(net_by_name(&rows), before_cats, "Kategorie-Netto unverändert");
-    assert_eq!(calc::totals(&rows).saldo_cents, 900_000, "Saldo unverändert");
+    assert_eq!(
+        net_by_name(&rows),
+        before_cats,
+        "Kategorie-Netto unverändert"
+    );
+    assert_eq!(
+        calc::totals(&rows).saldo_cents,
+        900_000,
+        "Saldo unverändert"
+    );
     assert_eq!(calc::by_month(&rows)[4].saldo_cents, -80_000);
     let after = calc::savings_rates(&rows);
     assert_eq!(after.consumption_rate, before_rates.consumption_rate);
@@ -477,14 +568,27 @@ fn legacy_decodes_to_31_consecutive_months() {
     // Sequential and gap-free.
     let mut expect = (2023i64, 6i64);
     for b in blocks {
-        assert_eq!((b["year"].as_i64().unwrap(), b["month"].as_i64().unwrap()), expect);
-        expect = if expect.1 == 12 { (expect.0 + 1, 1) } else { (expect.0, expect.1 + 1) };
+        assert_eq!(
+            (b["year"].as_i64().unwrap(), b["month"].as_i64().unwrap()),
+            expect
+        );
+        expect = if expect.1 == 12 {
+            (expect.0 + 1, 1)
+        } else {
+            (expect.0, expect.1 + 1)
+        };
     }
 
     // Every label that is present agrees with its inferred position — the decode is
     // self-validating, which is what makes the 7 unlabelled blocks safe.
-    let labelled = blocks.iter().filter(|b| b["labelSource"] == "label").count();
-    assert_eq!(labelled, 24, "24 beschriftete Blöcke bestätigen die Reihenfolge");
+    let labelled = blocks
+        .iter()
+        .filter(|b| b["labelSource"] == "label")
+        .count();
+    assert_eq!(
+        labelled, 24,
+        "24 beschriftete Blöcke bestätigen die Reihenfolge"
+    );
 }
 
 #[test]
@@ -493,8 +597,8 @@ fn legacy_markers_sum_to_the_carryover_and_rows_fall_short_by_316_50() {
     let legacy: serde_json::Value = serde_json::from_str(&fix_legacy()).unwrap();
     assert_eq!(legacy["markerTotalCents"], 4_000_000, "Marker = Vortrag");
     assert_eq!(legacy["rowTotalCents"], 4_485_541, "Zeilensumme");
-    let gap = legacy["markerTotalCents"].as_i64().unwrap()
-        - legacy["rowTotalCents"].as_i64().unwrap();
+    let gap =
+        legacy["markerTotalCents"].as_i64().unwrap() - legacy["rowTotalCents"].as_i64().unwrap();
     assert_eq!(gap, 25_000, "250,00 Differenz");
 }
 
@@ -533,7 +637,11 @@ fn legacy_per_year_totals() {
         let amount = b["amountCents"].as_i64().unwrap();
         let e = per_year.entry(year).or_default();
         e.2 += 1;
-        if b["kind"] == "income" { e.0 += amount } else { e.1 += amount }
+        if b["kind"] == "income" {
+            e.0 += amount
+        } else {
+            e.1 += amount
+        }
     }
     assert_eq!(per_year[&2023], (2_716_268, 2_250_317, 314));
     assert_eq!(per_year[&2024], (5_057_935, 3_848_186, 513));
