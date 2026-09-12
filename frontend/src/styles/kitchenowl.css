@@ -1,0 +1,144 @@
+/* ── KitchenOwl ──────────────────────────────────────────────────────────────
+   A separate, parallel ledger, and it has to look like one. The cues here are
+   deliberate and not decoration:
+
+   - `.ko-chip` is NOT `.category-chip`. KitchenOwl's seven household labels and
+     the app's 32 categories are unrelated taxonomies that are never mapped onto
+     each other, so the KitchenOwl chip is outlined and neutral and never touches
+     the --type-* palette. Making them look alike would teach the wrong thing.
+   - `.ko-widget` on the dashboard is boxed and captioned, so it cannot be read
+     as part of the personal ledger's arithmetic around it.
+   - `.money--share` is tinted away from the household total it sits next to. The
+     markers on <Money> carry the distinction; this is the third channel. */
+
+.ko-chip {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .1rem .45rem; border-radius: var(--r-sm);
+  border: 1px dashed var(--line-strong); background: transparent;
+  color: var(--ink-2); font-size: .72rem; font-weight: 600; white-space: nowrap;
+}
+/* 73 of 211 expenses in the overlapping period have no KitchenOwl category, so
+   the absent state is the common one: quiet and explicit, never a warning. */
+.ko-chip--none {
+  display: inline-flex; padding: .1rem .45rem; border-radius: var(--r-sm);
+  border: 1px dashed var(--line); color: var(--muted);
+  font-size: .72rem; font-style: italic; white-space: nowrap;
+}
+
+.money--share { color: var(--ink-2); }
+.money--share .money__basis { color: var(--accent); }
+
+.ko-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.1rem;
+  padding: .55rem .75rem; margin-bottom: .9rem;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--r-md); font-size: .8rem; color: var(--muted);
+}
+.ko-strip__counts { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+
+.ko-tabs { margin-bottom: .9rem; }
+.ko-tabs__count {
+  margin-left: .35rem; padding: 0 .35rem; border-radius: var(--r-pill);
+  background: var(--info-soft); color: var(--info); font-size: .7rem; font-weight: 700;
+}
+.ko-tabs__count--warn { background: var(--danger-soft); color: var(--danger); }
+
+.ko-intro { font-size: .82rem; color: var(--muted); margin-bottom: .8rem; max-width: 46rem; }
+
+.ko-filters {
+  display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: .8rem;
+}
+.ko-filters .input { max-width: 16rem; }
+.ko-filters__check { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--muted); }
+
+.ko-table td { vertical-align: top; }
+.ko-cell__name { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.ko-row--archived { opacity: .6; }
+.ko-row--archived td:first-child { box-shadow: inset 3px 0 0 var(--muted); }
+
+.ko-split { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
+.ko-split__part { font-size: .72rem; color: var(--muted); }
+.ko-split__factor { color: var(--accent); font-weight: 700; }
+
+.ko-link { display: inline-flex; align-items: center; gap: .25rem; font-size: .78rem; }
+/* Not a warning: an unlinked expense is the ordinary outcome by design. */
+.ko-link--none { color: var(--muted); font-size: .78rem; }
+
+.ko-error {
+  display: block; margin-top: .25rem; font-size: .72rem;
+  color: var(--danger); word-break: break-word;
+}
+
+/* ── review ─────────────────────────────────────────────────────────────── */
+.ko-drafts { display: grid; gap: .7rem; }
+.ko-draft {
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: .7rem .8rem;
+  display: grid; gap: .5rem;
+}
+.ko-draft--likely { border-color: var(--accent); background: var(--accent-soft); }
+.ko-draft__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem; }
+.ko-draft__amounts { display: flex; gap: .8rem; margin-left: auto; }
+.ko-draft__date { font-size: .78rem; color: var(--muted); }
+.ko-draft__none { font-size: .8rem; color: var(--muted); }
+.ko-draft__actions { display: flex; align-items: center; gap: .5rem; }
+
+.ko-candidates { display: grid; gap: .35rem; }
+.ko-candidates li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem;
+  padding: .4rem .55rem; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-sm); font-size: .84rem;
+}
+.ko-candidate__what { display: flex; flex-direction: column; min-width: 12rem; flex: 1; }
+.ko-candidate__why { font-size: .72rem; color: var(--muted); }
+.ko-candidate__when { font-size: .78rem; color: var(--muted); }
+
+/* ── push ───────────────────────────────────────────────────────────────── */
+.ko-push { width: min(94vw, 36rem); }
+.ko-push__intro { font-size: .82rem; color: var(--muted); }
+.ko-push__row { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+@media (max-width: 520px) { .ko-push__row { grid-template-columns: 1fr; } }
+.ko-push__split { border: 1px solid var(--line); border-radius: var(--r-md); padding: .6rem .7rem; }
+.ko-push__split legend { font-size: .8rem; font-weight: 600; color: var(--ink-2); padding: 0 .25rem; }
+.ko-push__share { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; }
+.ko-push__factor { width: 4.5rem; margin-left: auto; }
+.ko-push__actions { display: flex; justify-content: flex-end; gap: .5rem; }
+.ko-push__marker { font-size: .68rem; color: var(--muted); }
+.ko-push__attempts { display: block; font-size: .72rem; color: var(--muted); }
+.ko-push__next { font-size: .72rem; color: var(--muted); }
+.ko-push__row-actions { display: flex; gap: .35rem; justify-content: flex-end; }
+
+/* ── dashboard widget ───────────────────────────────────────────────────── */
+.ko-widget { display: grid; gap: .7rem; border-left: 3px solid var(--accent); }
+.ko-widget__head { display: flex; align-items: center; gap: .5rem; }
+.ko-widget__head h2 { display: flex; align-items: center; gap: .4rem; font-size: 1rem; }
+.ko-widget__head .pill { margin-left: auto; }
+.ko-widget__stale {
+  display: flex; align-items: flex-start; gap: .4rem;
+  font-size: .78rem; color: var(--warn);
+  background: var(--warn-soft); border-radius: var(--r-sm); padding: .4rem .55rem;
+}
+.ko-widget__figures { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+.ko-widget__figures > div { display: flex; flex-direction: column; gap: .1rem; }
+.ko-widget__list { display: grid; gap: .3rem; }
+.ko-widget__list li {
+  display: flex; align-items: center; gap: .5rem; font-size: .82rem;
+  padding-bottom: .3rem; border-bottom: 1px solid var(--line);
+}
+.ko-widget__list li:last-child { border-bottom: 0; }
+.ko-widget__name { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; flex: 1; min-width: 0; }
+.ko-widget__meta { font-size: .74rem; color: var(--muted); }
+.ko-widget__list .money { margin-left: auto; }
+.ko-widget__empty { font-size: .82rem; color: var(--muted); }
+.ko-widget__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  font-size: .74rem; color: var(--muted); padding-top: .2rem;
+}
+
+/* The push dialogue is rendered in place rather than in a <dialog>, because the
+   booking behind it stays visible and readable — the amount and the comment on the
+   row are what the form is about. */
+.dialog-shim {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  background: rgba(14, 17, 19, .55); overflow: auto;
+}

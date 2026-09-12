@@ -39,6 +39,21 @@ export const qk = {
     list: (year: number, month: number) => ['recurring', 'list', year, month] as const,
   },
   drafts: (year: number, month: number) => ['bookings', 'drafts', year, month] as const,
+  /**
+   * KitchenOwl. Deliberately NOT under `derived`: those keys are invalidated
+   * whenever a booking moves, and the mirror is a different ledger that a booking
+   * change cannot alter. The one exception is a link, which is handled explicitly.
+   */
+  kitchenowl: {
+    root: ['kitchenowl'] as const,
+    status: () => ['kitchenowl', 'status'] as const,
+    summary: () => ['kitchenowl', 'summary'] as const,
+    metadata: () => ['kitchenowl', 'metadata'] as const,
+    expenses: (filters: Record<string, unknown>) =>
+      ['kitchenowl', 'expenses', filters] as const,
+    drafts: (status: string) => ['kitchenowl', 'drafts', status] as const,
+    push: () => ['kitchenowl', 'push'] as const,
+  },
   imports: {
     root: ['imports'] as const,
     list: () => ['imports', 'list'] as const,
@@ -79,6 +94,17 @@ export function invalidateAfterTaxonomyChange(client: QueryClient) {
 export function invalidateAfterMaterialize(client: QueryClient, year: number) {
   client.invalidateQueries({ queryKey: qk.recurring.root });
   invalidateAfterBookingChange(client, [year]);
+}
+
+/**
+ * A sync ran, or a link changed. Everything KitchenOwl is stale — and so are the
+ * bookings, but only because a link writes `externalSource` onto one of them. No
+ * figure moves, which is why the year aggregates are deliberately NOT invalidated:
+ * confirming a link changes no total, and refetching them would suggest it might.
+ */
+export function invalidateAfterKitchenOwlChange(client: QueryClient) {
+  client.invalidateQueries({ queryKey: qk.kitchenowl.root });
+  client.invalidateQueries({ queryKey: qk.bookings.root });
 }
 
 /** Only the year overview and that year's aggregates; bookings are untouched. */

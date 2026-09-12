@@ -2,14 +2,29 @@ import { useId, useState, type ReactNode } from 'react';
 
 import { formatEuro } from '../lib/format';
 import { useT } from '../lib/i18n';
+import type { MessageKey } from '../lib/messages/de';
 import type { BookingKind } from '../lib/types';
 
 /**
  * `gross` is a plain amount. `net` is expenses minus income of the same category —
  * Miete reads 4.800,00 because a flatmate pays half of the 9.600,00 that actually
  * left the account. `signed` shows an explicit +/−.
+ *
+ * `household` and `share` belong to the KitchenOwl ledger and exist because they are
+ * the most confusable pair of numbers in the application: the same purchase has a
+ * full amount the household spent and a slice the user owes, they sit next to each
+ * other in every row, and neither is ever added to the other or to a booking. Both
+ * carry a visible marker and say which they are in their accessible name, so the
+ * distinction survives being read aloud, screenshotted or copied out of context.
  */
-export type Basis = 'gross' | 'net' | 'signed';
+export type Basis = 'gross' | 'net' | 'signed' | 'household' | 'share';
+
+/** Which bases wear a visible marker, and what it says. */
+const MARKERS: Partial<Record<Basis, { abbr: MessageKey; title: MessageKey }>> = {
+  net: { abbr: 'money.netAbbr', title: 'money.netExplainer' },
+  household: { abbr: 'money.householdAbbr', title: 'money.householdExplainer' },
+  share: { abbr: 'money.shareAbbr', title: 'money.shareExplainer' },
+};
 
 interface MoneyProps {
   cents: number | null | undefined;
@@ -40,6 +55,7 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
   const isCredit = basis === 'net' && cents < 0;
   const text = formatEuro(cents, { showSign: basis === 'signed' });
   const basisWord = t(`money.basis.${basis}` as const);
+  const marker = MARKERS[basis];
 
   return (
     <span
@@ -47,6 +63,7 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
         'money',
         resolved ? `money--${resolved}` : '',
         isCredit ? 'money--credit' : '',
+        basis === 'share' ? 'money--share' : '',
         className ?? '',
       ]
         .filter(Boolean)
@@ -54,9 +71,9 @@ export function Money({ cents, basis = 'gross', tone, className }: MoneyProps) {
       aria-label={basisWord ? `${text} ${basisWord}` : text}
     >
       {text}
-      {basis === 'net' && (
-        <abbr className="money__basis" title={t('money.netExplainer')} aria-hidden="true">
-          {t('money.netAbbr')}
+      {marker && (
+        <abbr className="money__basis" title={t(marker.title)} aria-hidden="true">
+          {t(marker.abbr)}
         </abbr>
       )}
     </span>

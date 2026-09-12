@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Download, FileJson } from 'lucide-react';
+import { ArrowLeftRight, Download, FileJson, Link2, Send } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
@@ -18,7 +18,9 @@ import { api, downloadFile } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
-import type { BookingPage } from '../../lib/types';
+import type { Booking, BookingPage, KoStatus } from '../../lib/types';
+
+import { PushDialog } from '../kitchenowl/PushDialog';
 
 export function BookingsPage() {
   const t = useT();
@@ -29,6 +31,17 @@ export function BookingsPage() {
   const uncategorizedOnly = params.get('ohneKategorie') === '1';
 
   const [downloaded, setDownloaded] = useState<string | null>(null);
+  // The push dialogue lives here because a push is an action on a booking, not a
+  // KitchenOwl browsing task. The column only appears when the server actually has
+  // KitchenOwl configured.
+  const [pushing, setPushing] = useState<Booking | null>(null);
+  const [pushNotice, setPushNotice] = useState<string | null>(null);
+  const koStatus = useQuery({
+    queryKey: qk.kitchenowl.status(),
+    queryFn: () => api<KoStatus>('/kitchenowl/status'),
+    retry: false,
+  });
+  const koReady = koStatus.data?.configured === true;
   const download = useMutation({
     mutationFn: (path: string) => downloadFile(path),
     onSuccess: setDownloaded,
@@ -148,6 +161,7 @@ export function BookingsPage() {
                     <th className="num">{t('bookings.expense')}</th>
                     <th className="num">{t('bookings.net')}</th>
                     <th>{t('bookings.tax')}</th>
+                    {koReady && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -199,6 +213,29 @@ export function BookingsPage() {
                         <Money cents={b.netCents} basis="net" tone="auto" />
                       </td>
                       <td>{b.taxRelevant ? <StatusPill tone="danger">×</StatusPill> : null}</td>
+                      {koReady && (
+                        <td className="num">
+                          {b.externalSource === 'kitchenowl' ? (
+                            // Already in KitchenOwl. Shown, not offered again — the
+                            // server refuses a second push, and a button that only
+                            // produces an error is worse than no button.
+                            <span className="ko-link" title={t('ko.linked')}>
+                              <Link2 size={14} aria-hidden="true" />
+                              <span className="sr-only">{t('ko.linked')}</span>
+                            </span>
+                          ) : b.kind === 'transfer' || b.status !== 'confirmed' ? null : (
+                            <button
+                              type="button"
+                              className="icon-button"
+                              title={t('ko.pushTitle')}
+                              aria-label={`${t('ko.pushTitle')}: ${b.comment}`}
+                              onClick={() => setPushing(b)}
+                            >
+                              <Send size={15} aria-hidden="true" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -206,6 +243,20 @@ export function BookingsPage() {
             </div>
           )}
         </>
+      )}
+
+      {pushNotice && <Banner tone="info">{pushNotice}</Banner>}
+
+      {pushing && (
+        <div className="dialog-shim">
+          <PushDialog
+            booking={pushing}
+            onClose={(message) => {
+              setPushing(null);
+              if (message) setPushNotice(message);
+            }}
+          />
+        </div>
       )}
     </>
   );

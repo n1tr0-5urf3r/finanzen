@@ -272,3 +272,203 @@ export interface TaxReport {
   entries: TaxEntry[];
   byCategory: TaxCategorySummary[];
 }
+
+/* ── KitchenOwl ───────────────────────────────────────────────────────────────
+   A SEPARATE, PARALLEL LEDGER. None of these numbers is ever added to a booking
+   figure, and every view showing both says which is which. `amountCents` is what
+   the household spent; `ownShareCents` is the user's slice of it. */
+
+export interface KoMember {
+  memberId: number;
+  name: string;
+  username: string | null;
+  /** Negative means the user owes the household. The only balance KitchenOwl has. */
+  balanceCents: number;
+  isMe: boolean;
+  isOwner: boolean;
+  isAdmin: boolean;
+  fetchedAt: string;
+}
+
+/**
+ * KitchenOwl's own taxonomy — seven household labels with no relationship to the
+ * app's 32 categories and five types. Never auto-mapped, and deliberately not
+ * styled like an app category.
+ */
+export interface KoCategory {
+  categoryId: number;
+  name: string;
+  colorArgb: number | null;
+  budgetCents: number | null;
+  fetchedAt: string;
+}
+
+export interface KoMetadata {
+  members: KoMember[];
+  categories: KoCategory[];
+  fetchedAt: string | null;
+  /** Served anyway, with a warning: the push dialogue must open during an outage. */
+  stale: boolean;
+  warning: string | null;
+}
+
+export interface KoShare {
+  memberId: number;
+  name: string | null;
+  /** An integer WEIGHT, not a percentage. */
+  factor: number;
+  shareCents: number;
+}
+
+export interface KoExpense {
+  id: string;
+  externalId: number;
+  name: string;
+  description: string | null;
+  date: string;
+  /** The full shared amount — what left somebody's account. */
+  amountCents: number;
+  /** The user's slice. Never summed with the amount or with a booking. */
+  ownShareCents: number;
+  paidById: number | null;
+  paidByName: string | null;
+  paidFor: KoShare[];
+  koCategoryId: number | null;
+  koCategoryName: string | null;
+  excludeFromStatistics: boolean;
+  archivedAt: string | null;
+  linkedBookingId: string | null;
+  linkedBookingComment: string | null;
+  linkedBookingAmountCents: number | null;
+  updatedAt: string;
+}
+
+export interface KoExpensePage {
+  items: KoExpense[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sumAmountCents: number;
+  sumOwnShareCents: number;
+  linkedCount: number;
+}
+
+export interface KoMatchCandidate {
+  bookingId: string;
+  comment: string;
+  amountCents: number;
+  year: number;
+  month: number;
+  monthName: string;
+  score: number;
+  basis: 'fullAmount' | 'ownShare' | 'fullAmountNear' | 'ownShareNear';
+}
+
+export type KoDraftStatus =
+  | 'open'
+  | 'likely_duplicate'
+  | 'possible_duplicate'
+  | 'ignored_by_default'
+  | 'confirmed'
+  | 'discarded';
+
+export interface KoDraft {
+  id: string;
+  status: KoDraftStatus;
+  expense: KoExpense;
+  candidates: KoMatchCandidate[];
+  /** `link` or `none`. Never `create`: a pull writes no booking. */
+  suggestedAction: 'link' | 'none';
+  createdAt: string;
+}
+
+export interface KoDraftPage {
+  items: KoDraft[];
+  total: number;
+  openCount: number;
+  likelyCount: number;
+}
+
+export interface KoSyncRun {
+  id: string;
+  kind: string;
+  status: 'running' | 'success' | 'partial' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  createdCount: number;
+  updatedCount: number;
+  archivedCount: number;
+  failedCount: number;
+  error: string | null;
+}
+
+export interface KoStatus {
+  configured: boolean;
+  enabled: boolean;
+  reachable: boolean | null;
+  running: boolean;
+  householdId: number | null;
+  householdName: string | null;
+  lastExpenseRun: KoSyncRun | null;
+  lastMetadataRun: KoSyncRun | null;
+  nextRunAt: string | null;
+  /** 0 means only "jetzt synchronisieren" moves anything. */
+  pollSeconds: number;
+  mirroredCount: number;
+  archivedCount: number;
+  linkedCount: number;
+  openDraftCount: number;
+  likelyDuplicateCount: number;
+  pendingPushCount: number;
+  failedPushCount: number;
+  metadataFetchedAt: string | null;
+  metadataStale: boolean;
+  lastError: string | null;
+}
+
+export interface KoSummary {
+  configured: boolean;
+  enabled: boolean;
+  householdName: string | null;
+  members: KoMember[];
+  myBalanceCents: number | null;
+  recent: KoExpense[];
+  month: Period;
+  monthAmountCents: number;
+  monthOwnShareCents: number;
+  monthCount: number;
+  lastSyncedAt: string | null;
+  stale: boolean;
+  warning: string | null;
+}
+
+export type KoPushState =
+  | 'queued'
+  | 'sending'
+  | 'pushed'
+  | 'failed'
+  | 'abandoned'
+  | 'retracted';
+
+export interface KoPushIntent {
+  bookingId: string;
+  state: KoPushState;
+  bookingComment: string | null;
+  amountCents: number;
+  date: string;
+  name: string;
+  marker: string;
+  attempts: number;
+  lastError: string | null;
+  externalId: number | null;
+  nextAttemptAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KoSyncResult {
+  started: boolean;
+  expenses: KoSyncRun | null;
+  metadata: KoSyncRun | null;
+  error: string | null;
+}

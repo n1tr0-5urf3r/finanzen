@@ -10,6 +10,7 @@ import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { Dashboard } from '../../lib/types';
 import type { MessageKey } from '../../lib/messages/de';
+import { KitchenOwlWidget } from '../kitchenowl/KitchenOwlWidget';
 
 function Kpi({
   labelKey,
@@ -139,6 +140,12 @@ export function DashboardPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Below the personal ledger's own figures, boxed and labelled, because the
+          one thing it must never look like is part of the arithmetic above it. */}
+      <div style={{ marginBottom: '1rem' }}>
+        <KitchenOwlWidget />
       </div>
 
       <div className="panel panel--pad">
