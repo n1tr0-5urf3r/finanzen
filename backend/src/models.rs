@@ -301,6 +301,55 @@ pub struct CategoryAnalysis {
     pub excluded_transfer_count: i64,
 }
 
+/// A single subject's twelve months — one category, or one comment.
+///
+/// The spreadsheet's `Filter` tab did exactly this and it is the question a
+/// household actually asks: not "what did Auto & Parken cost" but "how much do I
+/// spend on tanken, and is it getting worse".
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthlySeries {
+    pub year: i32,
+    /// `category` or `comment` — which kind of subject was asked for.
+    pub mode: String,
+    /// The category name or the comment, verbatim. Data, so never translated.
+    pub subject: String,
+    pub category_id: Option<Uuid>,
+    /// Twelve entries, Januar first. Gross legs and the net, so the UI can show
+    /// the netting rather than assert it.
+    pub months: Vec<SeriesMonth>,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    pub net_cents: i64,
+    /// Divided by the months that carry a booking for THIS subject, not by twelve
+    /// and not by the year's months — an expense that only happens in summer
+    /// should not look small.
+    pub average_per_active_month_cents: i64,
+    pub booking_count: i64,
+    pub months_with_data: i64,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SeriesMonth {
+    pub month: u8,
+    pub month_name: String,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    pub net_cents: i64,
+    pub booking_count: i64,
+}
+
+/// What the picker offers: every comment that actually occurs, most used first.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SeriesSubject {
+    pub comment: String,
+    pub booking_count: i64,
+    pub net_cents: i64,
+    pub category_name: Option<String>,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MonthlyRow {

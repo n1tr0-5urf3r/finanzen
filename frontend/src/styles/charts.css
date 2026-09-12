@@ -45,3 +45,21 @@
 
 .chart-grid { display: grid; gap: 1rem; }
 @media (min-width: 1120px) { .chart-grid--pair { grid-template-columns: 3fr 2fr; } }
+
+/* ── the per-subject series ──────────────────────────────────────────────── */
+.series { margin-bottom: 1rem; }
+.series__header { margin-bottom: .75rem; }
+.series__header .footnote { margin-top: .2rem; }
+.series__controls {
+  display: flex; flex-wrap: wrap; gap: .6rem .75rem;
+  align-items: center; margin-bottom: .75rem;
+}
+.series__picker { flex: 1 1 14rem; min-width: 0; }
+.series__stats {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem .9rem;
+  margin-bottom: .75rem;
+}
+@media (min-width: 700px) { .series__stats { grid-template-columns: repeat(4, 1fr); } }
+.series__stats > div { display: flex; flex-direction: column; gap: .1rem; }
+.chart__bar--credit { fill: var(--credit); }
+.chart__bar--expense { fill: var(--expense); }

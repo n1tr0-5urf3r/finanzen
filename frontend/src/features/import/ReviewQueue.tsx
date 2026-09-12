@@ -5,7 +5,7 @@ import { Check, SkipForward } from 'lucide-react';
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, StatusPill } from '../../components/ui';
-import { api, jsonBody } from '../../lib/api';
+import { api, jsonBody, asList } from '../../lib/api';
 import { formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterTaxonomyChange, qk } from '../../lib/queryKeys';
@@ -54,7 +54,7 @@ export function ReviewQueue({
     queryFn: () => api<ReviewItem[]>(`/imports/${batchId}/review?limit=1000`),
   });
 
-  const items = useMemo(() => query.data ?? [], [query.data]);
+  const items = useMemo(() => asList<ReviewItem>(query.data), [query.data]);
   const pending = useMemo(() => items.filter((i) => !done[i.id]), [items, done]);
   const current = pending[Math.min(cursor, Math.max(0, pending.length - 1))] as
     | ReviewItem

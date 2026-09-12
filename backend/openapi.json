@@ -118,6 +118,97 @@
         }
       }
     },
+    "/api/v1/analysis/series": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Twelve months for one category or one comment.",
+        "operationId": "series",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "description": "Kategorie — genau eine von beiden",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "comment",
+            "in": "query",
+            "description": "Kommentar, z. B. tanken — Groß-/Kleinschreibung egal",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zwölf Monate für eine Kategorie oder einen Kommentar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlySeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Weder oder beide Parameter angegeben"
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/series/subjects": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "The comments worth charting, most used first — what the picker offers.",
+        "operationId": "series_subjects",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kommentare mit mehr als einer Buchung, häufigste zuerst",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeriesSubject"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -4998,6 +5089,75 @@
           }
         }
       },
+      "MonthlySeries": {
+        "type": "object",
+        "description": "A single subject's twelve months — one category, or one comment.\n\nThe spreadsheet's `Filter` tab did exactly this and it is the question a\nhousehold actually asks: not \"what did Auto & Parken cost\" but \"how much do I\nspend on tanken, and is it getting worse\".",
+        "required": [
+          "year",
+          "mode",
+          "subject",
+          "months",
+          "incomeCents",
+          "expenseCents",
+          "netCents",
+          "averagePerActiveMonthCents",
+          "bookingCount",
+          "monthsWithData"
+        ],
+        "properties": {
+          "averagePerActiveMonthCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Divided by the months that carry a booking for THIS subject, not by twelve\nand not by the year's months — an expense that only happens in summer\nshould not look small."
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mode": {
+            "type": "string",
+            "description": "`category` or `comment` — which kind of subject was asked for."
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeriesMonth"
+            },
+            "description": "Twelve entries, Januar first. Gross legs and the net, so the UI can show\nthe netting rather than assert it."
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "subject": {
+            "type": "string",
+            "description": "The category name or the comment, verbatim. Data, so never translated."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PasswordRequest": {
         "type": "object",
         "required": [
@@ -5475,6 +5635,71 @@
                 "$ref": "#/components/schemas/BookingKind"
               }
             ]
+          }
+        }
+      },
+      "SeriesMonth": {
+        "type": "object",
+        "required": [
+          "month",
+          "monthName",
+          "incomeCents",
+          "expenseCents",
+          "netCents",
+          "bookingCount"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SeriesSubject": {
+        "type": "object",
+        "description": "What the picker offers: every comment that actually occurs, most used first.",
+        "required": [
+          "comment",
+          "bookingCount",
+          "netCents"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

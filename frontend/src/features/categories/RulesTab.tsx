@@ -4,7 +4,7 @@ import { Pencil, Play, Plus, Trash2 } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, StatusPill } from '../../components/ui';
-import { api, jsonBody } from '../../lib/api';
+import { api, jsonBody, asList } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterTaxonomyChange, qk } from '../../lib/queryKeys';
 import type { ApplyRulesResult, BookingKind, Category, Rule } from '../../lib/types';
@@ -107,7 +107,7 @@ export function RulesTab({
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return (rules.data ?? []).filter((r) => {
+    return asList<Rule>(rules.data).filter((r) => {
       if (onlyUnused && r.matchCount > 0) return false;
       if (!needle) return true;
       return (
@@ -121,7 +121,7 @@ export function RulesTab({
   if (rules.isLoading) return <LoadingState />;
   if (rules.isError) return <ErrorState error={rules.error} retry={() => rules.refetch()} />;
 
-  const all = rules.data ?? [];
+  const all = asList<Rule>(rules.data);
   const unused = all.filter((r) => r.matchCount === 0).length;
 
   return (

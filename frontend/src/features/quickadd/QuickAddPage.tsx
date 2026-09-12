@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChevronRight, Delete, X } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
-import { api, jsonBody } from '../../lib/api';
+import { api, jsonBody, asList } from '../../lib/api';
 import { formatEuro, monthName } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterBookingChange, qk } from '../../lib/queryKeys';
@@ -186,8 +186,8 @@ export function QuickAddPage() {
 
       {sheetOpen && (
         <CommentSheet
-          rules={rules.data ?? []}
-          comments={comments.data ?? []}
+          rules={asList(rules.data)}
+          comments={asList(comments.data)}
           onPick={(comment) => {
             dispatch({ type: 'setComment', comment });
             setSheetOpen(false);
@@ -198,7 +198,7 @@ export function QuickAddPage() {
 
       {categoryOpen && (
         <CategorySheet
-          categories={categories.data ?? []}
+          categories={asList(categories.data)}
           selectedId={override?.id ?? null}
           onPick={(picked) => {
             setOverride(picked);

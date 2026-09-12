@@ -137,6 +137,12 @@ export const de = {
   'months.balance': 'Saldo',
   'months.savingsRate': 'Sparquote',
 
+  'analysis.seriesTitle': 'Verlauf je Monat',
+  'analysis.seriesHint': 'Ein Kommentar oder eine Kategorie über zwölf Monate — etwa tanken, um zu sehen, ob es teurer wird.',
+  'analysis.byComment': 'Nach Kommentar',
+  'analysis.byCategory': 'Nach Kategorie',
+  'analysis.perActiveMonth': 'Ø je aktivem Monat',
+  'months.withData': 'Monate mit Daten',
   'analysis.title': 'Auswertung nach Kategorie',
   'analysis.intro':
     'Alle Beträge netto: Ausgaben minus Einnahmen derselben Kategorie. Negativ bedeutet, dass unter dem Strich Geld hereinkam.',

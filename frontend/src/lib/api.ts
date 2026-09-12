@@ -144,3 +144,16 @@ export async function downloadFile(path: string): Promise<string> {
   setTimeout(() => URL.revokeObjectURL(url), 0);
   return filename;
 }
+
+/**
+ * A list from a query that may not have one yet.
+ *
+ * `query.data ?? []` looks safe and is not: it only guards `undefined`, so a
+ * payload that is an object — an error body, a paged response, a mock wired to
+ * the wrong endpoint — reaches `.map` and takes the whole screen down. Twice now
+ * a component has blanked for exactly that reason, so the check is a function
+ * rather than a habit.
+ */
+export function asList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}

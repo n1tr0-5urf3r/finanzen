@@ -7,15 +7,17 @@
 
 use axum::{Json, extract::Query};
 use sqlx::{PgConnection, Row};
+use uuid::Uuid;
 
 use crate::{
     auth::Ctx,
     calc::{self, Kind, LedgerRow},
-    error::Result,
+    error::{AppError, Result},
     locale::{div_round_half_up, month_name_de},
     models::{
         CategoryAnalysis, CategoryAnalysisRow, CategoryTypeSummary, Dashboard, MonthlyOverview,
-        MonthlyRow, TaxCategorySummary, TaxEntry, TaxReport,
+        MonthlyRow, MonthlySeries, SeriesMonth, SeriesSubject, TaxCategorySummary, TaxEntry,
+        TaxReport,
     },
 };
 
@@ -348,6 +350,157 @@ pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxRep
         entries,
         by_category: by_category.into_values().collect(),
     };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeriesQuery {
+    pub year: i32,
+    /// Exactly one of these. A category answers "what does Auto & Parken cost";
+    /// a comment answers "what do I spend on tanken", which is the question the
+    /// spreadsheet's Filter tab existed for and the one a household actually asks.
+    pub category_id: Option<Uuid>,
+    pub comment: Option<String>,
+}
+
+/// Twelve months for one category or one comment.
+#[utoipa::path(
+    get,
+    path = "/api/v1/analysis/series",
+    tag = "analysis",
+    params(
+        ("year" = i32, Query, description = "Kalenderjahr"),
+        ("categoryId" = Option<Uuid>, Query, description = "Kategorie — genau eine von beiden"),
+        ("comment" = Option<String>, Query, description = "Kommentar, z. B. tanken — Groß-/Kleinschreibung egal"),
+    ),
+    responses(
+        (status = 200, description = "Zwölf Monate für eine Kategorie oder einen Kommentar", body = MonthlySeries),
+        (status = 400, description = "Weder oder beide Parameter angegeben"),
+    ),
+)]
+pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<MonthlySeries>> {
+    let (mode, subject, where_sql): (&str, String, &str) = match (&q.category_id, &q.comment) {
+        (Some(_), None) => ("category", String::new(), "b.category_id = $2"),
+        // Matched case-insensitively on the trimmed comment, exactly as the rule
+        // table matches, so "Tanken" and "tanken" are one subject and not two.
+        (None, Some(c)) => ("comment", c.trim().to_string(), "b.match_key = lower(btrim($2))"),
+        _ => {
+            return Err(AppError::Validation(
+                "Genau eine von categoryId oder comment angeben".into(),
+            ));
+        }
+    };
+
+    let sql = format!(
+        "SELECT b.period_month, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'income'), 0)::bigint AS inc, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'expense'), 0)::bigint AS exp, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
+                count(*)::bigint AS n \
+           FROM v_ledger b \
+          WHERE b.period_year = $1::smallint AND {where_sql} \
+          GROUP BY b.period_month ORDER BY b.period_month"
+    );
+
+    let mut query = sqlx::query(&sql).bind(q.year);
+    query = match (&q.category_id, &q.comment) {
+        (Some(id), _) => query.bind(id),
+        _ => query.bind(&subject),
+    };
+    let rows = query.fetch_all(ctx.tenant.conn()).await?;
+
+    let mut months: Vec<SeriesMonth> = (1..=12u8)
+        .map(|month| SeriesMonth {
+            month,
+            month_name: month_name_de(month).to_string(),
+            income_cents: 0,
+            expense_cents: 0,
+            net_cents: 0,
+            booking_count: 0,
+        })
+        .collect();
+
+    for r in &rows {
+        let month: i16 = r.get("period_month");
+        if !(1..=12).contains(&month) {
+            continue;
+        }
+        let slot = &mut months[(month - 1) as usize];
+        slot.income_cents = r.get("inc");
+        slot.expense_cents = r.get("exp");
+        slot.net_cents = r.get("net");
+        slot.booking_count = r.get("n");
+    }
+
+    // The name is looked up rather than echoed, so a renamed category answers with
+    // its current name instead of whatever the caller happened to send.
+    let subject = if mode == "category" {
+        sqlx::query_scalar::<_, String>("SELECT name FROM categories WHERE id = $1")
+            .bind(q.category_id)
+            .fetch_optional(ctx.tenant.conn())
+            .await?
+            .ok_or_else(|| AppError::NotFound("Kategorie".into()))?
+    } else {
+        subject
+    };
+
+    let income_cents = months.iter().map(|m| m.income_cents).sum();
+    let expense_cents = months.iter().map(|m| m.expense_cents).sum();
+    let net_cents = months.iter().map(|m| m.net_cents).sum();
+    let booking_count = months.iter().map(|m| m.booking_count).sum();
+    let months_with_data = months.iter().filter(|m| m.booking_count > 0).count() as i64;
+
+    let out = MonthlySeries {
+        year: q.year,
+        mode: mode.to_string(),
+        subject,
+        category_id: q.category_id,
+        average_per_active_month_cents: div_round_half_up(net_cents, months_with_data.max(1)),
+        months,
+        income_cents,
+        expense_cents,
+        net_cents,
+        booking_count,
+        months_with_data,
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+/// The comments worth charting, most used first — what the picker offers.
+#[utoipa::path(
+    get,
+    path = "/api/v1/analysis/series/subjects",
+    tag = "analysis",
+    params(("year" = i32, Query, description = "Kalenderjahr")),
+    responses((status = 200, description = "Kommentare mit mehr als einer Buchung, häufigste zuerst", body = Vec<SeriesSubject>)),
+)]
+pub async fn series_subjects(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Vec<SeriesSubject>>> {
+    let rows = sqlx::query(
+        "SELECT b.comment, count(*)::bigint AS n, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
+                max(b.category_name) AS category_name \
+           FROM v_ledger b \
+          WHERE b.period_year = $1::smallint \
+          GROUP BY b.comment \
+          HAVING count(*) > 1 \
+          ORDER BY n DESC, b.comment LIMIT 300",
+    )
+    .bind(q.year)
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+
+    let out = rows
+        .iter()
+        .map(|r| SeriesSubject {
+            comment: r.get("comment"),
+            booking_count: r.get("n"),
+            net_cents: r.get("net"),
+            category_name: r.get("category_name"),
+        })
+        .collect();
     ctx.tenant.commit().await?;
     Ok(Json(out))
 }

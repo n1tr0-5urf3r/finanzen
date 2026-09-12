@@ -14,7 +14,7 @@ import {
   PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api, asList } from '../../lib/api';
 import { formatDate, formatDateTime, formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterKitchenOwlChange, qk } from '../../lib/queryKeys';
@@ -510,7 +510,7 @@ function PushQueue({ onNotice }: { onNotice: (message: string) => void }) {
     // A queued push is drained in the background, so the list has to move on its
     // own or it looks stuck.
     refetchInterval: (q) =>
-      (q.state.data ?? []).some((i) => i.state === 'queued' || i.state === 'sending')
+      asList<KoPushIntent>(q.state.data).some((i) => i.state === 'queued' || i.state === 'sending')
         ? 3000
         : false,
   });

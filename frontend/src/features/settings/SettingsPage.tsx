@@ -14,7 +14,7 @@ import {
   PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { api, downloadFile, jsonBody } from '../../lib/api';
+import { api, downloadFile, jsonBody, asList } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { formatDateTime, formatEuro, parseEuroInput } from '../../lib/format';
 import { useI18n, useT, type Locale } from '../../lib/i18n';
@@ -121,7 +121,7 @@ function YearsSection() {
 
   if (years.isLoading) return <LoadingState />;
   if (years.isError) return <ErrorState error={years.error} retry={() => years.refetch()} />;
-  const rows = years.data ?? [];
+  const rows = asList<Year>(years.data);
 
   return (
     <section className="settings-section">
@@ -416,7 +416,7 @@ function ExportSection() {
             onChange={(e) => setYear(e.target.value)}
           >
             <option value="">{t('settings.exportAllYears')}</option>
-            {(years.data ?? []).map((y) => (
+            {asList<Year>(years.data).map((y) => (
               <option key={y.year} value={y.year}>
                 {y.year}
               </option>

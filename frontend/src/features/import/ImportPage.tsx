@@ -14,7 +14,7 @@ import {
   PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { api, apiUpload } from '../../lib/api';
+import { api, apiUpload, asList } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterBookingChange, invalidateAfterTaxonomyChange, qk } from '../../lib/queryKeys';
@@ -85,7 +85,7 @@ export function ImportPage() {
 
       {tab === 'import' ? (
         <ImportTab
-          batches={batches.data ?? []}
+          batches={asList(batches.data)}
           loading={batches.isLoading}
           selected={batchId}
           onSelect={(id) => setParam('stapel', id)}

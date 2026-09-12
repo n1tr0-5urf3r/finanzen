@@ -14,7 +14,7 @@ import {
   PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { api, jsonBody } from '../../lib/api';
+import { api, jsonBody, asList } from '../../lib/api';
 import { MONTHS_DE, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterMaterialize, qk } from '../../lib/queryKeys';
@@ -68,7 +68,7 @@ export function RecurringPage() {
   // Due, not yet booked, and not unticked by hand. Selection is stored as the
   // *exclusions* so that a template becoming due does not silently stay unticked.
   const selectable = useMemo(
-    () => (templates.data ?? []).filter((x) => x.dueInPeriod && !x.bookedInPeriod),
+    () => asList<RecurringTemplate>(templates.data).filter((x) => x.dueInPeriod && !x.bookedInPeriod),
     [templates.data],
   );
   const selected = selectable.filter((x) => !deselected.has(x.id));
@@ -180,7 +180,7 @@ export function RecurringPage() {
       {formOpen && (
         <TemplateForm
           template={editing}
-          categories={categories.data ?? []}
+          categories={asList<Category>(categories.data)}
           defaultPeriod={{ year, month }}
           onDone={() => {
             setFormOpen(false);

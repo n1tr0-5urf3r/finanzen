@@ -5,13 +5,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money, NetBreakdown, ScopeNote } from '../../components/Money';
 import { Banner, EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api, asList } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
 import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
+import { SeriesChart } from './SeriesChart';
 import type { MessageKey } from '../../lib/messages/de';
-import type { CategoryAnalysis, CategoryAnalysisRow } from '../../lib/types';
+import type { Category, CategoryAnalysis, CategoryAnalysisRow } from '../../lib/types';
 
 type SortKey = 'name' | 'type' | 'income' | 'expense' | 'net' | 'share' | 'average' | 'count';
 
@@ -46,6 +47,13 @@ export function AnalysisPage() {
   const query = useQuery({
     queryKey: qk.derived.categories(year),
     queryFn: () => api<CategoryAnalysis>(`/analysis/categories?year=${year}`),
+  });
+  // The picker needs the real category list, not the analysis rows: a category
+  // with no bookings this year is still a legitimate thing to chart.
+  const categories = useQuery({
+    queryKey: qk.taxonomy.categories(),
+    queryFn: () => api<Category[]>('/categories'),
+    staleTime: 30 * 60_000,
   });
 
   const rows = useMemo(() => {
@@ -106,6 +114,11 @@ export function AnalysisPage() {
               </Link>
             </Banner>
           )}
+
+          {/* Above the table, because "how much do I spend on tanken" is the
+              question people come here with; the year's totals are what they
+              scroll to afterwards. */}
+          <SeriesChart year={year} categories={asList(categories.data)} />
 
           <div className="panel table-wrap screen-table">
             <table className="data-table">

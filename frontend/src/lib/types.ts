@@ -603,3 +603,35 @@ export interface ApplyRulesResult {
   stillUncategorized: number;
   dryRun: boolean;
 }
+
+export interface SeriesMonth {
+  month: number;
+  monthName: string;
+  incomeCents: number;
+  expenseCents: number;
+  netCents: number;
+  bookingCount: number;
+}
+
+export interface MonthlySeries {
+  year: number;
+  mode: 'category' | 'comment';
+  /** The category name or the comment, verbatim — data, never translated. */
+  subject: string;
+  categoryId: string | null;
+  months: SeriesMonth[];
+  incomeCents: number;
+  expenseCents: number;
+  netCents: number;
+  /** Divided by the months carrying a booking for this subject, not by twelve. */
+  averagePerActiveMonthCents: number;
+  bookingCount: number;
+  monthsWithData: number;
+}
+
+export interface SeriesSubject {
+  comment: string;
+  bookingCount: number;
+  netCents: number;
+  categoryName: string | null;
+}

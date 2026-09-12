@@ -136,6 +136,8 @@ pub fn router(state: AppState) -> Router {
         .route("/dashboard", get(analysis::dashboard))
         .route("/overview/months", get(analysis::monthly))
         .route("/analysis/categories", get(analysis::categories))
+        .route("/analysis/series", get(analysis::series))
+        .route("/analysis/series/subjects", get(analysis::series_subjects))
         .route("/tax", get(analysis::tax))
         .route("/tax/export.csv", get(export::tax_csv))
         .route("/tax/export.pdf", get(export::tax_pdf))

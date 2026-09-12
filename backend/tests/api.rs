@@ -2060,3 +2060,115 @@ async fn paging_partitions_the_rows_in_both_directions() {
         );
     }
 }
+
+/// Twelve months for one comment — "how much do I spend on tanken, and is it
+/// getting worse". The spreadsheet's Filter tab answered this and it is the
+/// question a household asks more often than "what did the category cost".
+#[tokio::test]
+async fn a_comment_can_be_charted_across_the_year() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let auto = app.category_id("Auto & Parken").await;
+    app.send("POST", "/rules", Some(json!({"comment":"tanken","categoryId":auto})))
+        .await;
+
+    for (month, cents) in [(1, 6_500), (1, 5_500), (3, 7_200), (9, 8_100)] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":month,"kind":"expense",
+                        "amountCents":cents,"comment":"tanken"})),
+        )
+        .await;
+    }
+    // A different comment in the same category must not bleed into the series.
+    app.send(
+        "POST",
+        "/bookings",
+        Some(json!({"year":2026,"month":1,"kind":"expense",
+                    "amountCents":2_500,"comment":"Parkhaus"})),
+    )
+    .await;
+
+    let (status, s) = app
+        .send("GET", "/analysis/series?year=2026&comment=tanken", None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(s["mode"], "comment");
+    assert_eq!(s["subject"], "tanken");
+    assert_eq!(s["bookingCount"], 4, "Parkhaus gehört nicht dazu");
+    assert_eq!(s["expenseCents"], 27_300);
+
+    let months = s["months"].as_array().unwrap();
+    assert_eq!(months.len(), 12, "immer zwölf, auch die leeren");
+    assert_eq!(months[0]["netCents"], 12_000, "Januar: beide Tankfüllungen");
+    assert_eq!(months[1]["netCents"], 0, "Februar ist leer, nicht abwesend");
+    assert_eq!(months[8]["netCents"], 8_100);
+
+    // Averaged over the months that carry a booking for THIS comment, not over
+    // twelve and not over the year's nine — a summer-only expense should not be
+    // made to look small by the months it never occurs in.
+    assert_eq!(s["monthsWithData"], 3);
+    assert_eq!(s["averagePerActiveMonthCents"], 9_100);
+}
+
+/// The same endpoint, asked about a category, and the mutual exclusivity that
+/// keeps the two questions from being confused.
+#[tokio::test]
+async fn the_series_takes_a_category_or_a_comment_but_not_both() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let auto = app.category_id("Auto & Parken").await;
+    app.send("POST", "/rules", Some(json!({"comment":"tanken","categoryId":auto})))
+        .await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(json!({"year":2026,"month":5,"kind":"expense",
+                    "amountCents":6_000,"comment":"tanken"})),
+    )
+    .await;
+
+    let (_, by_category) = app
+        .send(
+            "GET",
+            &format!("/analysis/series?year=2026&categoryId={auto}"),
+            None,
+        )
+        .await;
+    assert_eq!(by_category["mode"], "category");
+    // The name is looked up, not echoed, so a rename answers with the current one.
+    assert_eq!(by_category["subject"], "Auto & Parken");
+    assert_eq!(by_category["months"][4]["netCents"], 6_000);
+
+    for query in [
+        "/analysis/series?year=2026",
+        "/analysis/series?year=2026&comment=tanken&categoryId=00000000-0000-0000-0000-000000000000",
+    ] {
+        let (status, _) = app.send("GET", query, None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
+    }
+}
+
+/// Matching is case-insensitive on the trimmed comment, exactly as the rule table
+/// matches — otherwise "Tanken" and "tanken" would chart as two different things.
+#[tokio::test]
+async fn a_comment_series_folds_case_the_way_the_rules_do() {
+    let mut app = app!();
+    app.setup_admin().await;
+    for comment in ["tanken", "Tanken", "  tanken  "] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":2,"kind":"expense",
+                        "amountCents":5_000,"comment":comment})),
+        )
+        .await;
+    }
+
+    let (_, s) = app
+        .send("GET", "/analysis/series?year=2026&comment=TANKEN", None)
+        .await;
+    assert_eq!(s["bookingCount"], 3, "alle drei Schreibweisen sind dasselbe");
+    assert_eq!(s["months"][1]["netCents"], 15_000);
+}
