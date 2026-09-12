@@ -45,3 +45,4 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
+url = "2"
