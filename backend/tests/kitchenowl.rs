@@ -266,6 +266,12 @@ struct TestApp {
 
 impl TestApp {
     async fn new(kitchenowl_url: Option<String>) -> Option<Self> {
+        Self::build(kitchenowl_url, 40).await
+    }
+
+    /// `max_pages` is the KITCHENOWL_MAX_PULL_PAGES cap, which one test needs to be
+    /// able to exhaust without seeding a thousand expenses.
+    async fn build(kitchenowl_url: Option<String>, max_pages: u32) -> Option<Self> {
         let url = std::env::var("TEST_DATABASE_URL").ok()?;
         let admin = PgPoolOptions::new()
             .max_connections(1)
@@ -298,6 +304,7 @@ impl TestApp {
         config.kitchenowl_household_id = Some(1);
         // Short, so the reconcile-before-post branch is reachable without waiting.
         config.kitchenowl_http_timeout = std::time::Duration::from_secs(2);
+        config.kitchenowl_max_pull_pages = max_pages;
         let db = finanzen::db::connect(&config)
             .await
             .expect("connect + migrate");
@@ -830,6 +837,72 @@ async fn a_retry_after_a_timeout_adopts_the_existing_expense_instead_of_double_p
         .await;
     assert_eq!(booking["externalSource"], "kitchenowl");
     assert_eq!(booking["externalId"], "1000");
+}
+
+#[tokio::test]
+async fn a_reconcile_scan_that_runs_out_of_pages_refuses_to_post_again() {
+    // The scan walks by date, so an old push sits deep in the list. If the page cap
+    // is reached before the target date, the question "did the last attempt land?"
+    // is unanswered — and posting anyway is exactly the duplicate this mechanism
+    // exists to prevent. It must fail loudly instead.
+    let mock = MockServer::start().await;
+    let Some(app) = TestApp::build(Some(mock.url.clone()), 2).await else {
+        return;
+    };
+    app.sync().await;
+
+    // More recent expenses than the two-page cap can walk, all newer than the
+    // booking being pushed, so the scan gives up before reaching its date.
+    let filler: Vec<Value> = (0..100)
+        .map(|i| {
+            expense(
+                i + 1,
+                "Supermarkt",
+                10.0,
+                ms(30 + i),
+                None,
+                1,
+                &[(1, 1), (2, 1)],
+            )
+        })
+        .collect();
+    mock.seed(filler);
+
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+    mock.inner().swallow_posts = true;
+    app.send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    wait_for(&app, |v| {
+        v["state"] == "failed" || v["state"] == "abandoned"
+    })
+    .await;
+    let after_first = mock.inner().post_count;
+    assert_eq!(after_first, 1);
+
+    mock.inner().swallow_posts = false;
+    app.send(
+        "POST",
+        &format!("/kitchenowl/push/{booking_id}/retry"),
+        None,
+    )
+    .await;
+    let intent = wait_for(&app, |v| {
+        v["state"] == "failed" || v["state"] == "abandoned"
+    })
+    .await;
+
+    assert_eq!(
+        mock.inner().post_count,
+        after_first,
+        "an unanswered reconcile must not fall through to a second post"
+    );
+    assert!(
+        intent["lastError"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Abgleich vor dem Senden"),
+        "the reason must be on the row: {intent}"
+    );
 }
 
 #[tokio::test]

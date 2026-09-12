@@ -260,8 +260,13 @@ pub async fn attempt(
 ///
 /// Pages are ordered by **date** descending, not by id, so a pushed expense dated
 /// three months ago is not near the top. The scan therefore walks pages until it has
-/// passed the payload's own date rather than looking at "the top few", and is capped
-/// by `KITCHENOWL_MAX_PULL_PAGES`.
+/// passed the payload's own date rather than looking at "the top few".
+///
+/// Running out of pages is an **error**, not a "not found". The whole purpose of the
+/// scan is to answer a question the caller cannot otherwise answer — did the previous
+/// attempt land? — and a truncated scan has not answered it. Returning `None` there
+/// would let the caller post a second time, which is the one outcome this whole
+/// mechanism exists to prevent. Raising the cap is the fix; guessing is not.
 async fn reconcile(client: &KoClient, config: &Config, intent: &Intent) -> Result<Option<i64>> {
     let target = intent.payload.date;
     let mut cursor: Option<i64> = None;
@@ -269,6 +274,7 @@ async fn reconcile(client: &KoClient, config: &Config, intent: &Intent) -> Resul
     while pages < config.kitchenowl_max_pull_pages {
         let page = client.expense_page(cursor).await?;
         pages += 1;
+        // The end of the household: a complete answer, the expense is not there.
         if page.is_empty() {
             return Ok(None);
         }
@@ -284,10 +290,16 @@ async fn reconcile(client: &KoClient, config: &Config, intent: &Intent) -> Resul
         }
         match wire::next_cursor(&page, cursor) {
             Some(c) => cursor = Some(c),
+            // The list ended before the target date. Also complete.
             None => return Ok(None),
         }
     }
-    Ok(None)
+    Err(AppError::Integration(format!(
+        "Abgleich vor dem Senden nach {} Seiten abgebrochen, ohne das Buchungsdatum zu \
+         erreichen. Es ist unklar, ob die Ausgabe bereits existiert — bitte \
+         KITCHENOWL_MAX_PULL_PAGES erhöhen.",
+        config.kitchenowl_max_pull_pages
+    )))
 }
 
 // --------------------------------------------------------------- payloads
