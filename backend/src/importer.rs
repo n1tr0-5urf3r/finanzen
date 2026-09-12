@@ -684,7 +684,11 @@ pub struct ReviewQuery {
     get,
     path = "/api/v1/imports/{id}/review",
     tag = "imports",
-    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    params(
+        ("id" = Uuid, Path, description = "Datensatz-Id"),
+        ("status" = Option<String>, Query, description = "open (Vorgabe), skipped, resolved oder all"),
+        ("limit" = Option<i64>, Query, description = "Vorgabe 200, höchstens 1000"),
+    ),
     responses((status = 200, description = "Kommentare ohne Regel, nach Häufigkeit", body = Vec<serde_json::Value>)),
 )]
 pub async fn review(

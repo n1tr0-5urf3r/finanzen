@@ -1017,6 +1017,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "reassignTo",
+            "in": "query",
+            "description": "Buchungen vorher auf diese Kategorie umhängen",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -1351,6 +1361,25 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "open (Vorgabe), skipped, resolved oder all",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Vorgabe 200, höchstens 1000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],

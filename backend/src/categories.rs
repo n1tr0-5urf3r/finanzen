@@ -165,7 +165,13 @@ pub struct DeleteQuery {
     delete,
     path = "/api/v1/categories/{id}",
     tag = "categories",
-    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    params(
+        ("id" = Uuid, Path, description = "Datensatz-Id"),
+        // The way out of the 409: the refusal tells the caller how many bookings
+        // are in the way, and this is what it is supposed to do about it. It was
+        // implemented but undocumented, so no client could find it.
+        ("reassignTo" = Option<Uuid>, Query, description = "Buchungen vorher auf diese Kategorie umhängen"),
+    ),
     responses((status = 204, description = "Gelöscht"), (status = 409, description = "Noch Buchungen zugeordnet", body = crate::error::ErrorBody)),
 )]
 pub async fn delete(
