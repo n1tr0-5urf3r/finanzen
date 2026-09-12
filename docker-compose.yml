@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-finanzen}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Consumed by deploy/init-app-role.sh to create the non-superuser role the
+      # application actually connects as.
+      APP_DB_USER: ${APP_DB_USER:-finanzen_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
+      TZ: ${APP_TIMEZONE:-Europe/Berlin}
+    volumes:
+      - finanzen-db:/var/lib/postgresql/data
+      - ./deploy/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-finanzen}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  finanzen:
+    build:
+      context: .
+    image: ${CONTAINER_IMAGE:-ghcr.io/your-github-owner/finanzen}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      APP_BIND: 0.0.0.0:3100
+      APP_DATA_DIR: /app/data
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Berlin}
+      TZ: ${APP_TIMEZONE:-Europe/Berlin}
+      DATABASE_URL: postgres://${APP_DB_USER:-finanzen_app}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-finanzen}
+    ports:
+      # Loopback only: TLS terminates at the nginx reverse proxy on the host.
+      - "127.0.0.1:${HOST_PORT:-3100}:3100"
+    volumes:
+      - finanzen-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  finanzen-db:
+  finanzen-data:

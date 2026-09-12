@@ -1,0 +1,105 @@
+/* Quick Add is full-bleed and outside the app shell: it is the one screen used
+   one-handed, standing up, in a shop. Three taps plus the digits. */
+.quick {
+  position: fixed; inset: 0; z-index: 40;
+  background: var(--surface-inverse); color: var(--on-inverse);
+  display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.quick__top {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .5rem .75rem; padding-top: calc(.5rem + env(safe-area-inset-top, 0px));
+}
+.quick__top h1 { font-size: .95rem; font-weight: 600; flex: 1; text-align: center; }
+.quick__top .icon-button { color: var(--on-inverse-muted); }
+.quick__top .icon-button:hover { background: rgba(255,255,255,.08); }
+
+.quick__amount {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .2rem; padding: 1.1rem .75rem;
+}
+.amount-display { font-size: clamp(2.4rem, 12vw, 3.4rem); font-weight: 700; letter-spacing: -0.03em; }
+.amount-display--expense  { color: var(--clay-300); }
+.amount-display--income   { color: var(--cyan-400); }
+.amount-display--transfer { color: #a3a7d6; }
+.quick__meta { font-size: .8rem; color: var(--on-inverse-muted); }
+
+.quick__suggestions {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 0 .6rem .5rem;
+}
+.quick__section-label {
+  font-size: .68rem; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--on-inverse-muted); padding: .35rem .25rem; font-weight: 700;
+}
+.tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; }
+
+.tile {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--r-md); color: var(--on-inverse);
+  padding: .55rem .5rem; min-height: 62px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: .1rem; text-align: left; position: relative; overflow: hidden;
+}
+.tile:hover { background: rgba(255,255,255,.12); }
+.tile[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); }
+/* Both lines are DATA — the comment and its category — so neither is translated. */
+.tile__comment {
+  font-size: .84rem; font-weight: 650; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%;
+}
+.tile__category {
+  font-size: .66rem; color: var(--on-inverse-muted); line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%;
+}
+.tile[aria-pressed='true'] .tile__category { color: rgba(255,255,255,.8); }
+/* Tapping the ghost amount fills it and saves: two taps for a fixed cost. */
+.tile__ghost {
+  position: absolute; top: .3rem; right: .35rem;
+  font-size: .62rem; color: var(--accent-bright); font-weight: 700;
+  background: rgba(0,0,0,.25); border-radius: var(--r-pill); padding: .05rem .3rem;
+}
+.tile--more { align-items: center; justify-content: center; color: var(--on-inverse-muted); }
+
+.keypad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem;
+  padding: .5rem .6rem;
+}
+.keypad button {
+  min-height: var(--tap-lg);
+  background: rgba(255,255,255,.09); border: 0; border-radius: var(--r-md);
+  color: var(--on-inverse); font-size: 1.35rem; font-weight: 600;
+}
+.keypad button:active { background: rgba(255,255,255,.2); }
+
+.quick__confirm {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: var(--tap-lg); width: calc(100% - 1.2rem); margin: 0 .6rem .6rem;
+  border: 0; border-radius: var(--r-md);
+  font-size: 1rem; font-weight: 700;
+}
+/* Three distinct states, so the resolved category is visible BEFORE committing. */
+.quick__confirm--rule    { background: var(--primary); color: var(--on-primary); }
+.quick__confirm--guess   { background: var(--accent); color: #06202a; }
+.quick__confirm--unknown { background: var(--warn); color: #1a1400; }
+.quick__confirm:disabled { background: rgba(255,255,255,.12); color: var(--on-inverse-muted); }
+
+.sheet {
+  position: fixed; inset: auto 0 0 0; z-index: 50;
+  background: var(--surface); color: var(--ink);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  max-height: 85dvh; display: flex; flex-direction: column;
+  box-shadow: var(--shadow-3);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sheet__header { padding: .75rem; border-bottom: 1px solid var(--line); }
+.sheet__list { overflow-y: auto; flex: 1; }
+.sheet__item {
+  display: flex; align-items: center; gap: .5rem; width: 100%;
+  padding: .7rem .75rem; border: 0; background: transparent;
+  border-bottom: 1px solid var(--line); text-align: left; min-height: 56px;
+}
+.sheet__item:hover { background: var(--surface-2); }
+.sheet__item strong { font-size: .9rem; font-weight: 600; }
+.sheet__item span { margin-left: auto; font-size: .75rem; color: var(--muted); }

@@ -1,0 +1,33 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+
+import { AppShell } from './components/AppShell';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginPage, SetupPage } from './features/auth/AuthPages';
+import { BookingsPage } from './features/bookings/BookingsPage';
+import { DashboardPage } from './features/dashboard/DashboardPage';
+import { QuickAddPage } from './features/quickadd/QuickAddPage';
+
+/**
+ * German slugs, deliberately: they mirror the spreadsheet tabs the user already
+ * navigates by name, and translating URLs would double the route table, break
+ * bookmarks on a language switch, and drag data-ish vocabulary into the message
+ * catalogue. API paths stay English.
+ */
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/einrichten" element={<SetupPage />} />
+      <Route path="/anmelden" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        {/* Quick Add is full-bleed and lives outside the shell. */}
+        <Route path="/schnell" element={<QuickAddPage />} />
+        <Route element={<AppShell />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/buchungen" element={<BookingsPage />} />
+        </Route>
+      </Route>
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}

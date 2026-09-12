@@ -1,0 +1,182 @@
+/* Anthrazit surfaces, dark green as the primary action, and the cyan from the FI
+   logo as the accent. Everything is a semantic token, which is what makes dark
+   mode one block rather than a component sweep. */
+:root {
+  color-scheme: light dark;
+
+  /* ── raw ramps: never referenced by a component ─────────────────────────── */
+  --anthrazit-950:#0e1113; --anthrazit-900:#14181b; --anthrazit-850:#1b2124;
+  --anthrazit-800:#232a2e; --anthrazit-700:#2e373b; --anthrazit-600:#3c474c;
+  --anthrazit-500:#55646a; --anthrazit-400:#7a8a90; --anthrazit-300:#a8b5ba;
+  --anthrazit-200:#cbd4d7; --anthrazit-100:#e4eaec; --anthrazit-050:#f2f5f6;
+
+  --forest-950:#0b1a15; --forest-900:#10241d; --forest-800:#163027;
+  --forest-700:#1d4034; --forest-600:#245243; --forest-500:#2e6b57;
+  --forest-400:#3e8a71; --forest-300:#5fae93; --forest-200:#8fcdb7;
+  --forest-100:#c2e5d8; --forest-050:#e4f3ec;
+
+  /* sampled from fi.png: #00bae2 at the top, #0782be toward the bottom */
+  --cyan-700:#0782be; --cyan-600:#0096c4; --cyan-500:#00b8e3;
+  --cyan-400:#4fd0f0; --cyan-200:#a6e9f8; --cyan-050:#e0f7fd;
+
+  --clay-700:#8c4526; --clay-600:#b85c33; --clay-500:#c2764a;
+  --clay-300:#e39366; --clay-050:#fcf0e8;
+  --amber-600:#a06b00; --amber-400:#e8b84b; --amber-050:#fdf4dc;
+
+  /* ── surfaces and text ──────────────────────────────────────────────────── */
+  --bg:#f1f4f4;
+  --surface:#ffffff;
+  --surface-2:var(--anthrazit-050);
+  --surface-sunken:#e7ecec;
+  --surface-inverse:var(--anthrazit-900);
+  --line:#d5dddd;
+  --line-strong:var(--anthrazit-300);
+  --ink:var(--anthrazit-900);
+  --ink-2:var(--anthrazit-600);
+  --muted:#667176;
+  --on-inverse:#e6ecee;
+  --on-inverse-muted:#95a3a8;
+
+  /* ── brand and interaction ──────────────────────────────────────────────── */
+  --primary:var(--forest-700);
+  --primary-hover:var(--forest-800);
+  --primary-soft:var(--forest-050);
+  --on-primary:#ffffff;
+  --accent:var(--cyan-600);
+  --accent-bright:var(--cyan-500);
+  --accent-soft:var(--cyan-050);
+  --focus-ring:color-mix(in srgb, var(--cyan-500) 45%, transparent);
+
+  /* ── finance semantics ──────────────────────────────────────────────────────
+     Teal vs clay rather than green vs red. Green is already the brand primary, so
+     green income chips would read as buttons; and red/green is the commonest
+     colour-vision confusion in an app whose central act is telling income from
+     expense at a glance. Sign and prefix always duplicate the colour channel. */
+  --income:#0e7c93;   --income-soft:#dcf1f5;
+  --expense:var(--clay-600); --expense-soft:var(--clay-050);
+  --transfer:#5f639b; --transfer-soft:#e9e9f4;
+  --credit:var(--income); --credit-soft:var(--income-soft);
+  --uncategorized:var(--amber-600); --uncategorized-soft:var(--amber-050);
+  --taxflag:#9b3b58; --taxflag-soft:#f7e4ea;
+
+  /* ── the five category types ────────────────────────────────────────────── */
+  --type-einkommen:#1f8aa6;       --type-einkommen-soft:#dcf0f5;
+  --type-fixkosten:#3d5a8a;       --type-fixkosten-soft:#e2e8f3;
+  --type-variabel:#c0673c;        --type-variabel-soft:#fae8dd;
+  --type-sparen:#2e7d5b;          --type-sparen-soft:#ddf0e7;
+  --type-sonstiges:#7a8288;       --type-sonstiges-soft:#e9eced;
+
+  /* ── feedback ───────────────────────────────────────────────────────────── */
+  --good:#2e7d5b; --good-soft:#ddf0e7;
+  --warn:var(--amber-600); --warn-soft:var(--amber-050);
+  --danger:#b23b2b; --danger-soft:#fbe7e3;
+  --info:var(--accent); --info-soft:var(--accent-soft);
+
+  /* ── geometry and motion ────────────────────────────────────────────────── */
+  --r-sm:3px; --r-md:6px; --r-lg:12px; --r-pill:999px;
+  --shadow-1:0 1px 2px rgba(14,17,19,.07), 0 1px 3px rgba(14,17,19,.05);
+  --shadow-2:0 6px 16px rgba(14,17,19,.10);
+  --shadow-3:0 24px 60px rgba(14,17,19,.22);
+  --tap:44px;      /* minimum touch target */
+  --tap-lg:64px;   /* quick-add keypad */
+  --page-pad:1rem;
+  --dur-fast:120ms; --dur:190ms; --ease:cubic-bezier(.2,.6,.25,1);
+
+  --font-ui:'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+            Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ── dark ─────────────────────────────────────────────────────────────────────
+   Only the tokens are redefined; no component knows this block exists. */
+:root[data-theme='dark'] {
+  --bg:var(--anthrazit-900);
+  --surface:var(--anthrazit-850);
+  --surface-2:var(--anthrazit-800);
+  --surface-sunken:var(--anthrazit-950);
+  --surface-inverse:var(--anthrazit-950);
+  --line:#313a3f;
+  --line-strong:var(--anthrazit-600);
+  --ink:#e6ecee;
+  --ink-2:var(--anthrazit-200);
+  --muted:#93a0a5;
+  --on-inverse:#e6ecee;
+  --on-inverse-muted:#8c999e;
+
+  --primary:var(--forest-500);
+  --primary-hover:var(--forest-400);
+  --primary-soft:#16302a;
+  --on-primary:#06120e;
+  --accent:var(--cyan-400);
+  --accent-soft:#0b2e38;
+  --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
+
+  --income:#4fd0f0; --income-soft:#0b2e38;
+  --expense:var(--clay-300); --expense-soft:#3a2418;
+  --transfer:#a3a7d6; --transfer-soft:#242642;
+  --credit:var(--income); --credit-soft:var(--income-soft);
+  --uncategorized:var(--amber-400); --uncategorized-soft:#332703;
+  --taxflag:#de8fa6; --taxflag-soft:#3a1f27;
+
+  --type-einkommen:#4fb8d4; --type-einkommen-soft:#10313b;
+  --type-fixkosten:#7c98ce; --type-fixkosten-soft:#1a2338;
+  --type-variabel:#e0956b;  --type-variabel-soft:#37231a;
+  --type-sparen:#57b187;    --type-sparen-soft:#12301f;
+  --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
+
+  --good:#57b187; --good-soft:#12301f;
+  --warn:var(--amber-400); --warn-soft:#332703;
+  --danger:#e58c7c; --danger-soft:#3a201c;
+  --info:var(--accent); --info-soft:var(--accent-soft);
+
+  --shadow-1:0 1px 2px rgba(0,0,0,.45);
+  --shadow-2:0 6px 16px rgba(0,0,0,.5);
+  --shadow-3:0 24px 60px rgba(0,0,0,.65);
+}
+
+/* The same block for viewers who have not chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg:var(--anthrazit-900);
+    --surface:var(--anthrazit-850);
+    --surface-2:var(--anthrazit-800);
+    --surface-sunken:var(--anthrazit-950);
+    --surface-inverse:var(--anthrazit-950);
+    --line:#313a3f;
+    --line-strong:var(--anthrazit-600);
+    --ink:#e6ecee;
+    --ink-2:var(--anthrazit-200);
+    --muted:#93a0a5;
+    --primary:var(--forest-500);
+    --primary-hover:var(--forest-400);
+    --primary-soft:#16302a;
+    --on-primary:#06120e;
+    --accent:var(--cyan-400);
+    --accent-soft:#0b2e38;
+    --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
+    --income:#4fd0f0; --income-soft:#0b2e38;
+    --expense:var(--clay-300); --expense-soft:#3a2418;
+    --transfer:#a3a7d6; --transfer-soft:#242642;
+    --credit:var(--income); --credit-soft:var(--income-soft);
+    --uncategorized:var(--amber-400); --uncategorized-soft:#332703;
+    --taxflag:#de8fa6; --taxflag-soft:#3a1f27;
+    --type-einkommen:#4fb8d4; --type-einkommen-soft:#10313b;
+    --type-fixkosten:#7c98ce; --type-fixkosten-soft:#1a2338;
+    --type-variabel:#e0956b;  --type-variabel-soft:#37231a;
+    --type-sparen:#57b187;    --type-sparen-soft:#12301f;
+    --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
+    --good:#57b187; --good-soft:#12301f;
+    --warn:var(--amber-400); --warn-soft:#332703;
+    --danger:#e58c7c; --danger-soft:#3a201c;
+    --shadow-1:0 1px 2px rgba(0,0,0,.45);
+    --shadow-2:0 6px 16px rgba(0,0,0,.5);
+    --shadow-3:0 24px 60px rgba(0,0,0,.65);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root { --line:var(--anthrazit-500); --muted:var(--anthrazit-700); }
+  :root[data-theme='dark'] { --line:var(--anthrazit-400); --muted:var(--anthrazit-200); }
+}
+
+@media (min-width: 820px) { :root { --page-pad:1.5rem; } }
+@media (min-width: 1120px) { :root { --page-pad:2rem; } }

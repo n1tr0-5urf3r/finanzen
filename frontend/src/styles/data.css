@@ -1,0 +1,70 @@
+/* ── money ──────────────────────────────────────────────────────────────────
+   Every euro amount in the application renders through <Money>. Nothing else may
+   format currency, because the net/gross distinction has to be carried in the
+   markup and not left to each call site. */
+.money { white-space: nowrap; }
+.money--income   { color: var(--income); }
+.money--expense  { color: var(--expense); }
+.money--transfer { color: var(--transfer); }
+.money--credit   { color: var(--credit); font-weight: 600; }
+.money--empty    { color: var(--muted); }
+.money__basis {
+  font-size: .62em; margin-left: .15em; color: var(--muted);
+  text-decoration: none; vertical-align: .35em; font-weight: 600;
+}
+
+.net-cell {
+  border: 0; background: transparent; padding: 0; color: inherit;
+  text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px;
+}
+.net-cell:hover { text-decoration-color: var(--accent); }
+
+.net-breakdown { display: grid; gap: .2rem; min-width: 15rem; }
+.net-breakdown__row { display: flex; justify-content: space-between; gap: 1.5rem; font-size: .82rem; }
+.net-breakdown__row--total {
+  border-top: 1px solid var(--line); padding-top: .25rem; margin-top: .15rem; font-weight: 700;
+}
+.net-breakdown__note { font-size: .72rem; color: var(--muted); }
+
+/* ── kpi tiles ──────────────────────────────────────────────────────────── */
+.kpi {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: .85rem .95rem;
+  display: flex; flex-direction: column; gap: .1rem; min-width: 0;
+}
+.kpi__label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.kpi__value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.kpi__scope { font-size: .68rem; color: var(--muted); margin-top: .2rem; }
+.kpi--warn { border-color: var(--uncategorized); background: var(--uncategorized-soft); }
+.kpi--accent .kpi__value { color: var(--accent); }
+
+/* ── tables ─────────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.data-table caption { text-align: left; color: var(--muted); font-size: .8rem; padding: .5rem .6rem; }
+.data-table th, .data-table td {
+  padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--line);
+}
+.data-table th {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); font-weight: 700; white-space: nowrap;
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+.data-table td.num, .data-table th.num { text-align: right; }
+.data-table tbody tr:hover { background: var(--surface-2); }
+.data-table tfoot td { font-weight: 700; border-top: 2px solid var(--line-strong); }
+
+/* An unmatched booking is flagged, never hidden and never bucketed. */
+.row--uncategorized { background: var(--uncategorized-soft); }
+.row--uncategorized td:first-child { box-shadow: inset 3px 0 0 var(--uncategorized); }
+.row--transfer td:first-child { box-shadow: inset 3px 0 0 var(--transfer); }
+
+.banner {
+  display: flex; gap: .6rem; align-items: flex-start;
+  padding: .7rem .85rem; border-radius: var(--r-md); font-size: .85rem;
+  border: 1px solid; margin-bottom: 1rem;
+}
+.banner--info { background: var(--info-soft); border-color: var(--accent); color: var(--ink); }
+.banner--warn { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+.banner--danger { background: var(--danger-soft); border-color: var(--danger); color: var(--ink); }
+.banner strong { display: block; }

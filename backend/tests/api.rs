@@ -745,3 +745,18 @@ async fn import_is_idempotent() {
         .await;
     assert_eq!(bookings["total"], 474, "keine Doppelbuchungen");
 }
+
+/// An unknown API path must answer a JSON 404. Without an explicit fallback on the
+/// nested router it falls through to the SPA and returns 200 text/html, which turns
+/// a client bug into a silent rendering oddity.
+#[tokio::test]
+async fn an_unknown_api_path_is_a_json_404() {
+    let app = app!();
+    let (status, body) = app.send("GET", "/does-not-exist", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "not_found");
+
+    let (status, body) = app.send("POST", "/bookings/not-a-uuid/nope", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "not_found");
+}

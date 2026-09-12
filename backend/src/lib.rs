@@ -134,6 +134,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/years", get(years::list).post(years::create))
         .route("/years/{year}", put(years::update))
+        // Without this the nested router falls through to the outer SPA fallback,
+        // so a typo'd API path would answer 200 text/html and a client bug would
+        // look like a rendering glitch instead of a 404.
+        .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(state.clone(), csrf))
         .with_state(state.clone());
 
@@ -147,6 +151,10 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/v1", api)
         .fallback_service(static_files)
         .layer(TraceLayer::new_for_http())
+}
+
+async fn api_not_found(method: Method, uri: axum::http::Uri) -> AppError {
+    AppError::NotFound(format!("{method} {}", uri.path()))
 }
 
 async fn health() -> Json<StatusResponse> {

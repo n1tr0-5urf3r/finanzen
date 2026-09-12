@@ -1,0 +1,222 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeftRight, Delete, X } from 'lucide-react';
+
+import { DataLabel } from '../../components/DataLabel';
+import { api, jsonBody } from '../../lib/api';
+import { formatEuro, monthName } from '../../lib/format';
+import { useT } from '../../lib/i18n';
+import { invalidateAfterBookingChange, qk } from '../../lib/queryKeys';
+import type { Booking, CommentSummary, Rule } from '../../lib/types';
+import { CommentSheet } from './CommentSheet';
+import { useKeyboardBridge, usePrediction, useQuickAdd, useSuggestions } from './useQuickAdd';
+
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫'] as const;
+
+export function QuickAddPage() {
+  const t = useT();
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const { state, dispatch } = useQuickAdd();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [saved, setSaved] = useState<Booking | null>(null);
+
+  const rules = useQuery({
+    queryKey: qk.taxonomy.rules(),
+    queryFn: () => api<Rule[]>('/rules'),
+    staleTime: 30 * 60_000,
+  });
+  const comments = useQuery({
+    queryKey: qk.bookings.comments(),
+    queryFn: () => api<CommentSummary[]>('/bookings/comments'),
+    staleTime: 5 * 60_000,
+  });
+
+  const prediction = usePrediction(state.comment, rules.data);
+  const tiles = useSuggestions(comments.data, 5);
+
+  const onKey = useKeyboardBridge(dispatch);
+  useEffect(() => {
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onKey]);
+
+  const create = useMutation({
+    mutationFn: () =>
+      api<Booking>('/bookings', {
+        method: 'POST',
+        ...jsonBody({
+          year: state.year,
+          month: state.month,
+          kind: state.kind,
+          amountCents: state.cents,
+          comment: state.comment.trim(),
+        }),
+      }),
+    onSuccess: (booking) => {
+      invalidateAfterBookingChange(client, [booking.year]);
+      client.invalidateQueries({ queryKey: qk.bookings.comments() });
+      setSaved(booking);
+      dispatch({ type: 'reset' });
+    },
+  });
+
+  const ready = state.cents > 0 && state.comment.trim().length > 0;
+  const confirmTone =
+    prediction.status === 'rule' ? 'rule' : prediction.status === 'guess' ? 'guess' : 'unknown';
+  const confirmLabel =
+    prediction.status === 'rule'
+      ? t('quick.saveWith', { category: prediction.categoryName })
+      : prediction.status === 'guess'
+        ? t('quick.saveGuess', { category: prediction.categoryName })
+        : t('quick.saveUnknown');
+
+  return (
+    <div className="quick">
+      <div className="quick__top">
+        <button className="icon-button" onClick={() => navigate('/dashboard')} aria-label={t('common.close')}>
+          <X size={20} aria-hidden="true" />
+        </button>
+        <h1>{t('quick.title')}</h1>
+        <button
+          className="icon-button"
+          onClick={() => dispatch({ type: 'cycleKind' })}
+          aria-label={t('quick.switchKind')}
+        >
+          <ArrowLeftRight size={18} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="quick__amount">
+        {/* aria-live so the running value is announced as it is typed. */}
+        <output className={`amount-display amount-display--${state.kind}`} aria-live="polite" aria-atomic="true">
+          {formatEuro(state.cents)}
+        </output>
+        <span className="quick__meta">
+          {t(`bookings.kind.${state.kind}`)} · {monthName(state.month)} {state.year}
+        </span>
+      </div>
+
+      <div className="quick__suggestions">
+        <p className="quick__section-label">{t('quick.frequent')}</p>
+        <div className="tile-grid">
+          {tiles.map((tile) => (
+            <SuggestionTile
+              key={tile.comment}
+              tile={tile}
+              selected={tile.comment === state.comment}
+              onSelect={() => dispatch({ type: 'setComment', comment: tile.comment })}
+            />
+          ))}
+          <button className="tile tile--more" onClick={() => setSheetOpen(true)}>
+            <span className="tile__comment" style={{ textAlign: 'center' }}>⌨</span>
+            <span className="tile__category" style={{ textAlign: 'center' }}>
+              {t('quick.otherComment')}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="keypad" role="group" aria-label={t('quick.keypad')}>
+        {KEYS.map((key) => (
+          <button
+            key={key}
+            onClick={() => {
+              if (key === '⌫') dispatch({ type: 'backspace' });
+              else if (key === '00') dispatch({ type: 'doubleZero' });
+              else dispatch({ type: 'digit', value: Number(key) });
+            }}
+            aria-label={key === '⌫' ? t('quick.backspace') : key}
+          >
+            {key === '⌫' ? <Delete size={20} aria-hidden="true" /> : key}
+          </button>
+        ))}
+      </div>
+
+      <button
+        className={`quick__confirm quick__confirm--${confirmTone}`}
+        disabled={!ready || create.isPending}
+        onClick={() => create.mutate()}
+      >
+        {confirmLabel}
+      </button>
+
+      {sheetOpen && (
+        <CommentSheet
+          rules={rules.data ?? []}
+          comments={comments.data ?? []}
+          onPick={(comment) => {
+            dispatch({ type: 'setComment', comment });
+            setSheetOpen(false);
+          }}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
+
+      {saved && <SavedToast booking={saved} onDismiss={() => setSaved(null)} />}
+    </div>
+  );
+}
+
+function SuggestionTile({
+  tile,
+  selected,
+  onSelect,
+}: {
+  tile: CommentSummary;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button className="tile" aria-pressed={selected} onClick={onSelect}>
+      {/* Both lines are data: the comment the user types, and the category the
+          rule table resolves it to. Neither is translated. */}
+      <span className="tile__comment">
+        <DataLabel>{tile.comment}</DataLabel>
+      </span>
+      <span className="tile__category">
+        {tile.categoryName ? <DataLabel>{tile.categoryName}</DataLabel> : '—'}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * After an unmatched save, the fix is offered inline: two taps after the mistake,
+ * and creating the rule recategorises every existing booking with that comment.
+ * This is the single highest-leverage action in the app and it has to be reachable
+ * from the phone.
+ */
+function SavedToast({ booking, onDismiss }: { booking: Booking; onDismiss: () => void }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const unmatched = booking.categorySource === 'unresolved';
+
+  useEffect(() => {
+    if (unmatched) return;
+    const timer = setTimeout(onDismiss, 4000);
+    return () => clearTimeout(timer);
+  }, [unmatched, onDismiss]);
+
+  return (
+    <div className="toast-stack">
+      <div className={`toast ${unmatched ? 'toast--warn' : ''}`} role="status">
+        <div>
+          <div>
+            {t('quick.saved', {
+              amount: formatEuro(booking.amountCents),
+              comment: booking.comment,
+            })}
+          </div>
+          {unmatched && <div style={{ opacity: 0.8 }}>{t('quick.savedUnknown')}</div>}
+        </div>
+        {unmatched ? (
+          <button onClick={() => navigate('/kategorien')}>{t('quick.createRule')}</button>
+        ) : (
+          <button onClick={onDismiss}>{t('common.close')}</button>
+        )}
+      </div>
+    </div>
+  );
+}

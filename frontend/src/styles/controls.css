@@ -1,0 +1,81 @@
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+  padding: .5rem .85rem; border-radius: var(--r-md);
+  border: 1px solid transparent; font-size: .875rem; font-weight: 600;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+.button--primary { background: var(--primary); color: var(--on-primary); }
+.button--primary:hover:not(:disabled) { background: var(--primary-hover); }
+.button--secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.button--secondary:hover:not(:disabled) { background: var(--surface-2); }
+.button--ghost { background: transparent; color: var(--ink-2); }
+.button--ghost:hover:not(:disabled) { background: var(--surface-2); }
+.button--danger { background: var(--danger); color: #fff; }
+.button:disabled { opacity: .55; }
+
+.icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--tap); height: var(--tap);
+  border: 1px solid transparent; border-radius: var(--r-md);
+  background: transparent; color: var(--ink-2);
+}
+.icon-button:hover { background: var(--surface-2); }
+
+.field { display: flex; flex-direction: column; gap: .3rem; }
+.field > label { font-size: .8rem; font-weight: 600; color: var(--ink-2); }
+.field > small { font-size: .75rem; color: var(--muted); }
+
+.input, .select {
+  padding: .5rem .6rem; border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); background: var(--surface); color: var(--ink);
+  min-height: var(--tap); width: 100%;
+}
+.input:focus-visible, .select:focus-visible { border-color: var(--accent); }
+
+.form-stack { display: flex; flex-direction: column; gap: .85rem; }
+
+.segmented {
+  display: inline-flex; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: 2px;
+}
+.segmented button {
+  border: 0; background: transparent; color: var(--muted);
+  padding: .35rem .7rem; border-radius: calc(var(--r-md) - 1px);
+  font-size: .82rem; font-weight: 600;
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .22rem .55rem; border-radius: var(--r-pill);
+  font-size: .75rem; font-weight: 600;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line);
+}
+
+/* Data labels — category and type names — are ground truth and never translated.
+   They get a distinct, quieter treatment from UI chrome so the difference is
+   visible rather than merely documented. */
+.category-chip { border-radius: var(--r-sm); border: 0; }
+.category-chip--einkommen { background: var(--type-einkommen-soft); color: var(--type-einkommen); }
+.category-chip--fixkosten { background: var(--type-fixkosten-soft); color: var(--type-fixkosten); }
+.category-chip--variabel  { background: var(--type-variabel-soft);  color: var(--type-variabel); }
+.category-chip--sparen    { background: var(--type-sparen-soft);    color: var(--type-sparen); }
+.category-chip--sonstiges { background: var(--type-sonstiges-soft); color: var(--type-sonstiges); }
+.category-chip--none {
+  background: var(--uncategorized-soft); color: var(--uncategorized);
+  border: 1px dashed currentColor;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .15rem .5rem; border-radius: var(--r-pill);
+  font-size: .72rem; font-weight: 600;
+}
+.pill--neutral { background: var(--surface-2); color: var(--muted); }
+.pill--good    { background: var(--good-soft); color: var(--good); }
+.pill--warn    { background: var(--warn-soft); color: var(--warn); }
+.pill--danger  { background: var(--danger-soft); color: var(--danger); }
+.pill--info    { background: var(--info-soft); color: var(--info); }

@@ -1,0 +1,9 @@
+/* Split by concern for readability; Vite inlines these at build time, so the
+   shipped artefact is still a single stylesheet and a single request. */
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './controls.css';
+@import './data.css';
+@import './feedback.css';
+@import './quickadd.css';

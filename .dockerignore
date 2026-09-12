@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+backend/target
+backend/tests/fixtures
+frontend/node_modules
+frontend/dist
+data
+*.db
+*.db-*
+*.xlsx
+*.ods
+docker-compose.yml
+nginx.finanzen.conf
+README.md
