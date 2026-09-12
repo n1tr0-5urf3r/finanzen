@@ -33,6 +33,12 @@ interface MoneyProps {
   tone?: BookingKind | 'credit' | 'auto';
   /** Force an explicit +/− while keeping the basis marker. See `FlowMoney`. */
   signed?: boolean;
+  /**
+   * Whether this is money the category brought IN. Defaults to the sign of a net
+   * figure, which is only correct while the stored expense-positive sign is the
+   * one being displayed — `FlowMoney` shows the opposite sign and says so here.
+   */
+  credit?: boolean;
   className?: string;
 }
 
@@ -44,7 +50,7 @@ interface MoneyProps {
  * site remembering it, and it is why a screen reader hears "4.800,00 Euro netto"
  * where a sighted user sees the superscript marker.
  */
-export function Money({ cents, basis = 'gross', tone, signed, className }: MoneyProps) {
+export function Money({ cents, basis = 'gross', tone, signed, credit, className }: MoneyProps) {
   const t = useT();
   const { hidden } = usePrivacy();
   if (cents === null || cents === undefined) {
@@ -56,7 +62,7 @@ export function Money({ cents, basis = 'gross', tone, signed, className }: Money
   }
 
   const resolved = tone === 'auto' ? (cents < 0 ? 'income' : 'expense') : tone;
-  const isCredit = basis === 'net' && cents < 0;
+  const isCredit = credit ?? (basis === 'net' && cents < 0);
   // Privacy mode replaces the figure and its accessible name, and nothing else:
   // the tone, the credit styling and the netto marker all describe what KIND of
   // number this is, which is the part that stays useful with the amount gone.
@@ -111,23 +117,29 @@ export function Money({ cents, basis = 'gross', tone, signed, className }: Money
  */
 export function FlowMoney({
   netCents,
+  flowCents,
   className,
 }: {
-  netCents: number | null | undefined;
+  /** A stored net: expenses minus income, so a category that earned money is negative. */
+  netCents?: number | null;
+  /** Already oriented as a flow — a balance, a running total — so it is shown as it is. */
+  flowCents?: number | null;
   className?: string;
 }) {
-  if (netCents === null || netCents === undefined) return <Money cents={null} />;
-  // `money--credit` normally keys off a negative net; flipping the display would
-  // silently drop it from exactly the rows it exists for, so it is applied here
-  // from the stored sign.
-  const credit = netCents < 0;
+  const flow = flowCents !== undefined ? flowCents : netCents == null ? null : -netCents;
+  if (flow === null || flow === undefined) return <Money cents={null} />;
+  // Stated, not inferred. `Money` derives "is this a credit" from a NEGATIVE net,
+  // which is the stored convention; handed the flipped value it marks every
+  // ordinary expense as a credit and colours the whole column backwards.
+  const credit = flow > 0;
   return (
     <Money
-      cents={-netCents}
+      cents={flow}
       basis="net"
       signed
+      credit={credit}
       tone={credit ? 'income' : 'expense'}
-      className={[credit ? 'money--credit' : '', className ?? ''].filter(Boolean).join(' ')}
+      className={className}
     />
   );
 }

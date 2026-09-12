@@ -24,7 +24,7 @@ export function ChartFrame({
   note,
   columns,
   data,
-  valueBasis = 'net',
+  valueBasis = 'cost',
   height = 240,
   children,
 }: {
@@ -34,11 +34,17 @@ export function ChartFrame({
   columns: string[];
   data: ChartDatum[];
   /**
-   * How the values are oriented. `flow` flips the stored expense-positive sign
-   * for display, so the table agrees with a chart whose bars point up for money
-   * in — a table that contradicts the picture above it is worse than no table.
+   * What the values ARE, which decides both their sign and their colour. A table
+   * that contradicts the picture above it is worse than no table.
+   *
+   * - `cost`   stored nets read as costs: positive is what it cost, a negative is
+   *            money the category brought in.
+   * - `net`    stored nets shown as flows: the sign is flipped for display.
+   * - `flow`   already money-in-positive (a balance, a running total).
+   * - `gross`  plain magnitudes under a column that says which they are, so they
+   *            take no direction colour at all.
    */
-  valueBasis?: 'net' | 'flow';
+  valueBasis?: 'cost' | 'net' | 'flow' | 'gross';
   height?: number;
   children: ReactNode;
 }) {
@@ -81,8 +87,12 @@ export function ChartFrame({
                 <th scope="row">{row.label}</th>
                 {row.values.map((v, j) => (
                   <td key={j} className="num">
-                    {valueBasis === 'flow' ? (
+                    {valueBasis === 'net' ? (
                       <FlowMoney netCents={v} />
+                    ) : valueBasis === 'flow' ? (
+                      <FlowMoney flowCents={v} />
+                    ) : valueBasis === 'gross' ? (
+                      <Money cents={v} />
                     ) : (
                       <Money cents={v} basis="net" tone="auto" />
                     )}

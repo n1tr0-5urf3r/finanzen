@@ -20,8 +20,8 @@
   gap: .2rem; padding: 1.1rem .75rem;
 }
 .amount-display { font-size: clamp(2.4rem, 12vw, 3.4rem); font-weight: 700; letter-spacing: -0.03em; }
-.amount-display--expense  { color: var(--clay-300); }
-.amount-display--income   { color: var(--cyan-400); }
+.amount-display--expense  { color: var(--red-300); }
+.amount-display--income   { color: var(--forest-300); }
 .amount-display--transfer { color: #a3a7d6; }
 .quick__meta { font-size: .8rem; color: var(--on-inverse-muted); }
 

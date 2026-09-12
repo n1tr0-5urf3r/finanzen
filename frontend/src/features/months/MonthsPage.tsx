@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { CumulativeLine, MonthlyBars, TypeBreakdown, type MonthPoint } from '../../charts/MonthlyCharts';
 import { DataLabel } from '../../components/DataLabel';
-import { Money, ScopeNote } from '../../components/Money';
+import { FlowMoney, Money, ScopeNote } from '../../components/Money';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
@@ -185,7 +185,7 @@ function MonthsBody({
                     <Money cents={empty ? null : m.expenseCents} tone="expense" />
                   </td>
                   <td className="num">
-                    <Money cents={empty ? null : m.balanceCents} basis="signed" tone="auto" />
+                    <FlowMoney flowCents={empty ? null : m.balanceCents} />
                   </td>
                   {/* Absent where nothing is booked. Never zero-filled: a zero
                       here would draw a cliff in the running balance. */}
@@ -219,7 +219,7 @@ function MonthsBody({
                 <Money cents={data.total.expenseCents} tone="expense" />
               </td>
               <td className="num">
-                <Money cents={data.total.balanceCents} basis="signed" tone="auto" />
+                <FlowMoney flowCents={data.total.balanceCents} />
               </td>
               <td className="num">
                 {/* The year's close is the balance, and the server sends no
@@ -275,7 +275,7 @@ function MonthsBody({
                   <div>
                     <dt>{t('months.balance')}</dt>
                     <dd>
-                      <Money cents={m.balanceCents} basis="signed" tone="auto" />
+                      <FlowMoney flowCents={m.balanceCents} />
                     </dd>
                   </div>
                   <div>

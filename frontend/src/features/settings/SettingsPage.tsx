@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Download, ExternalLink, FileJson, RefreshCw } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
-import { Money } from '../../components/Money';
+import { FlowMoney, Money } from '../../components/Money';
 import {
   Banner,
   Button,
@@ -187,7 +187,7 @@ function YearsSection() {
                     <Money cents={y.expenseCents} tone="expense" />
                   </td>
                   <td className="num">
-                    <Money cents={y.balanceCents} basis="signed" tone="auto" />
+                    <FlowMoney flowCents={y.balanceCents} />
                   </td>
                   <td className="num">
                     <Money cents={y.closingBalanceCents} />

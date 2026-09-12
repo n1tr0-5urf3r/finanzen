@@ -297,7 +297,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
           <ChartFrame
             title={`${series.data.subject} · ${year}`}
             columns={[t('bookings.net')]}
-            valueBasis="flow"
+            valueBasis="net"
             note={t('analysis.seriesOrientation')}
             data={bars.months.map((m) => ({
               label: m.monthName,

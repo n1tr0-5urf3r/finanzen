@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 
 import { CategoryChip } from '../../components/DataLabel';
-import { Money, NetBreakdown, ScopeNote } from '../../components/Money';
+import { FlowMoney, Money, NetBreakdown, ScopeNote } from '../../components/Money';
 import { Banner, ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatEuro, formatPercent } from '../../lib/format';
@@ -72,7 +72,7 @@ export function DashboardPage() {
           <Money cents={d.expenseCents} tone="expense" />
         </Kpi>
         <Kpi labelKey="dashboard.balance" transfersIncluded={false}>
-          <Money cents={d.balanceCents} basis="signed" tone="auto" />
+          <FlowMoney flowCents={d.balanceCents} />
         </Kpi>
         {/* Deliberately adjacent to the balance, and deliberately a different
             scope — that contrast is what ScopeNote exists to explain. */}

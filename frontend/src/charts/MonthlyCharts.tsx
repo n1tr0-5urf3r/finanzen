@@ -55,6 +55,7 @@ export function MonthlyBars({ points, height = 220 }: { points: MonthPoint[]; he
       title={t('chart.monthly')}
       columns={[t('bookings.income'), t('bookings.expense')]}
       data={data}
+      valueBasis="gross"
       height={height}
     >
       <Gridlines
@@ -146,6 +147,7 @@ export function CumulativeLine({
       title={t('chart.cumulative')}
       note={t('chart.stopsAtLastMonth')}
       columns={[t('months.cumulative')]}
+      valueBasis="flow"
       data={data}
       height={height}
     >

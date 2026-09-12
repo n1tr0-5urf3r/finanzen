@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { DataLabel, TypeChip } from '../../components/DataLabel';
-import { Money } from '../../components/Money';
+import { FlowMoney } from '../../components/Money';
 import {
   Banner,
   Button,
@@ -242,7 +242,7 @@ function CategoriesTab({
                       </td>
                       <td className="num">{c.bookingCount ?? 0}</td>
                       <td className="num">
-                        <Money cents={c.netCents} basis="net" tone="auto" />
+                        <FlowMoney netCents={c.netCents} />
                       </td>
                       <td>
                         <div className="cat-row__actions">

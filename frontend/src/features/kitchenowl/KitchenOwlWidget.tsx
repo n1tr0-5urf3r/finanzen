@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, WalletMinimal } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
-import { Money } from '../../components/Money';
+import { FlowMoney, Money } from '../../components/Money';
 import { StatusPill } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
@@ -66,7 +66,7 @@ export function KitchenOwlWidget() {
             <div>
               <span className="kpi__label">{t('ko.balance')}</span>
               <span className="kpi__value">
-                <Money cents={summary.myBalanceCents} basis="signed" tone="auto" />
+                <FlowMoney netCents={summary.myBalanceCents} />
               </span>
               <span className="kpi__scope">
                 {summary.myBalanceCents === null || summary.myBalanceCents === 0

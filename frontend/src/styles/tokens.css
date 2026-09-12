@@ -24,6 +24,8 @@
 
   --clay-700:#8c4526; --clay-600:#b85c33; --clay-500:#c2764a;
   --clay-300:#e39366; --clay-050:#fcf0e8;
+  --red-700:#9b2c22; --red-600:#c0392b; --red-500:#d4503f;
+  --red-300:#f08d7d; --red-050:#fdecea;
   --amber-600:#a06b00; --amber-400:#e8b84b; --amber-050:#fdf4dc;
 
   /* ── surfaces and text ──────────────────────────────────────────────────── */
@@ -51,12 +53,15 @@
   --focus-ring:color-mix(in srgb, var(--cyan-500) 45%, transparent);
 
   /* ── finance semantics ──────────────────────────────────────────────────────
-     Teal vs clay rather than green vs red. Green is already the brand primary, so
-     green income chips would read as buttons; and red/green is the commonest
-     colour-vision confusion in an app whose central act is telling income from
-     expense at a glance. Sign and prefix always duplicate the colour channel. */
-  --income:#0e7c93;   --income-soft:#dcf1f5;
-  --expense:var(--clay-600); --expense-soft:var(--clay-050);
+     Green for money in, red for money out — the convention every bank statement
+     already taught the reader, and the one this app's owner asked for. Green and
+     red are also the commonest colour-vision confusion, so the colour is NEVER
+     the only channel: every figure that carries a direction also carries an
+     explicit + or −, and the row usually names it as well. The brand green is
+     much darker than the income green, so an income figure does not read as a
+     button. */
+  --income:#1b8a4b;   --income-soft:#e3f6e9;
+  --expense:var(--red-600); --expense-soft:var(--red-050);
   --transfer:#5f639b; --transfer-soft:#e9e9f4;
   --credit:var(--income); --credit-soft:var(--income-soft);
   --uncategorized:var(--amber-600); --uncategorized-soft:var(--amber-050);
@@ -113,8 +118,8 @@
   --accent-soft:#0b2e38;
   --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
 
-  --income:#4fd0f0; --income-soft:#0b2e38;
-  --expense:var(--clay-300); --expense-soft:#3a2418;
+  --income:var(--forest-300); --income-soft:#10301c;
+  --expense:var(--red-300); --expense-soft:#3a1a16;
   --transfer:#a3a7d6; --transfer-soft:#242642;
   --credit:var(--income); --credit-soft:var(--income-soft);
   --uncategorized:var(--amber-400); --uncategorized-soft:#332703;
@@ -156,8 +161,8 @@
     --accent:var(--cyan-400);
     --accent-soft:#0b2e38;
     --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
-    --income:#4fd0f0; --income-soft:#0b2e38;
-    --expense:var(--clay-300); --expense-soft:#3a2418;
+    --income:var(--forest-300); --income-soft:#10301c;
+    --expense:var(--red-300); --expense-soft:#3a1a16;
     --transfer:#a3a7d6; --transfer-soft:#242642;
     --credit:var(--income); --credit-soft:var(--income-soft);
     --uncategorized:var(--amber-400); --uncategorized-soft:#332703;

@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
 
 import { I18nProvider } from '../lib/i18n';
-import { Money } from './Money';
+import { FlowMoney, Money } from './Money';
 
 function wrap(ui: ReactNode, locale: 'de' | 'en' = 'de') {
   return render(<I18nProvider initialLocale={locale}>{ui}</I18nProvider>);
@@ -43,5 +43,54 @@ describe('<Money>', () => {
   it('renders an absent value without inventing a zero', () => {
     wrap(<Money cents={null} />);
     expect(screen.getByText('–')).toBeInTheDocument();
+  });
+});
+
+describe('<FlowMoney>', () => {
+  // This file has no global auto-cleanup, and every case here renders the same
+  // figure with a different sign.
+  afterEach(cleanup);
+
+  /**
+   * The regression that made every expense in the analysis table green: `Money`
+   * infers "credit" from a negative net, and a flipped figure hands it a negative
+   * for an ordinary cost. Colour and marking must follow the STORED direction,
+   * not the sign on screen.
+   */
+  it('does not mark an ordinary expense as a credit', () => {
+    const { container } = render(
+      <I18nProvider initialLocale="de">
+        <FlowMoney netCents={110000} />
+      </I18nProvider>,
+    );
+    const el = within(container).getByText(/1\.100,00/);
+    // Money went out: minus, expense colouring, no credit.
+    expect(el.textContent).toContain('-');
+    expect(el.className).toContain('money--expense');
+    expect(el.className).not.toContain('money--credit');
+  });
+
+  it('shows money that came in as a signed gain', () => {
+    const { container } = render(
+      <I18nProvider initialLocale="de">
+        <FlowMoney netCents={-2200000} />
+      </I18nProvider>,
+    );
+    const el = within(container).getByText(/22\.000,00/);
+    expect(el.textContent).toContain('+');
+    expect(el.className).toContain('money--income');
+    expect(el.className).toContain('money--credit');
+  });
+
+  /** A balance is already a flow, so its sign is kept and only coloured. */
+  it('keeps the sign of a figure that is already a balance', () => {
+    const { container } = render(
+      <I18nProvider initialLocale="de">
+        <FlowMoney flowCents={900000} />
+      </I18nProvider>,
+    );
+    const el = within(container).getByText(/9\.000,00/);
+    expect(el.textContent).toContain('+');
+    expect(el.className).toContain('money--income');
   });
 });

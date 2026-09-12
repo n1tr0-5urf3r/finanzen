@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, Download, FileJson, Link2, Send, Users2 } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
-import { Money } from '../../components/Money';
+import { FlowMoney, Money } from '../../components/Money';
 import {
   Banner,
   Button,
@@ -285,7 +285,7 @@ export function BookingsPage() {
                         {b.kind === 'expense' ? <Money cents={b.amountCents} tone="expense" /> : null}
                       </td>
                       <td className="num">
-                        <Money cents={b.netCents} basis="net" tone="auto" />
+                        <FlowMoney netCents={b.netCents} />
                       </td>
                       <td>{b.taxRelevant ? <StatusPill tone="danger">×</StatusPill> : null}</td>
                       {koReady && (
