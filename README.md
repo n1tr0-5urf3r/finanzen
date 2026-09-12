@@ -1,204 +1,145 @@
-# Finanzen
+<p align="center">
+  <img src="docs/logo.png" alt="Finanzen" width="120">
+</p>
 
-A personal finance web app that replaces `konten_2026_auswertung.xlsx`.
+<h1 align="center">Finanzen</h1>
 
-The spreadsheet was well built — two-layer categorisation, netting, a tax tab, five
-charts — but it is a desktop artefact, and the thing it cannot do is the thing that
-happens most: recording a booking on a phone, in a shop, in ten seconds. That is why
-this exists. Everything else is porting what already worked.
+<p align="center">
+  <em>Ein Haushaltsbuch, das die Tabelle ersetzt — und das Erfassen endlich aufs Handy bringt.</em>
+</p>
 
-**The spreadsheet's arithmetic is the specification.** Every figure below was
-recomputed from the raw `Einnahmen` / `Ausgaben` / `Kommentar` columns and the
-workbook's own `Kategorien` sheet, and the test suite asserts the app reproduces all
-of it exactly.
+<p align="center">
+  <img alt="Rust" src="https://img.shields.io/badge/backend-Rust%20%2B%20axum-b7410e">
+  <img alt="React" src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-0096c4">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/db-PostgreSQL%2017-336791">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-256-2e7d5b">
+  <img alt="Deployment" src="https://img.shields.io/badge/deploy-Docker%20Compose-2496ed">
+</p>
 
-## What it does
+---
 
-- **Bookings** with income / expense / transfer, per-month or per-day, tax flags.
-- **Two-layer categorisation**: a rule table mapping comment → category, plus a
-  per-booking manual override that wins. A rule change recategorises history.
-- **Netting everywhere**: a category's figure is expenses minus income *of the same
-  category*. Rent reads 5.100 € net because a flatmate pays half of the 10.200 €
-  that actually left the account.
-- **Dashboard, monthly overview, category analysis, tax report**, all net, all with
-  transfers excluded from consumption.
-- **Import** of both `.xlsx` and `.ods`, with a dry-run preview and a review queue
-  for comments no rule matches.
-- **Recurring templates** with a per-month checklist and one *alle buchen* action.
-  Monthly, quarterly and annual; templates whose amount varies book as drafts.
-- **Receipts** photographed straight from the phone camera and attached to a booking.
-- **Exports**: the tax list as CSV and a printable PDF, and the whole account as
-  JSON (a restorable backup) or CSV.
-- **KitchenOwl** mirrored as a second, parallel ledger — browsable, with link
-  suggestions, a push queue and a read-only dashboard tile. Never summed with the
-  personal bookings.
-- **Multi-user** with local auth; the authenticator sits behind a trait so OIDC can
-  be added without touching call sites.
+Die Tabelle konnte alles — zweistufige Kategorisierung, Netto-Rechnung, Steuerblatt,
+Diagramme. Nur das, was am häufigsten passiert, konnte sie nicht: eine Buchung im
+Laden, auf dem Handy, in zehn Sekunden. Genau dafür gibt es dieses Projekt.
 
-## Running it
+**Die Arithmetik der Tabelle ist die Spezifikation.** Jede Zahl wurde aus den rohen
+Spalten neu berechnet, nicht aus den Formelzellen gelesen, und die Testsuite prüft,
+dass die App sie exakt reproduziert.
+
+## Was es kann
+
+- **Schnellerfassung in drei Tipps** — Betrag über einen Cent-zuerst-Ziffernblock,
+  Kommentar aus den eigenen häufigsten Buchungen, fertig. Die Kategorie schlägt die
+  Regeltabelle im Browser vor, ohne Server und ohne Verbindung; wählen kann man sie
+  trotzdem jederzeit selbst.
+- **Netto überall** — eine Kategorie zeigt Ausgaben *minus Einnahmen derselben
+  Kategorie*. Die Miete steht mit 3.960 € netto da, weil ein Mitbewohner die Hälfte
+  der 7.920 € zahlt, die tatsächlich vom Konto gingen. Beide Beträge bleiben sichtbar.
+- **Zweistufige Kategorisierung** — eine Regeltabelle ordnet Kommentare zu, eine
+  manuelle Zuordnung pro Buchung schlägt sie. Eine Regeländerung ordnet die
+  Vergangenheit mit neu zu und sagt, wie viele Buchungen sie bewegt hat.
+- **Import aus .xlsx und .ods** — mit Vorschau vor dem Übernehmen und einer Prüfliste
+  für Kommentare, die keine Regel kennt: nach Häufigkeit sortiert, eine Entscheidung
+  pro Kommentar, per Tastatur.
+- **Steuer** — Buchungen markieren, Belege fotografieren, als CSV oder PDF exportieren.
+- **Wiederkehrende Vorlagen** — die achtzehn Posten, die jeden Monat gleich sind, mit
+  zwei Tipps buchen statt achtzehnmal tippen.
+- **KitchenOwl** — die geteilten Ausgaben des Haushalts als *eigenes, getrenntes*
+  Buch. Wird nie mit den privaten Buchungen verrechnet, und ein Abgleich bucht nichts
+  von selbst.
+- **Mehrere Benutzer** — getrennte Daten, per Row-Level-Security in der Datenbank
+  erzwungen und nicht per Handler-Disziplin.
+
+## Ansehen
+
+| | |
+|:--:|:--:|
+| <a href="docs/screenshots/dashboard.png"><img src="docs/screenshots/dashboard.png" alt="Dashboard"></a> | <a href="docs/screenshots/monate.png"><img src="docs/screenshots/monate.png" alt="Monatsübersicht"></a> |
+| **Dashboard** — beide Sparquoten, weil die naive Variante Erstattungen als Einkommen zählt | **Monatsübersicht** — die Linie endet beim letzten Monat mit Buchungen, statt flach weiterzulaufen |
+| <a href="docs/screenshots/auswertung.png"><img src="docs/screenshots/auswertung.png" alt="Auswertung"></a> | <a href="docs/screenshots/buchungen.png"><img src="docs/screenshots/buchungen.png" alt="Buchungen"></a> |
+| **Auswertung** — netto je Kategorie, Gutschriften als solche gekennzeichnet | **Buchungen** — filtern, suchen, bearbeiten; nicht zugeordnete Zeilen bleiben sichtbar markiert |
+| <a href="docs/screenshots/quickadd.png"><img src="docs/screenshots/quickadd.png" alt="Schnellerfassung" width="260"></a> | <a href="docs/screenshots/mobil.png"><img src="docs/screenshots/mobil.png" alt="Mobil" width="260"></a> |
+| **Schnellerfassung** — der Grund für das Projekt | **Mobil** — Tabellen werden zu Karten, nicht zu seitlichem Scrollen |
+| <a href="docs/screenshots/pruefliste.png"><img src="docs/screenshots/pruefliste.png" alt="Prüfliste"></a> | <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Steuer"></a> |
+| **Prüfliste** — 238 unbekannte Kommentare, nach Häufigkeit sortiert | **Steuer** — Belegliste mit Kamera-Upload und CSV/PDF-Export |
+
+<sub>Alle Screenshots zeigen erfundene Beispieldaten.</sub>
+
+## Schnellstart
 
 ```bash
+git clone <repo> finanzen && cd finanzen
 cp .env.example .env
-$EDITOR .env          # set APP_PUBLIC_URL, APP_SESSION_SECRET and both DB passwords
+$EDITOR .env          # APP_PUBLIC_URL, APP_SESSION_SECRET und beide DB-Passwörter
 docker compose up -d
 ```
 
-Then open the app and complete the first-run setup. Registration is closed after
-that; further accounts are created by the admin under **Einstellungen**.
+Danach die Ersteinrichtung im Browser abschließen. Registrierung ist anschließend
+geschlossen; weitere Konten legt dieses Konto unter **Einstellungen** an.
 
-Behind nginx: `nginx.finanzen.conf` is a working example. `APP_PUBLIC_URL` must be
-the exact public https URL — the session cookie's `Secure` flag and the CSRF origin
-check are both derived from it.
+Hinter einem TLS-Proxy: `nginx.finanzen.conf` ist ein funktionierendes Beispiel.
+`APP_PUBLIC_URL` muss exakt die öffentliche https-URL sein — davon hängen das
+`Secure`-Flag des Session-Cookies und die CSRF-Prüfung ab.
 
-## Importing the spreadsheets
+## Konfiguration
 
-1. **Kategorien → Regeln**: load the rule table (or let the review queue build it).
-2. **Import**: upload `konten_2026_auswertung.xlsx`, check the preview, commit.
-3. **Einstellungen → Jahre**: set the 2026 carry-over to `40.000,00 €`.
-4. Repeat for `konten.ods` to bring in 2023–2025.
+Alles über `.env`; `.env.example` ist vollständig kommentiert.
 
-The legacy sheet has no month column; months are recovered from the saldo markers in
-column D and the month labels that sit in column D or E. The importer reports which
-blocks it inferred, and warns about the three that disagree with their own marker
-rather than adjusting rows to make the sheet balance.
+| Variable | Bedeutung |
+|---|---|
+| `APP_PUBLIC_URL` | Exakte öffentliche URL. Steuert Cookie-Flag und CSRF-Prüfung. |
+| `APP_SESSION_SECRET` | Mindestens 32 Zeichen. Ändern meldet alle ab. |
+| `APP_DB_USER` / `APP_DB_PASSWORD` | Die Rolle, mit der die App verbindet — **kein** Superuser, sonst wäre RLS wirkungslos. Die App startet in dem Fall nicht. |
+| `AUTH_ALLOW_REGISTRATION` | Standard `false`: Konten legt der Admin an. |
+| `KITCHENOWL_URL` / `KITCHENOWL_TOKEN` | Leer lassen deaktiviert die Integration vollständig. |
+| `KITCHENOWL_*_SECONDS` | Sync-Intervalle. `0` schaltet eine Schleife ab, sonst Minimum 60 s. |
+| `IMPORT_FUZZY_MIN_CONFIDENCE` | Standard `0.92`. Niedriger erzeugt Vorschläge, die man reflexhaft annimmt und die falsch sind. |
 
-## Development
+## Entwicklung
 
 ```bash
-# Postgres for the tests
+# Postgres für die Tests
 docker run -d --rm --name fin-pg -p 55432:5432 \
   -e POSTGRES_USER=finanzen -e POSTGRES_PASSWORD=finanzen -e POSTGRES_DB=finanzen \
   postgres:17-alpine
 
 cd backend
-cargo test                    # golden tests skip without fixtures
 TEST_DATABASE_URL=postgres://finanzen:finanzen@localhost:55432/finanzen cargo test
 
-# Real-data assertions need fixtures extracted from the workbooks first.
-# They are gitignored: they carry every booking amount and comment.
-cargo run --bin extract-fixtures -- \
-  ../konten_2026_auswertung.xlsx ../konten.ods tests/fixtures
-
-# The KitchenOwl fixtures ARE committed: they are anonymised, not recorded. The real
-# household is shared, so the expense names are another person's spending. They keep
-# every structural property that matters and invent the rest. One #[ignore]d test
-# re-verifies the shapes against the live instance, read-only:
-set -a; . ../.env; set +a
-cargo test --test kitchenowl -- --ignored
-
-cd ../frontend && npm ci && npm run dev    # proxies /api to localhost:3100
+cd ../frontend && npm ci && npm run dev    # /api geht per Proxy an localhost:3100
 ```
 
-## Design notes worth knowing before changing things
+Die Golden-Tests laufen gegen Fixtures, die aus den eigenen Arbeitsmappen erzeugt
+werden. Sie liegen bewusst **nicht** im Repository — sie enthalten echte
+Finanzdaten — und die Tests überspringen sich mit einem Hinweis, wenn sie fehlen:
 
-**Money is `i64` cents, everywhere.** Both source files carry IEEE-754 artifacts in
-their raw XML — `67.29000000000001`, and the carry-over itself stored as
-`45171.910000000011`. One rounding rule (half away from zero) is applied at exactly
-two boundaries: a spreadsheet cell becoming cents, and a KitchenOwl float becoming
-cents. Nothing downstream re-rounds.
+```bash
+cargo run --bin extract-fixtures -- ../konten_2026.xlsx ../konten.ods tests/fixtures
+```
 
-**Netting is a generated column, not a convention.** `bookings.net_cents` is
-`GENERATED ALWAYS AS` expense-positive, so a category net is a plain `SUM` with no
-`CASE`, transfers contribute `0` structurally, and a forgotten
-`AND kind <> 'transfer'` is harmless.
+## Entscheidungen, die man vor dem Ändern kennen sollte
 
-**The month is the canonical key; the day is optional.** 1404 of ~1878 bookings
-genuinely have no day. A nullable date with generated period columns would leave the
-majority NULL and unindexable, so `period_year`/`period_month` are NOT NULL and
-`booked_on` is the refinement. "New bookings need a date" is a CHECK keyed on
-provenance, not on a year threshold.
+**Geld ist `i64` in Cent, überall.** Beide Quelldateien tragen IEEE-754-Artefakte im
+rohen XML — `67.29000000000001`, und der Vortrag selbst als `45171.910000000011`. Eine
+Rundungsregel, angewendet an genau zwei Stellen; danach rundet nichts mehr nach.
 
-**Tenant isolation is enforced by Postgres, not by discipline.** Every user-scoped
-table has `FORCE ROW LEVEL SECURITY`; handlers receive a `Tenant` that has already
-set `app.user_id`, so no query binds a user id and the `WHERE user_id = $1` is
-absent *by design* rather than forgotten. The app refuses to start if its database
-role can bypass RLS — a superuser silently makes all of it inert. A metadata test
-fails when any future table grows a `user_id` without a policy.
+**Der Monat ist der Schlüssel, der Tag die Präzisierung.** Ein großer Teil der
+importierten Buchungen hat gar keinen Tag. Ein nullable Datum mit generierten
+Periodenspalten ließe die Mehrheit NULL und nicht indizierbar.
 
-**Category names, type labels and comments are data.** They come from the database
-in German and stay German in the English interface. So do all amounts and dates: the
-money is euros and must match the bank statement. A test asserts no English string
-equals any category or type name.
+**Netto ist eine generierte Spalte, keine Konvention.** `net_cents` ist
+`GENERATED ALWAYS AS` ausgaben-positiv — deshalb ist ein Kategorie-Netto ein
+schlichtes `SUM` ohne `CASE`, und Umbuchungen tragen strukturell 0 bei.
 
-**Recurring bookings are idempotent by index, not by check.** One booking per
-template per month, ever, enforced by a partial unique index — so pressing *alle
-buchen* twice is a no-op rather than a double posting. A template whose amount
-varies (the gym is 29,00 / 31,50 / 34,50) materialises as a **draft**: drafts are
-outside `v_ledger`, so they move no total until confirmed with the real amount.
+**Mandantentrennung erzwingt Postgres, nicht Disziplin.** Jede Tabelle mit `user_id`
+hat `FORCE ROW LEVEL SECURITY`; Handler bekommen eine Transaktion, in der
+`app.user_id` schon gesetzt ist. Keine Query bindet eine Benutzer-ID — das fehlende
+`WHERE user_id = $1` ist *by design* abwesend, nicht vergessen.
 
-**Receipts live on disk, never in the database.** `APP_DATA_DIR/receipts/<user
-id>/<uuid>.<ext>`, with the extension taken from the content type. The filename
-the browser sends is metadata and is never a path component. Backup is `pg_dump`
-plus that one directory; a 2 MB PDF per row in `bytea` would triple the dump and
-make it useless as a quick restore path.
+**Kategorienamen und Kommentare sind Daten.** Sie kommen auf Deutsch aus der
+Datenbank und bleiben in der englischen Oberfläche deutsch. Beträge und Datumsangaben
+werden immer de-DE formatiert: das Geld sind Euro und muss zum Kontoauszug passen.
 
-**Money is de-DE formatted in exactly one place outside the UI: the CSV and PDF
-exports.** Their reader is a German Excel and a tax office, and `1234,56` opens as
-a number there while `123456` opens as a six-figure line item. The JSON export
-keeps integer cents, because its reader is `POST /exports/restore` — and a
-round-trip through a formatted decimal is how a cent goes missing. A test exports
-an account, restores it into a fresh user and compares every report field by
-field.
+## Lizenz
 
-**Both savings rates ship.** The naive one (`balance / gross income`) reproduces the
-spreadsheet and is misleading on its own, because gross income includes cost-sharing
-and refunds that are really negative expenses — it understates the rate by 26 points.
-The consumption rate divides real income by real consumption. The identity
-`savings_amount = balance + net(Sparen)` ties them together and is asserted.
-
-**KitchenOwl is a separate, parallel ledger.** Its expenses are mirrored locally and
-never summed with the personal bookings; pulled items land in a review list and are
-never auto-booked. Matching is an optional, reversible **link** that creates no
-booking and moves no figure. The two ledgers will not fully reconcile, by design —
-an expense with no link is the normal case and is never framed as an outstanding
-task.
-
-That is not squeamishness. Where the two overlap, most shared purchases are already
-recorded at their **full** value, because that is what left the account. Booking a
-pulled expense automatically would double-post most of the groceries.
-
-Three things about KitchenOwl's API are worth knowing before touching
-`backend/src/kitchenowl/wire.rs`, which is the one module allowed to see its JSON:
-
-- Expense pages are ordered by **`date` descending, not by id**. A back-dated
-  expense entered today lands in the middle of the first page, so the pagination
-  cursor is the *last item in the returned order* and an id high-water-mark can
-  never be a stop condition. The pull is a complete scan each time, capped by
-  `KITCHENOWL_MAX_PULL_PAGES`; a capped scan reports `partial`, not success.
-- `category_id` is `null` when there is no category, and the nested `category`
-  object is absent entirely rather than null. A third of the corpus looks like that.
-- `paid_for[].factor` is an **integer weight**, not a percentage. Shares are
-  allocated by largest remainder so they sum to the amount exactly.
-
-Push is a transactional outbox: the intent is committed before any HTTP and the
-endpoint answers 202 with KitchenOwl down. Retrying is safe because a `#fin:` marker
-in the description lets an attempt recognise its own earlier work — after a timeout
-it scans for that marker instead of posting again.
-
-Participation is **per account**: the credentials are process-global, so an account
-takes part only after someone presses *jetzt synchronisieren* on it once.
-
-**`backend/openapi.json` is committed and CI fails on `git diff --exit-code`.**
-Regenerate it with `cargo run --bin openapi-export > openapi.json` whenever a
-handler's contract changes. Three tests guard it: the document must match a
-hardcoded `(method, path)` contract exactly (both directions, and in count), every
-documented path must be reachable on the real router, and the committed file must
-equal what the binary prints.
-
-## Verified against the source data
-
-| | |
-|---|---|
-| Bookings 2026 | 474 |
-| Einnahmen / Ausgaben | 36.000,00 € / 27.000,00 € |
-| Bilanz 2026 | 9.000,00 € |
-| Vortrag → Bilanz gesamt | 40.000,00 € → 49.000,00 € |
-| Tax-relevant | 20 (816,92 € out, 6.000,00 € in) |
-| Uncategorised | 0 |
-| Savings rate | 25,00 % naive · 53,75 % consumption-based |
-| Legacy | 1404 bookings, Juni 2023 – Dezember 2025, 31 month blocks |
-
-Two bugs in the original workbook the app does not reproduce: the `Typ` column's
-`VLOOKUP` range stopped one row short of the category table, so one category's
-bookings silently became `Sonstiges` and the `Auswertung` tab's total was 460,00 €
-short. Here the type is a foreign key, so a category without a type cannot exist.
+Noch nicht festgelegt.
