@@ -4,6 +4,7 @@ import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
 import { errorMessage } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { PrivacyToggle } from './PrivacyToggle';
+import { ScopeNote } from './Money';
 
 export function Button({
   variant = 'primary',
@@ -49,6 +50,40 @@ export function PageHeader({
         <PrivacyToggle />
       </div>
     </header>
+  );
+}
+
+/**
+ * A headline figure with its label and its scope.
+ *
+ * `scope` is REQUIRED and has three values, because the question "are transfers
+ * inside this number" has three honest answers and the dashboard's original
+ * version only allowed two — which is why every KitchenOwl screen hand-rolled its
+ * own tile rather than answer a question that does not apply to a ledger with no
+ * transfers in it.
+ *
+ * - `with` / `without` — the personal ledger, where transfers exist.
+ * - `none` — a ledger where the concept does not apply. Says so by saying nothing.
+ */
+export function Kpi({
+  label,
+  children,
+  hint,
+  scope,
+  tone,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+  scope: 'with' | 'without' | 'none';
+  tone?: 'warn' | 'accent';
+}) {
+  return (
+    <div className={`kpi ${tone ? `kpi--${tone}` : ''}`} title={hint}>
+      <span className="kpi__label">{label}</span>
+      <span className="kpi__value">{children}</span>
+      {scope !== 'none' && <ScopeNote transfersIncluded={scope === 'with'} />}
+    </div>
   );
 }
 

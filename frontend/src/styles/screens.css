@@ -201,11 +201,18 @@
 
 
 /* ── cross-year search ──────────────────────────────────────────────────────── */
-.search-bar {
+/* One filter bar for every screen. Nine screens had this exact declaration inline
+   and two more had near-copies, which is how the year picker ended up in a
+   different place on each of them. `align-items: flex-end` so pickers of different
+   heights sit on one baseline; wrapping so a phone stacks them. */
+.filter-bar {
   display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end;
   margin-bottom: 1rem;
 }
-.search-bar > .field { min-width: 0; }
+.filter-bar > .field { min-width: 0; }
+/* A section heading inside a panel needs no ad-hoc margin at six call sites. */
+.panel h2 { margin: 0 0 .6rem; }
+.panel h2:only-child { margin-bottom: 0; }
 /* The bar column is proportion, not a scale — it collapses first on a phone,
    where the figures beside it are what is being read anyway. */
 .search-years__bar { width: 28%; min-width: 0; }

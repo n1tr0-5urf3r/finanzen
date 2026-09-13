@@ -98,7 +98,7 @@ export function SearchPage() {
       <PageHeader title={t('search.title')} subtitle={t('search.intro')} />
 
       <form
-        className="panel panel--pad search-bar"
+        className="panel panel--pad filter-bar"
         onSubmit={(e) => {
           e.preventDefault();
           update('q', draft.trim() || null);

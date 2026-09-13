@@ -227,6 +227,9 @@ export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
     <ChartFrame
       title={t('chart.byType')}
       columns={[t('bookings.net')]}
+      // Stored expense-positive figures read as costs here: this chart ranks what
+      // each type cost, and a negative one is a type that brought money in.
+      valueBasis="cost"
       data={data}
       height={height}
     >

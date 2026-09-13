@@ -22,6 +22,7 @@ export interface ChartDatum {
 export function ChartFrame({
   title,
   note,
+  legend,
   columns,
   data,
   valueBasis = 'cost',
@@ -30,6 +31,9 @@ export function ChartFrame({
 }: {
   title: string;
   note?: string;
+  /** Rendered inside the figure, between the caption and the chart — a legend
+      outside the `<figure>` labels nothing, as far as the markup is concerned. */
+  legend?: ReactNode;
   /** Column headings for the data table, one per series. */
   columns: string[];
   data: ChartDatum[];
@@ -56,6 +60,7 @@ export function ChartFrame({
       <figcaption className="chart__title" id={`${id}-title`}>
         {title}
       </figcaption>
+      {legend}
       {/* The wrapper is what scrolls on a narrow screen, so the chart keeps a
           legible minimum width instead of shrinking its labels to nothing. */}
       <div className="chart__canvas">

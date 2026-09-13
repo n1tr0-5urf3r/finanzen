@@ -60,8 +60,7 @@ export function GroupedMonthBars({
   // Two bars in the middle 70% of each band, with a hair of air between them.
   const barWidth = Math.max(2, (band.width * 0.7) / 2 - 1);
 
-  return (
-    <>
+  const legend = (
       <p className="chart-legend">
         <span className="chart-legend__item">
           <span className="chart-legend__swatch chart-legend__swatch--now" aria-hidden="true" />
@@ -72,8 +71,12 @@ export function GroupedMonthBars({
           {labelPrevious}
         </span>
       </p>
+  );
+
+  return (
       <ChartFrame
         title={title}
+        legend={legend}
         note={note}
         columns={[labelCurrent, labelPrevious]}
         valueBasis={valueBasis}
@@ -118,6 +121,5 @@ export function GroupedMonthBars({
         })}
         <line x1={LEFT} x2={RIGHT} y1={zeroY} y2={zeroY} className="chart__baseline" />
       </ChartFrame>
-    </>
   );
 }
