@@ -192,3 +192,5 @@
 /* Failures are listed per expense, never rolled into a count: the point of the
    list is that the ones that did not land are still findable. */
 .ko-tagging__failures { margin: .35rem 0 0; padding-left: 1.1rem; font-size: .82rem; }
+
+.ko-rescan { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 0 0 .8rem; }

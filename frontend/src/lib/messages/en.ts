@@ -480,6 +480,9 @@ export const en: Messages = {
   'ko.countMirrored': 'Mirrored',
   'ko.countLinked': 'Linked',
   'ko.countOpen': 'Open suggestions',
+  'ko.rescan': 'Recompute suggestions',
+  'ko.rescanHint': 'Suggestions are worked out when an expense is pulled. Bookings imported afterwards are invisible to the list until it runs again.',
+  'ko.rescanDone': '{scanned} suggestions checked · {withCandidates} with a match · {likely} likely duplicates',
   'ko.reviewIntro':
     'Where a mirrored expense matches an existing booking you can link the two. A link creates NO booking and changes no amount.',
   'ko.reviewEmpty': 'Nothing to decide.',

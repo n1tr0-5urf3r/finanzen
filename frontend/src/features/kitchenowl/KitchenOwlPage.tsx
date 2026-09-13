@@ -507,6 +507,24 @@ function Review({ onNotice }: { onNotice: (message: string) => void }) {
     },
   });
 
+  const rescan = useMutation({
+    mutationFn: () =>
+      api<{ scanned: number; withCandidates: number; likelyDuplicates: number }>(
+        '/kitchenowl/drafts/rescan',
+        { method: 'POST' },
+      ),
+    onSuccess: (r) => {
+      invalidateAfterKitchenOwlChange(client);
+      onNotice(
+        t('ko.rescanDone', {
+          scanned: r.scanned,
+          withCandidates: r.withCandidates,
+          likely: r.likelyDuplicates,
+        }),
+      );
+    },
+  });
+
   if (query.isLoading) return <LoadingState />;
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />;
   const page = query.data!;
@@ -514,8 +532,20 @@ function Review({ onNotice }: { onNotice: (message: string) => void }) {
   return (
     <div className="panel panel--pad">
       <p className="ko-intro">{t('ko.reviewIntro')}</p>
-      {(link.isError || dismiss.isError) && (
-        <ErrorState error={link.error ?? dismiss.error} />
+
+      {/* A suggestion is a claim about two ledgers, but it is only computed when
+          the KitchenOwl side moves — so bookings imported after a pull are
+          invisible to it until asked. This is the asking. */}
+      <p className="ko-rescan">
+        <Button variant="ghost" onClick={() => rescan.mutate()} busy={rescan.isPending}>
+          <RefreshCw size={15} aria-hidden="true" />
+          {t('ko.rescan')}
+        </Button>
+        <span className="footnote">{t('ko.rescanHint')}</span>
+      </p>
+
+      {(link.isError || dismiss.isError || rescan.isError) && (
+        <ErrorState error={link.error ?? dismiss.error ?? rescan.error} />
       )}
       {page.items.length === 0 ? (
         <EmptyState title={t('ko.reviewEmpty')} />

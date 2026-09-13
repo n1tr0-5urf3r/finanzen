@@ -514,6 +514,9 @@ export const de = {
   'ko.countMirrored': 'Gespiegelt',
   'ko.countLinked': 'Verknüpft',
   'ko.countOpen': 'Offene Vorschläge',
+  'ko.rescan': 'Vorschläge neu berechnen',
+  'ko.rescanHint': 'Vorschläge entstehen beim Abruf. Buchungen, die danach importiert wurden, kennt die Liste erst nach einem neuen Durchlauf.',
+  'ko.rescanDone': '{scanned} Vorschläge geprüft · {withCandidates} mit Treffer · {likely} wahrscheinliche Dubletten',
   'ko.reviewIntro':
     'Wo eine gespiegelte Ausgabe zu einer vorhandenen Buchung passt, kannst du beide verknüpfen. Eine Verknüpfung legt KEINE Buchung an und ändert keinen Betrag.',
   'ko.reviewEmpty': 'Nichts zu entscheiden.',
