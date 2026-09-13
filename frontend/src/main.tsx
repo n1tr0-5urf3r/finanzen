@@ -10,18 +10,12 @@ import { PrivacyProvider } from './lib/privacy';
 import { ThemeProvider } from './lib/theme';
 import './styles/index.css';
 
-import { installViewportInset } from './lib/viewport';
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false },
     mutations: { retry: false },
   },
 });
-
-// Installed before the first render and never torn down: the bottom bar exists for
-// the whole life of the app, so the listener should too.
-installViewportInset();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

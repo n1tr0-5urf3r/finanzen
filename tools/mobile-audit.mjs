@@ -1,12 +1,16 @@
 /**
- * Does anything on a phone screen stick out sideways?
+ * Does the app still fit a phone?
  *
- * A single element wider than the viewport makes the whole DOCUMENT wider than the
- * viewport, and Chrome on Android answers that by scaling the entire page down —
- * navigation bar included — and by making vertical scrolling fight a horizontal
- * one. It looks like three unrelated bugs ("the navbar is zoomed", "scrolling
- * broke", "the charts are odd") and it is one, so it is worth a mechanical check
- * rather than an eye.
+ * Three checks, all of them things that have actually gone wrong here:
+ *
+ * 1. Nothing sticks out sideways. A single element wider than the viewport makes
+ *    the whole DOCUMENT wider, and Chrome on Android answers that by scaling the
+ *    entire page down — navigation bar included — and by making vertical scrolling
+ *    fight a horizontal one. It looks like three unrelated bugs and it is one.
+ * 2. The document does not scroll. The app scrolls inside its shell; if the
+ *    document scrolls, the browser's URL bar hides and reveals, and every
+ *    bottom-anchored thing on the screen moves with it.
+ * 3. The bottom bar is on screen, with its full height, on every route.
  *
  * Run (needs nothing installed but Docker):
  *
@@ -88,10 +92,21 @@ for (const route of ROUTES) {
         });
       }
     }
+    // The bottom bar must be laid out inside the screen, and the DOCUMENT must
+    // not scroll — the app scrolls inside its shell. Both together are what keep
+    // the browser's URL bar out of the layout: it cannot hide if nothing scrolls
+    // it, so there is no viewport transition for a bar to be caught in.
+    const bar = document.querySelector('.mobile-bar');
+    const barRect = bar ? bar.getBoundingClientRect() : null;
     return {
       authed,
       docScrollWidth: doc.scrollWidth,
       bodyScrollWidth: document.body.scrollWidth,
+      docScrollHeight: (document.scrollingElement ?? doc).scrollHeight,
+      innerHeight: window.innerHeight,
+      bar: barRect
+        ? { top: Math.round(barRect.top), bottom: Math.round(barRect.bottom), height: Math.round(barRect.height) }
+        : null,
       offenders: offenders.slice(0, 8),
     };
   }, VIEWPORT.width);
@@ -101,11 +116,32 @@ for (const route of ROUTES) {
     process.exitCode = 2;
     continue;
   }
-  const overflows = report.docScrollWidth > VIEWPORT.width + 1;
-  if (overflows) {
-    problems.push({ route, ...report });
-    console.log(`✗ ${route} — document is ${report.docScrollWidth}px wide, viewport is ${VIEWPORT.width}px`);
-    for (const o of report.offenders) console.log(`    ${o.selector}  [${o.left}…${o.right}]`);
+  const faults = [];
+  if (report.docScrollWidth > VIEWPORT.width + 1) {
+    faults.push(`document is ${report.docScrollWidth}px wide, viewport is ${VIEWPORT.width}px`);
+    for (const o of report.offenders) faults.push(`  sticks out: ${o.selector} [${o.left}…${o.right}]`);
+  }
+  if (route !== '/schnell') {
+    if (report.docScrollHeight > report.innerHeight + 1) {
+      faults.push(
+        `document scrolls (${report.docScrollHeight}px in a ${report.innerHeight}px viewport) — ` +
+          'the shell should be the scroller, or the URL bar will move the layout',
+      );
+    }
+    if (!report.bar || report.bar.height === 0) {
+      faults.push('no bottom bar rendered');
+    } else if (report.bar.bottom > report.innerHeight + 1 || report.bar.top < 0) {
+      faults.push(
+        `bottom bar is off-screen (top ${report.bar.top}, bottom ${report.bar.bottom}, ` +
+          `viewport ${report.innerHeight})`,
+      );
+    }
+  }
+
+  if (faults.length > 0) {
+    problems.push({ route, faults });
+    console.log(`✗ ${route}`);
+    for (const f of faults) console.log(`    ${f}`);
   } else {
     console.log(`✓ ${route}`);
   }

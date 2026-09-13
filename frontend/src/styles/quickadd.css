@@ -1,7 +1,11 @@
 /* Quick Add is full-bleed and outside the app shell: it is the one screen used
    one-handed, standing up, in a shop. Three taps plus the digits. */
 .quick {
-  position: fixed; inset: 0; z-index: 40;
+  /* Anchored to the TOP and given an explicit small-viewport height, rather than
+     stretched between two edges: the top of the screen never moves, while the
+     bottom edge a fixed element is measured against does. The confirm bar lives
+     at the bottom of this box and is the whole point of the screen. */
+  position: fixed; inset: 0 0 auto 0; height: 100svh; z-index: 40;
   background: var(--surface-inverse); color: var(--on-inverse);
   display: flex; flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom, 0px);
