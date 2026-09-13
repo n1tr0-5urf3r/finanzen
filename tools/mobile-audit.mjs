@@ -28,7 +28,8 @@ const USER = process.env.USER_NAME;
 const PASSWORD = process.env.PASSWORD;
 
 const ROUTES = [
-  '/dashboard', '/buchungen', '/monate', '/auswertung', '/steuer',
+  '/dashboard', '/buchungen', '/suche?q=essen', '/monate', '/auswertung',
+  '/vergleich', '/ruecklagen', '/steuer',
   '/vorlagen', '/kitchenowl', '/kitchenowl?ansicht=analysis', '/kategorien', '/import',
   '/einstellungen', '/schnell',
 ];

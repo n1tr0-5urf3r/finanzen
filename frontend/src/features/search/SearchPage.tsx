@@ -170,6 +170,12 @@ export function SearchPage() {
               {/* The reason this screen exists, so it comes first. */}
               <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
                 <h2 style={{ margin: '0 0 .6rem' }}>{t('search.byYear')}</h2>
+                {/* Five money columns do not fit 390px however hard they try.
+                    `.table-wrap` is the house answer: the table scrolls inside
+                    its own box and the PAGE never gets wider than the phone —
+                    which is what makes Chrome shrink the whole layout, navigation
+                    bar included. */}
+                <div className="table-wrap">
                 <table className="data-table search-years">
                   <thead>
                     <tr>
@@ -214,6 +220,7 @@ export function SearchPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {comments.length > 1 && (
