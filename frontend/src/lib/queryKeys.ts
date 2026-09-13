@@ -80,6 +80,9 @@ export const qk = {
     series: (year: number, mode: string, subject: string) =>
       ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,
     seriesSubjects: (year: number) => ['kitchenowl', 'analysis', year, 'subjects'] as const,
+    compare: (year: number) => ['kitchenowl', 'analysis', year, 'compare'] as const,
+    trailing: (year: number, month: number) =>
+      ['kitchenowl', 'analysis', year, 'trailing', month] as const,
   },
   admin: {
     users: () => ['admin', 'users'] as const,

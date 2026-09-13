@@ -75,12 +75,109 @@ const SERIES = {
   monthsWithData: 2,
 };
 
+// Februar is the only month both years hold: 2026 stops there and 2025 ran on to
+// Juni. So the raw pair says the household halved its spending and the shared-month
+// pair says it rose — the entire reason this screen has two bases.
+const COMPARE = {
+  year: 2026,
+  previousYear: 2025,
+  current: {
+    year: 2026,
+    amountCents: 7000,
+    ownShareCents: 3500,
+    expenseCount: 2,
+    monthsWithData: 1,
+    lastMonthWithData: 2,
+    comparableAmountCents: 7000,
+    comparableOwnShareCents: 3500,
+    comparableExpenseCount: 2,
+    excludedCount: 0,
+  },
+  previous: {
+    year: 2025,
+    amountCents: 13000,
+    ownShareCents: 6500,
+    expenseCount: 3,
+    monthsWithData: 2,
+    lastMonthWithData: 6,
+    comparableAmountCents: 7000,
+    comparableOwnShareCents: 3500,
+    comparableExpenseCount: 2,
+    excludedCount: 0,
+  },
+  comparableMonths: [2],
+  fullyComparable: false,
+  previousYearHasData: true,
+  rows: [
+    {
+      koCategoryId: 1,
+      koCategoryName: 'Wocheneinkauf',
+      amountCents: 5000,
+      ownShareCents: 2500,
+      expenseCount: 1,
+      previousAmountCents: 10000,
+      previousOwnShareCents: 5000,
+      previousExpenseCount: 2,
+      deltaAmountCents: -5000,
+      deltaOwnShareCents: -2500,
+      deltaRatio: -0.5,
+      comparableAmountCents: 5000,
+      comparableOwnShareCents: 2500,
+      comparablePreviousAmountCents: 4000,
+      comparablePreviousOwnShareCents: 2000,
+      comparableDeltaAmountCents: 1000,
+      comparableDeltaOwnShareCents: 500,
+      comparableDeltaRatio: 0.25,
+      monthlyAmountCents: months({ 1: 5000 }),
+      monthlyOwnShareCents: months({ 1: 2500 }),
+      previousMonthlyAmountCents: months({ 1: 4000, 5: 6000 }),
+      previousMonthlyOwnShareCents: months({ 1: 2000, 5: 3000 }),
+      isNew: false,
+      isGone: false,
+    },
+  ],
+  paidBy: [
+    {
+      memberId: 1,
+      name: 'Fabi',
+      amountCents: 5000,
+      previousAmountCents: 10000,
+      deltaCents: -5000,
+      expenseCount: 1,
+      previousExpenseCount: 2,
+    },
+  ],
+  years: [2026, 2025],
+};
+
+const TRAILING = {
+  year: 2026,
+  month: 2,
+  fromYear: 2025,
+  fromMonth: 3,
+  amountCents: 13000,
+  ownShareCents: 6500,
+  expenseCount: 3,
+  monthsWithData: 2,
+  months: Array.from({ length: 12 }, (_, i) => ({
+    year: i < 10 ? 2025 : 2026,
+    month: ((2 + i) % 12) + 1,
+    monthName: `M${i + 1}`,
+    amountCents: i === 3 ? 6000 : i === 11 ? 7000 : 0,
+    ownShareCents: i === 3 ? 3000 : i === 11 ? 3500 : 0,
+    expenseCount: i === 3 || i === 11 ? 1 : 0,
+  })),
+  rows: [],
+};
+
 beforeEach(() => {
   api.mockReset();
   api.mockImplementation((path: string) => {
     if (path.includes('/analysis/series/subjects')) return Promise.resolve([]);
     if (path.includes('/analysis/series')) return Promise.resolve(SERIES);
     if (path.includes('/analysis/categories')) return Promise.resolve(ANALYSIS);
+    if (path.includes('/analysis/compare')) return Promise.resolve(COMPARE);
+    if (path.includes('/analysis/trailing')) return Promise.resolve(TRAILING);
     if (path.startsWith('/years')) return Promise.resolve([]);
     return Promise.resolve({ items: [], total: 0 });
   });
@@ -150,3 +247,64 @@ describe("the household's analysis", () => {
     expect(screen.getAllByText(/16,67/).length).toBeGreaterThan(0);
   });
 });
+
+describe("the household's year against last", () => {
+  /**
+   * The trap, and the reason the comparison is not just a subtraction.
+   *
+   * Raw, the household spent 70,00 against 130,00 — a 46 % saving that is entirely
+   * Juni not having happened yet. Over the month both years actually hold it rose
+   * from 40,00 to 50,00. The screen leads with the honest pair and says so.
+   */
+  it('leads with the shared months when the two years cover different ones', async () => {
+    const user = userEvent.setup();
+    const { container } = renderIt();
+
+    await user.click(await screen.findByRole('button', { name: 'Jahresvergleich' }));
+
+    expect(await screen.findByText(/Nur die 1 gemeinsamen Monate|1 gemeinsame Monate/)).toBeTruthy();
+    const row = [...container.querySelectorAll('.screen-table tbody tr')].find((r) =>
+      r.textContent?.includes('Wocheneinkauf'),
+    ) as HTMLElement;
+    // The shared-month pair: 50,00 against 40,00, so the change is a RISE.
+    expect(within(row).getByText(/40,00/)).toBeInTheDocument();
+    expect(within(row).getByText(/\+10,00/)).toBeInTheDocument();
+    // The raw −50,00 is not what leads.
+    expect(row.textContent).not.toContain('-50,00');
+  });
+
+  it('shows the raw years when asked, and says which basis is in use', async () => {
+    const user = userEvent.setup();
+    const { container } = renderIt();
+    await user.click(await screen.findByRole('button', { name: 'Jahresvergleich' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Ganze Jahre zeigen' }));
+    const cells = comparisonRow(container);
+    // Whole years: 50,00 against 100,00, so the change is a fall.
+    expect(cells[1].textContent).toContain('100,00');
+    expect(cells[2].textContent).toContain('-50,00');
+    expect(screen.getByText('Ganze Jahre')).toBeInTheDocument();
+  });
+
+  /** The pair rule survives the comparison: both figures, never their sum. */
+  it('compares the household amount and the own share separately', async () => {
+    const user = userEvent.setup();
+    const { container } = renderIt();
+    await user.click(await screen.findByRole('button', { name: 'Jahresvergleich' }));
+
+    const cells = comparisonRow(container);
+    // Column 0 is the household's amount, column 4 the user's share of it. They sit
+    // in different columns, carry different markers, and 75,00 appears nowhere.
+    expect(within(cells[0]).getByText(/50,00/).getAttribute('aria-label')).toMatch(/Haushalt/i);
+    expect(within(cells[4]).getByText(/25,00/).getAttribute('aria-label')).toMatch(/Anteil/i);
+    expect(container.textContent).not.toContain('75,00');
+  });
+});
+
+/** The Wocheneinkauf row of the comparison table, cell by cell. */
+function comparisonRow(container: HTMLElement): HTMLElement[] {
+  const row = [...container.querySelectorAll('.screen-table tbody tr')].find((r) =>
+    r.textContent?.includes('Wocheneinkauf'),
+  ) as HTMLElement;
+  return [...row.querySelectorAll('td')] as HTMLElement[];
+}

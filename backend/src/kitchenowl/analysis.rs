@@ -20,15 +20,16 @@
 //! than none. The count of what was left out is returned so the UI can say so.
 
 use axum::{Json, extract::Query};
-use sqlx::Row;
+use sqlx::{PgConnection, Row};
 
 use crate::{
     auth::Ctx,
     error::{AppError, Result},
     locale::{div_round_half_up, month_name_de},
     models::{
-        KoCategoryAnalysis, KoCategoryAnalysisRow, KoMonthlySeries, KoPayerShare, KoSeriesMonth,
-        KoSeriesSubject,
+        KoCategoryAnalysis, KoCategoryAnalysisRow, KoComparePayer, KoCompareRow, KoCompareTotals,
+        KoMonthlySeries, KoPayerShare, KoSeriesMonth, KoSeriesSubject, KoTrailingCategory,
+        KoTrailingMonth, KoTrailingWindow, KoYearComparison,
     },
 };
 
@@ -328,6 +329,442 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<KoSeriesQuery>) -> Result<Json
     Ok(Json(out))
 }
 
+// ------------------------------------------------------- year against year
+//
+// The same two questions the personal ledger answers in `crate::compare`, asked of
+// the mirror: "is this year worse than last" and "is this getting worse". The
+// second needs a window that crosses the year boundary, because a calendar year is
+// an accounting convention and a household's habits are not.
+//
+// The trap is the same one, and here it is sharper: the mirror's first expense is
+// 2024-12-22, so 2024 holds one month and 2025 holds twelve. Their raw totals
+// would report a 1.200 % rise that is entirely the calendar. So every figure is
+// returned twice — as the years stand, and restricted to `comparable_months`.
+
+/// Period as one orderable integer, mirroring `period_ord` in the personal ledger:
+/// `year * 12 + month - 1`. December to January is one step.
+fn ord(year: i32, month: u8) -> i32 {
+    year * 12 + month as i32 - 1
+}
+
+fn year_month(ord: i32) -> (i32, u8) {
+    (ord.div_euclid(12), (ord.rem_euclid(12) + 1) as u8)
+}
+
+/// `delta / previous`, or `None` when there was no previous to be a share of.
+fn ratio(delta_cents: i64, previous_cents: i64) -> Option<f64> {
+    if previous_cents == 0 {
+        None
+    } else {
+        Some(delta_cents as f64 / (previous_cents.abs() as f64))
+    }
+}
+
+/// One (year, month, category) bucket, as the mirror returns it.
+struct Bucket {
+    year: i32,
+    month: u8,
+    category_id: Option<i64>,
+    category_name: Option<String>,
+    amount_cents: i64,
+    own_share_cents: i64,
+    expense_count: i64,
+}
+
+/// Buckets for a closed `expense_date` range, which is how a window that spans two
+/// years is expressed — and it uses the `(user_id, expense_date)` index rather than
+/// a computed expression that could not.
+async fn load_buckets(
+    conn: &mut PgConnection,
+    from: (i32, u8),
+    to: (i32, u8),
+) -> Result<Vec<Bucket>> {
+    let rows = sqlx::query(
+        "SELECT EXTRACT(YEAR FROM e.expense_date)::int AS y, \
+                EXTRACT(MONTH FROM e.expense_date)::int AS m, \
+                e.ko_category_id AS cat, \
+                (array_agg(e.ko_category_name ORDER BY e.expense_date DESC))[1] AS cat_name, \
+                COALESCE(SUM(e.amount_cents), 0)::bigint AS amount, \
+                COALESCE(SUM(e.own_share_cents), 0)::bigint AS own, \
+                count(*)::bigint AS n \
+           FROM ko_expenses e \
+          WHERE e.user_id = app.current_user_id() AND NOT e.exclude_from_statistics \
+            AND e.expense_date >= make_date($1::int, $2::int, 1) \
+            AND e.expense_date < (make_date($3::int, $4::int, 1) + INTERVAL '1 month') \
+          GROUP BY y, m, e.ko_category_id",
+    )
+    .bind(from.0)
+    .bind(from.1 as i32)
+    .bind(to.0)
+    .bind(to.1 as i32)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .filter_map(|r| {
+            let month: i32 = r.get("m");
+            (1..=12).contains(&month).then(|| Bucket {
+                year: r.get("y"),
+                month: month as u8,
+                category_id: r.get("cat"),
+                category_name: r.get("cat_name"),
+                amount_cents: r.get("amount"),
+                own_share_cents: r.get("own"),
+                expense_count: r.get("n"),
+            })
+        })
+        .collect())
+}
+
+/// How many expenses KitchenOwl itself excludes from its statistics, per year.
+async fn excluded_in(conn: &mut PgConnection, year: i32) -> Result<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM ko_expenses e \
+          WHERE e.user_id = app.current_user_id() AND e.exclude_from_statistics \
+            AND EXTRACT(YEAR FROM e.expense_date)::int = $1",
+    )
+    .bind(year)
+    .fetch_one(&mut *conn)
+    .await?)
+}
+
+async fn mirror_years(conn: &mut PgConnection) -> Result<Vec<i32>> {
+    Ok(sqlx::query_scalar(
+        "SELECT DISTINCT EXTRACT(YEAR FROM e.expense_date)::int \
+           FROM ko_expenses e WHERE e.user_id = app.current_user_id() \
+          ORDER BY 1 DESC",
+    )
+    .fetch_all(&mut *conn)
+    .await?)
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCompareQuery {
+    pub year: i32,
+}
+
+/// The household's year against the one before it, per KitchenOwl category.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/analysis/compare",
+    tag = "kitchenowl",
+    params(("year" = i32, Query, description = "Kalenderjahr; verglichen wird mit dem Vorjahr")),
+    responses((status = 200, description = "Haushalt und eigener Anteil, Jahr gegen Vorjahr — roh und auf gemeinsame Monate beschränkt", body = KoYearComparison)),
+)]
+pub async fn compare(
+    mut ctx: Ctx,
+    Query(q): Query<KoCompareQuery>,
+) -> Result<Json<KoYearComparison>> {
+    let previous_year = q.year - 1;
+    let buckets = load_buckets(ctx.tenant.conn(), (previous_year, 1), (q.year, 12)).await?;
+
+    // The months both years hold. Intersection rather than a prefix: a household
+    // that skipped a month is a real thing, and taking the first N would compare
+    // August with February.
+    let months_of = |year: i32| -> std::collections::BTreeSet<u8> {
+        buckets
+            .iter()
+            .filter(|b| b.year == year)
+            .map(|b| b.month)
+            .collect()
+    };
+    let cur_months = months_of(q.year);
+    let prev_months = months_of(previous_year);
+    let comparable: Vec<u8> = cur_months.intersection(&prev_months).copied().collect();
+    let shared = |b: &Bucket| comparable.contains(&b.month);
+
+    // Keyed by the KitchenOwl category id, not by name: the id is stable and the
+    // name is typed by hand, so a renamed category is still one history. `None` is
+    // its own key — "no category" is a third of the corpus, not a missing value.
+    let mut ids: Vec<Option<i64>> = buckets.iter().map(|b| b.category_id).collect();
+    ids.sort();
+    ids.dedup();
+
+    let mut rows: Vec<KoCompareRow> = ids
+        .into_iter()
+        .map(|id| {
+            let mine = |year: i32| {
+                buckets
+                    .iter()
+                    .filter(move |b| b.category_id == id && b.year == year)
+            };
+            let sum = |year: i32, restricted: bool, f: fn(&Bucket) -> i64| -> i64 {
+                mine(year).filter(|b| !restricted || shared(b)).map(f).sum()
+            };
+
+            let amount = sum(q.year, false, |b| b.amount_cents);
+            let own = sum(q.year, false, |b| b.own_share_cents);
+            let count = sum(q.year, false, |b| b.expense_count);
+            let prev_amount = sum(previous_year, false, |b| b.amount_cents);
+            let prev_own = sum(previous_year, false, |b| b.own_share_cents);
+            let prev_count = sum(previous_year, false, |b| b.expense_count);
+            let cmp_amount = sum(q.year, true, |b| b.amount_cents);
+            let cmp_own = sum(q.year, true, |b| b.own_share_cents);
+            let cmp_prev_amount = sum(previous_year, true, |b| b.amount_cents);
+            let cmp_prev_own = sum(previous_year, true, |b| b.own_share_cents);
+
+            let monthly = |year: i32, f: fn(&Bucket) -> i64| -> Vec<i64> {
+                let mut slots = vec![0i64; 12];
+                for b in mine(year) {
+                    slots[(b.month - 1) as usize] += f(b);
+                }
+                slots
+            };
+
+            KoCompareRow {
+                ko_category_id: id,
+                // The most recent spelling wins, current year first.
+                ko_category_name: mine(q.year)
+                    .chain(mine(previous_year))
+                    .find_map(|b| b.category_name.clone()),
+                amount_cents: amount,
+                own_share_cents: own,
+                expense_count: count,
+                previous_amount_cents: prev_amount,
+                previous_own_share_cents: prev_own,
+                previous_expense_count: prev_count,
+                delta_amount_cents: amount - prev_amount,
+                delta_own_share_cents: own - prev_own,
+                delta_ratio: ratio(amount - prev_amount, prev_amount),
+                comparable_amount_cents: cmp_amount,
+                comparable_own_share_cents: cmp_own,
+                comparable_previous_amount_cents: cmp_prev_amount,
+                comparable_previous_own_share_cents: cmp_prev_own,
+                comparable_delta_amount_cents: cmp_amount - cmp_prev_amount,
+                comparable_delta_own_share_cents: cmp_own - cmp_prev_own,
+                comparable_delta_ratio: ratio(cmp_amount - cmp_prev_amount, cmp_prev_amount),
+                monthly_amount_cents: monthly(q.year, |b| b.amount_cents),
+                monthly_own_share_cents: monthly(q.year, |b| b.own_share_cents),
+                previous_monthly_amount_cents: monthly(previous_year, |b| b.amount_cents),
+                previous_monthly_own_share_cents: monthly(previous_year, |b| b.own_share_cents),
+                is_new: prev_count == 0 && count > 0,
+                is_gone: count == 0 && prev_count > 0,
+            }
+        })
+        .collect();
+    // Largest movement first, either direction: the screen is about what changed,
+    // not about what is biggest.
+    rows.sort_by(|a, b| {
+        b.delta_amount_cents
+            .abs()
+            .cmp(&a.delta_amount_cents.abs())
+            .then_with(|| b.amount_cents.cmp(&a.amount_cents))
+    });
+
+    let totals_for = |year: i32, excluded: i64| -> KoCompareTotals {
+        let all = buckets.iter().filter(|b| b.year == year);
+        let restricted = buckets.iter().filter(|b| b.year == year && shared(b));
+        let months: std::collections::BTreeSet<u8> = months_of(year);
+        KoCompareTotals {
+            year,
+            amount_cents: all.clone().map(|b| b.amount_cents).sum(),
+            own_share_cents: all.clone().map(|b| b.own_share_cents).sum(),
+            expense_count: all.map(|b| b.expense_count).sum(),
+            months_with_data: months.len() as i64,
+            last_month_with_data: months.iter().next_back().copied(),
+            comparable_amount_cents: restricted.clone().map(|b| b.amount_cents).sum(),
+            comparable_own_share_cents: restricted.clone().map(|b| b.own_share_cents).sum(),
+            comparable_expense_count: restricted.map(|b| b.expense_count).sum(),
+            excluded_count: excluded,
+        }
+    };
+    let current_excluded = excluded_in(ctx.tenant.conn(), q.year).await?;
+    let previous_excluded = excluded_in(ctx.tenant.conn(), previous_year).await?;
+
+    // Who paid, both years. Only a shared ledger can ask this, and "did the split
+    // drift" is the question behind it.
+    let payer_rows = sqlx::query(
+        "SELECT EXTRACT(YEAR FROM e.expense_date)::int AS y, \
+                e.paid_by_id AS id, COALESCE(m.name, '?') AS name, \
+                COALESCE(SUM(e.amount_cents), 0)::bigint AS amount, \
+                count(*)::bigint AS n \
+           FROM ko_expenses e \
+           LEFT JOIN ko_members m \
+                  ON m.user_id = e.user_id AND m.member_id = e.paid_by_id \
+          WHERE e.user_id = app.current_user_id() AND NOT e.exclude_from_statistics \
+            AND EXTRACT(YEAR FROM e.expense_date)::int IN ($1, $2) \
+          GROUP BY y, e.paid_by_id, m.name",
+    )
+    .bind(q.year)
+    .bind(previous_year)
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+
+    let mut payers: Vec<KoComparePayer> = Vec::new();
+    for r in &payer_rows {
+        let year: i32 = r.get("y");
+        let id: Option<i64> = r.get("id");
+        let name: String = r.get("name");
+        let amount: i64 = r.get("amount");
+        let n: i64 = r.get("n");
+        let slot = match payers.iter_mut().position(|p| p.member_id == id) {
+            Some(i) => &mut payers[i],
+            None => {
+                payers.push(KoComparePayer {
+                    member_id: id,
+                    name,
+                    amount_cents: 0,
+                    previous_amount_cents: 0,
+                    delta_cents: 0,
+                    expense_count: 0,
+                    previous_expense_count: 0,
+                });
+                payers.last_mut().expect("just pushed")
+            }
+        };
+        if year == q.year {
+            slot.amount_cents += amount;
+            slot.expense_count += n;
+        } else {
+            slot.previous_amount_cents += amount;
+            slot.previous_expense_count += n;
+        }
+    }
+    for p in &mut payers {
+        p.delta_cents = p.amount_cents - p.previous_amount_cents;
+    }
+    payers.sort_by_key(|p| std::cmp::Reverse(p.amount_cents));
+
+    let years = mirror_years(ctx.tenant.conn()).await?;
+    let out = KoYearComparison {
+        year: q.year,
+        previous_year,
+        current: totals_for(q.year, current_excluded),
+        previous: totals_for(previous_year, previous_excluded),
+        fully_comparable: cur_months == prev_months && !cur_months.is_empty(),
+        comparable_months: comparable,
+        previous_year_has_data: !prev_months.is_empty(),
+        rows,
+        paid_by: payers,
+        years,
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTrailingQuery {
+    pub year: i32,
+    pub month: u8,
+}
+
+/// The twelve months ending at the given period, whatever years they fall in.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/analysis/trailing",
+    tag = "kitchenowl",
+    params(
+        ("year" = i32, Query, description = "Jahr des letzten Monats im Fenster"),
+        ("month" = u8, Query, description = "Monat 1..12 — das Fenster endet hier"),
+    ),
+    responses(
+        (status = 200, description = "Zwölf Monate rückwärts, über die Jahresgrenze hinweg", body = KoTrailingWindow),
+        (status = 400, description = "Monat außerhalb 1..12"),
+    ),
+)]
+pub async fn trailing(
+    mut ctx: Ctx,
+    Query(q): Query<KoTrailingQuery>,
+) -> Result<Json<KoTrailingWindow>> {
+    if !(1..=12).contains(&q.month) {
+        return Err(AppError::Validation(
+            "Monat muss zwischen 1 und 12 liegen".into(),
+        ));
+    }
+    let to_ord = ord(q.year, q.month);
+    let from_ord = to_ord - 11;
+    let (from_year, from_month) = year_month(from_ord);
+
+    let buckets = load_buckets(
+        ctx.tenant.conn(),
+        (from_year, from_month),
+        (q.year, q.month),
+    )
+    .await?;
+
+    // Twelve slots, oldest first, every one present. An empty month is information:
+    // dropping it would slide the window and hide the gap.
+    let mut months: Vec<KoTrailingMonth> = (0..12)
+        .map(|i| {
+            let (year, month) = year_month(from_ord + i);
+            KoTrailingMonth {
+                year,
+                month,
+                month_name: month_name_de(month).to_string(),
+                amount_cents: 0,
+                own_share_cents: 0,
+                expense_count: 0,
+            }
+        })
+        .collect();
+
+    let mut rows: Vec<KoTrailingCategory> = Vec::new();
+    for b in &buckets {
+        let idx = (ord(b.year, b.month) - from_ord) as usize;
+        if let Some(slot) = months.get_mut(idx) {
+            slot.amount_cents += b.amount_cents;
+            slot.own_share_cents += b.own_share_cents;
+            slot.expense_count += b.expense_count;
+        }
+        let row = match rows
+            .iter_mut()
+            .position(|r| r.ko_category_id == b.category_id)
+        {
+            Some(i) => &mut rows[i],
+            None => {
+                rows.push(KoTrailingCategory {
+                    ko_category_id: b.category_id,
+                    ko_category_name: b.category_name.clone(),
+                    amount_cents: 0,
+                    own_share_cents: 0,
+                    expense_count: 0,
+                    average_per_month_cents: 0,
+                    average_own_share_per_month_cents: 0,
+                    monthly_amount_cents: vec![0; 12],
+                    monthly_own_share_cents: vec![0; 12],
+                });
+                rows.last_mut().expect("just pushed")
+            }
+        };
+        row.amount_cents += b.amount_cents;
+        row.own_share_cents += b.own_share_cents;
+        row.expense_count += b.expense_count;
+        if let Some(slot) = row.monthly_amount_cents.get_mut(idx) {
+            *slot += b.amount_cents;
+        }
+        if let Some(slot) = row.monthly_own_share_cents.get_mut(idx) {
+            *slot += b.own_share_cents;
+        }
+    }
+
+    let months_with_data = months.iter().filter(|m| m.expense_count > 0).count() as i64;
+    for row in &mut rows {
+        // Over the months the HOUSEHOLD was active in the window, never over twelve.
+        row.average_per_month_cents = div_round_half_up(row.amount_cents, months_with_data.max(1));
+        row.average_own_share_per_month_cents =
+            div_round_half_up(row.own_share_cents, months_with_data.max(1));
+    }
+    rows.sort_by_key(|r| std::cmp::Reverse(r.amount_cents));
+
+    let out = KoTrailingWindow {
+        year: q.year,
+        month: q.month,
+        from_year,
+        from_month,
+        amount_cents: months.iter().map(|m| m.amount_cents).sum(),
+        own_share_cents: months.iter().map(|m| m.own_share_cents).sum(),
+        expense_count: months.iter().map(|m| m.expense_count).sum(),
+        months_with_data,
+        months,
+        rows,
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
 /// The recurring names worth charting, most frequent first.
 #[utoipa::path(
     get,
@@ -371,4 +808,28 @@ pub async fn series_subjects(
         .collect();
     ctx.tenant.commit().await?;
     Ok(Json(out))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ord_round_trips_across_the_year_boundary() {
+        // The trailing window rests on this: December to January is one step, and
+        // the mirror's first expense is 2024-12-22, so that boundary is the first
+        // thing this feature meets.
+        assert_eq!(ord(2025, 1) - ord(2024, 12), 1);
+        assert_eq!(year_month(ord(2025, 1)), (2025, 1));
+        assert_eq!(year_month(ord(2025, 1) - 11), (2024, 2));
+    }
+
+    #[test]
+    fn a_ratio_against_nothing_is_not_a_number() {
+        // A category the household did not have last year is new, not infinitely
+        // more expensive.
+        assert_eq!(ratio(5_000, 0), None);
+        assert_eq!(ratio(2_000, 10_000), Some(0.2));
+        assert_eq!(ratio(-2_000, 10_000), Some(-0.2));
+    }
 }
