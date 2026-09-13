@@ -72,6 +72,10 @@ export const de = {
   'dashboard.income': 'Einnahmen',
   'dashboard.expense': 'Ausgaben',
   'dashboard.balance': 'Bilanz',
+  'dashboard.savingsDeposit': 'Sparrate / Monat',
+  'dashboard.savingsDepositHint': 'Was tatsächlich auf die Sparkonten ging — Netto der Kategorien vom Typ Sparen, also abzüglich Entnahmen.',
+  'dashboard.savingsDepositYear': '{total} im Jahr · {percent} vom Einkommen',
+  'dashboard.savingsRateNaiveNote': '{percent} nach Tabellenformel',
   'dashboard.savingsRateNaive': 'Sparquote (naiv)',
   'dashboard.savingsRateNaiveHint':
     'Bilanz geteilt durch Bruttoeinnahmen — wie in der Tabelle. Zählt Sparbeiträge als Ausgabe und Erstattungen als Einkommen.',

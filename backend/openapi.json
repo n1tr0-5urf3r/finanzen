@@ -3460,6 +3460,9 @@
           "savingsRateNaive",
           "savingsRateConsumption",
           "savingsAmountCents",
+          "savingsDepositCents",
+          "savingsDepositPerMonthCents",
+          "savingsDepositRate",
           "bookingCount",
           "taxRelevantCount",
           "uncategorizedCount",
@@ -3521,6 +3524,21 @@
           "savingsAmountCents": {
             "type": "integer",
             "format": "int64"
+          },
+          "savingsDepositCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What was actually paid into the savings categories this year — the decision,\nnot the residue. This is what a person means by \"meine Sparrate\"."
+          },
+          "savingsDepositPerMonthCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The same, per month with data, which is the form it is usually said in."
+          },
+          "savingsDepositRate": {
+            "type": "number",
+            "format": "double",
+            "description": "Of real income, so it is comparable with `savingsRateConsumption`."
           },
           "savingsRateConsumption": {
             "type": "number",

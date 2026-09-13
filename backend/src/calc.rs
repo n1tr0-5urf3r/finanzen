@@ -299,15 +299,28 @@ pub struct SavingsRates {
     pub income_base_cents: i64,
     pub consumption_cents: i64,
     pub savings_amount_cents: i64,
+    /// What actually went INTO the savings categories — the standing order, the
+    /// deposit, the thing a person means by "meine Sparrate". Net, so a withdrawal
+    /// in the same category subtracts from it.
+    pub savings_deposit_cents: i64,
+    pub savings_deposit_rate: f64,
 }
 
-/// Both savings rates.
+/// Three figures, answering three different questions.
 ///
-/// The naive rate reproduces the spreadsheet (`saldo / gross income`) and is wrong in
-/// a specific way worth keeping visible: gross income includes cost-sharing and
-/// refunds that are not income at all but negative expenses, which understates the
-/// rate substantially. The consumption rate divides real income by real consumption,
-/// excluding Sparen (retained wealth, not spending) and transfers.
+/// The DEPOSIT is what was actually paid into the savings categories. It is the
+/// literal answer to "what is my Sparrate", it is a decision the user made rather
+/// than a residue of one, and it is the only one of the three that can be checked
+/// against a bank statement.
+///
+/// The CONSUMPTION rate is how much of real income was not consumed — which
+/// includes money that simply stayed in the account, so it is the larger figure and
+/// the honest measure of headroom.
+///
+/// The NAIVE rate reproduces the spreadsheet (`saldo / gross income`) and is wrong
+/// in a specific way worth keeping computable: gross income includes cost-sharing
+/// and refunds that are not income at all but negative expenses, which understates
+/// it substantially.
 pub fn savings_rates(rows: &[LedgerRow]) -> SavingsRates {
     let t = totals(rows);
 
@@ -322,10 +335,19 @@ pub fn savings_rates(rows: &[LedgerRow]) -> SavingsRates {
         .map(LedgerRow::net_cents)
         .sum();
     let savings_amount_cents = income_base_cents - consumption_cents;
+    // Net, and positive when money moved IN: the stored sign is expense-positive,
+    // and a deposit is an expense of the Sparen category.
+    let savings_deposit_cents: i64 = rows
+        .iter()
+        .filter(|r| r.is_savings)
+        .map(LedgerRow::net_cents)
+        .sum();
 
     let ratio = |n: i64, d: i64| if d == 0 { 0.0 } else { n as f64 / d as f64 };
 
     SavingsRates {
+        savings_deposit_cents,
+        savings_deposit_rate: ratio(savings_deposit_cents, income_base_cents),
         naive_rate: ratio(t.saldo_cents, t.income_cents),
         naive_numerator_cents: t.saldo_cents,
         naive_denominator_cents: t.income_cents,

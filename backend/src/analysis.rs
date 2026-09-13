@@ -161,6 +161,12 @@ pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<
         average_expense_per_month_cents: calc::average_expense_per_month(&rows),
         fixed_costs_per_month_cents: calc::fixed_costs_per_month(&rows),
         months_with_data: months,
+        savings_deposit_cents: rates.savings_deposit_cents,
+        savings_deposit_per_month_cents: div_round_half_up(
+            rates.savings_deposit_cents,
+            months.max(1),
+        ),
+        savings_deposit_rate: rates.savings_deposit_rate,
         savings_rate_naive: rates.naive_rate,
         savings_rate_consumption: rates.consumption_rate,
         savings_amount_cents: rates.savings_amount_cents,

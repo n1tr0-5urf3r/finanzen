@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { CategoryChip } from '../../components/DataLabel';
 import { FlowMoney, Money, NetBreakdown, ScopeNote } from '../../components/Money';
-import { Banner, ErrorState, LoadingState, PageHeader } from '../../components/ui';
+import { ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatEuro, formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
@@ -56,14 +56,13 @@ export function DashboardPage() {
     <>
       <PageHeader title={t('dashboard.title', { year })} />
 
-      {d.carryoverGapCents != null && (
-        <Banner tone="warn">
-          {t('dashboard.carryoverGap', {
-            amount: maskAmount(formatEuro(d.carryoverGapCents, { showSign: true })),
-          })}
-        </Banner>
-      )}
-
+      {/* The carryover gap is not reported here any more. It is a permanent,
+          known property of the legacy import — the 2026 opening balance is a
+          CONFIGURED figure and the 2023–2025 rows do not add up to it — so a
+          warning banner on the screen opened every day was reporting a settled
+          fact as if it were news. It is still computed, still in the API, and
+          still shown in Einstellungen, which is where the opening balance is set
+          and therefore the only place it is actionable. */}
       <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
         <Kpi labelKey="dashboard.income" transfersIncluded={false}>
           <Money cents={d.incomeCents} tone="income" />
@@ -82,19 +81,36 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+        {/* The Sparrate leads, because it is the only one of the three that is a
+            decision rather than a residue: it is what left the account for Sparen
+            & Anlage, and the one figure here that can be checked against a bank
+            statement. Per month, which is how a standing order is thought of. */}
+        <Kpi
+          labelKey="dashboard.savingsDeposit"
+          hint="dashboard.savingsDepositHint"
+          transfersIncluded={false}
+          tone="accent"
+        >
+          <Money cents={d.savingsDepositPerMonthCents} />
+          <span className="kpi__sub">
+            {t('dashboard.savingsDepositYear', {
+              total: maskAmount(formatEuro(d.savingsDepositCents)),
+              percent: formatPercent(d.savingsDepositRate),
+            })}
+          </span>
+        </Kpi>
         <Kpi
           labelKey="dashboard.savingsRateConsumption"
           hint="dashboard.savingsRateConsumptionHint"
           transfersIncluded={false}
         >
           {formatPercent(d.savingsRateConsumption)}
-        </Kpi>
-        <Kpi
-          labelKey="dashboard.savingsRateNaive"
-          hint="dashboard.savingsRateNaiveHint"
-          transfersIncluded={false}
-        >
-          {formatPercent(d.savingsRateNaive)}
+          {/* The spreadsheet's own rate, kept because a figure that was on every
+              screen for years should not silently disappear — but as a footnote to
+              the one that supersedes it, not as a tile of equal weight. */}
+          <span className="kpi__sub">
+            {t('dashboard.savingsRateNaiveNote', { percent: formatPercent(d.savingsRateNaive) })}
+          </span>
         </Kpi>
         <Kpi labelKey="dashboard.averageExpense" transfersIncluded={false}>
           <Money cents={d.averageExpensePerMonthCents} />

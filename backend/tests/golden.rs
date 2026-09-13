@@ -436,7 +436,7 @@ fn per_month_averages_divide_by_months_with_data() {
 }
 
 #[test]
-fn both_savings_rates() {
+fn all_three_savings_figures() {
     require_fixtures!();
     let r = calc::savings_rates(&ledger_2026());
     assert_eq!(r.naive_numerator_cents, 900_000);
@@ -455,6 +455,19 @@ fn both_savings_rates() {
         "konsumbasiert {}",
         r.consumption_rate
     );
+
+    // The deposit: what actually went into Sparen & Anlage. Unlike the other two
+    // this one is checkable against a bank statement, which is why it is the
+    // headline figure — 660 a month to Mai, 860 after.
+    assert_eq!(r.savings_deposit_cents, 648_000);
+    assert!(
+        (r.savings_deposit_rate - 0.225).abs() < 0.0001,
+        "Sparrate {}",
+        r.savings_deposit_rate
+    );
+    // And it is strictly the smaller of the two: money that merely stayed in the
+    // account counts as "not consumed" but was never paid into anything.
+    assert!(r.savings_deposit_cents < r.savings_amount_cents);
 }
 
 #[test]

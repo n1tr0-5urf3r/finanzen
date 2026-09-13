@@ -262,6 +262,13 @@ pub struct Dashboard {
     /// Excludes Sparen (retained wealth) and transfers.
     pub savings_rate_consumption: f64,
     pub savings_amount_cents: i64,
+    /// What was actually paid into the savings categories this year — the decision,
+    /// not the residue. This is what a person means by "meine Sparrate".
+    pub savings_deposit_cents: i64,
+    /// The same, per month with data, which is the form it is usually said in.
+    pub savings_deposit_per_month_cents: i64,
+    /// Of real income, so it is comparable with `savingsRateConsumption`.
+    pub savings_deposit_rate: f64,
     pub booking_count: i64,
     pub tax_relevant_count: i64,
     pub uncategorized_count: i64,

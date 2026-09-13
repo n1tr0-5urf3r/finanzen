@@ -115,6 +115,10 @@ export interface Dashboard {
   savingsRateNaive: number;
   savingsRateConsumption: number;
   savingsAmountCents: number;
+  /** What was actually paid into the savings categories — the Sparrate. */
+  savingsDepositCents: number;
+  savingsDepositPerMonthCents: number;
+  savingsDepositRate: number;
   bookingCount: number;
   taxRelevantCount: number;
   uncategorizedCount: number;

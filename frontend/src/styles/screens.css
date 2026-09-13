@@ -194,3 +194,7 @@
 /* The highlighted option in the review picker. Distinct from `aria-selected`,
    which marks the category already chosen for this item. */
 .picker__option.is-highlighted { background: var(--primary-soft); }
+
+/* A second line under a KPI: the figure that puts the headline in context without
+   competing with it for a tile of its own. */
+.kpi__sub { display: block; font-size: .72rem; color: var(--muted); margin-top: .15rem; }
