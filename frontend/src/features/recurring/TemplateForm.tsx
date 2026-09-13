@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { Button, ErrorState } from '../../components/ui';
@@ -30,6 +30,12 @@ export function TemplateForm({
 }) {
   const t = useT();
   const maskedField = useMaskedFieldClass();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
   const [name, setName] = useState(template?.name ?? '');
   const [comment, setComment] = useState(template?.comment ?? '');
   const [kind, setKind] = useState<BookingKind>(template?.kind ?? 'expense');
@@ -80,7 +86,19 @@ export function TemplateForm({
   }
 
   return (
-    <form className="panel panel--pad form-stack" style={{ marginBottom: '1rem' }} onSubmit={submit}>
+    <>
+      {/* A modal, not a panel above the list. Rendered inline it opened at the top
+          of the page — the same complaint the booking editor had, and the same
+          answer: the form belongs over the row it is about, not somewhere the user
+          has to go looking for it. */}
+      <div className="sheet-scrim" onClick={onCancel} aria-hidden="true" />
+      <form
+        className="dialog__panel booking-editor form-stack"
+        role="dialog"
+        aria-modal="true"
+        aria-label={template ? t('recurring.editTemplate') : t('recurring.newTemplate')}
+        onSubmit={submit}
+      >
       <h2 style={{ margin: 0 }}>
         {template ? t('recurring.editTemplate') : t('recurring.newTemplate')}
       </h2>
@@ -241,6 +259,7 @@ export function TemplateForm({
           {t('common.cancel')}
         </Button>
       </div>
-    </form>
+      </form>
+    </>
   );
 }

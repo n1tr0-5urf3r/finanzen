@@ -249,6 +249,7 @@ export const de = {
   'recurring.interval.6': 'halbjährlich',
   'recurring.interval.12': 'jährlich',
   'recurring.intervalEvery': 'alle {count} Monate',
+  'recurring.viaRule': 'über Regel',
   'recurring.estimate': 'Betrag schwankt',
   'recurring.estimateHint':
     'Der Betrag ist nur ein Richtwert. Solche Buchungen entstehen als Entwurf und zählen erst nach der Bestätigung mit.',

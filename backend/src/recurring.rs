@@ -31,9 +31,18 @@ use crate::{
     },
 };
 
+/// A template without a category override is categorised by the RULE TABLE at
+/// materialisation time, which is the right default — a rule change then still
+/// reaches future bookings. The listing used to show an empty cell for that, which
+/// reads as "uncategorised" rather than as "whatever the rule gives it", so the
+/// last three joins here perform the same lookup the booking will perform and the
+/// response says which of the two the name came from.
 const SELECT_TEMPLATES: &str = "\
     SELECT r.id, r.name, r.comment, r.kind, r.amount_cents, r.amount_is_estimate, \
-           r.category_id, c.name AS category_name, t.label AS category_type, \
+           r.category_id, \
+           COALESCE(c.name, rc.name) AS category_name, \
+           COALESCE(t.label, rt.label) AS category_type, \
+           (r.category_id IS NULL AND rc.id IS NOT NULL) AS category_from_rule, \
            r.tax_relevant, r.day_of_month, r.interval_months, r.anchor_ord, \
            r.active_from_ord, r.active_to_ord, r.active, r.sort_order, \
            (SELECT count(*) FROM bookings b WHERE b.template_id = r.id)::bigint AS booking_count, \
@@ -42,7 +51,11 @@ const SELECT_TEMPLATES: &str = "\
                     WHERE b.template_id = r.id AND b.period_ord = $1::int) AS booked_in_period \
       FROM recurring_templates r \
       LEFT JOIN categories c ON c.id = r.category_id \
-      LEFT JOIN category_types t ON t.id = c.type_id";
+      LEFT JOIN category_types t ON t.id = c.type_id \
+      LEFT JOIN category_rules cr ON r.category_id IS NULL \
+                                 AND cr.match_key = lower(btrim(r.comment)) \
+      LEFT JOIN categories rc ON rc.id = cr.category_id \
+      LEFT JOIN category_types rt ON rt.id = rc.type_id";
 
 /// The due rule, in one place. A template is due in period `p` iff it is active, `p`
 /// lies inside its window, and `p` sits on the interval grid measured from the
@@ -82,6 +95,7 @@ fn row_to_template(r: &sqlx::postgres::PgRow, period: Option<i32>) -> RecurringT
         category_id: r.get("category_id"),
         category_name: r.get("category_name"),
         category_type: r.get("category_type"),
+        category_from_rule: r.try_get("category_from_rule").unwrap_or(false),
         tax_relevant: r.get("tax_relevant"),
         day_of_month: r.get::<Option<i16>, _>("day_of_month").map(|d| d as u8),
         interval_months: interval as u8,

@@ -196,8 +196,11 @@ export interface RecurringTemplate {
   /** The amount varies, so materialising produces a draft to confirm. */
   amountIsEstimate: boolean;
   categoryId: string | null;
+  /** The override's category, or the one the rule table gives the comment. */
   categoryName: string | null;
   categoryType: string | null;
+  /** True when the name above comes from the rule table rather than an override. */
+  categoryFromRule: boolean;
   taxRelevant: boolean;
   dayOfMonth: number | null;
   /** 1 monthly, 3 quarterly, 12 annual. */

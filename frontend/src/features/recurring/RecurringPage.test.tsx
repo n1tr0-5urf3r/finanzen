@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +26,7 @@ function template(overrides: Partial<RecurringTemplate>): RecurringTemplate {
     categoryId: null,
     categoryName: null,
     categoryType: null,
+    categoryFromRule: false,
     taxRelevant: false,
     dayOfMonth: 1,
     intervalMonths: 1,
@@ -188,5 +189,44 @@ describe('the monthly checklist', () => {
     // a figure quietly missing from the month.
     expect(await screen.findByText(/2 gebucht · 1 übersprungen/)).toBeInTheDocument();
     expect(screen.getByText(/davon 1 als Entwurf/)).toBeInTheDocument();
+  });
+});
+
+describe('the template list', () => {
+  /**
+   * Leaving the category to the rule table is the recommended way to write a
+   * template — a rule change then still reaches future bookings — and the list
+   * used to render that as an empty cell, which reads as "uncategorised" and
+   * argues for setting an override that nobody needs.
+   */
+  it('shows the category a rule-driven template will book into, and says it is the rule', async () => {
+    api.mockImplementation((path: string) =>
+      Promise.resolve(
+        String(path).startsWith('/recurring')
+          ? [
+              template({
+                id: 'sport',
+                name: 'Sport',
+                comment: 'Mafit',
+                categoryId: null,
+                categoryName: 'Sport',
+                categoryType: 'Fixkosten',
+                categoryFromRule: true,
+              }),
+            ]
+          : ({ items: [], total: 0 } as never),
+      ),
+    );
+    const { container } = renderPage();
+    await screen.findAllByText('Sport');
+
+    const row = [...container.querySelectorAll('tbody tr')].find((r) =>
+      r.textContent?.includes('Sport'),
+    ) as HTMLElement;
+    expect(row).toBeTruthy();
+    // The chip carries the category the rule resolves, not an empty cell...
+    expect(within(row).getAllByText('Sport').length).toBeGreaterThan(0);
+    // ...and it says where that came from, because a rule change will move it.
+    expect(row.textContent).toContain('über Regel');
   });
 });

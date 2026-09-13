@@ -904,6 +904,40 @@ async fn make_template(app: &TestApp, body: Value) -> String {
     created["id"].as_str().expect("template id").to_string()
 }
 
+/// A template with no override still books into a category — the rule table's —
+/// and the listing has to say so rather than showing an empty cell.
+///
+/// Leaving the override off is the RECOMMENDED way to write a template, because a
+/// rule change then still reaches future bookings. A list that renders that as
+/// "uncategorised" argues for the opposite.
+#[tokio::test]
+async fn a_template_without_an_override_shows_the_category_its_rule_gives_it() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let sport = app.category_id("Sport").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Mafit", "categoryId": sport})),
+    )
+    .await;
+
+    make_template(
+        &app,
+        json!({"name":"Sport","comment":"Mafit","kind":"expense","amountCents":2900,
+               "activeFrom":{"year":2026,"month":9}}),
+    )
+    .await;
+
+    let (status, list) = app.send("GET", "/recurring", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let row = &list[0];
+    assert!(row["categoryId"].is_null(), "no override was asked for");
+    assert_eq!(row["categoryName"], "Sport");
+    // ...and it is marked as coming from the rule, because a rule change moves it.
+    assert_eq!(row["categoryFromRule"], true);
+}
+
 /// Materialising twice must create nothing the second time.
 ///
 /// This is the property that decides whether the "alle buchen" button is safe to

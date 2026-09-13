@@ -5710,6 +5710,7 @@
           "kind",
           "amountCents",
           "amountIsEstimate",
+          "categoryFromRule",
           "taxRelevant",
           "intervalMonths",
           "anchor",
@@ -5757,6 +5758,10 @@
             "type": "integer",
             "format": "int64"
           },
+          "categoryFromRule": {
+            "type": "boolean",
+            "description": "True when the name above comes from the rule table rather than from an\noverride — so a rule change will move it, and that is worth saying."
+          },
           "categoryId": {
             "type": [
               "string",
@@ -5768,7 +5773,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "The category this template books into: the override if it has one, otherwise\nthe one the rule table gives its comment. An empty cell in the list read as\n\"uncategorised\", which was never true."
           },
           "categoryType": {
             "type": [

@@ -258,6 +258,13 @@ export function RecurringPage() {
                         typeLabel={x.categoryType}
                         fallback={t('bookings.sourceNone')}
                       />
+                      {/* Said, not implied: this category comes from the rule
+                          table, so changing the rule moves this template too. */}
+                      {x.categoryFromRule && x.categoryName && (
+                        <span className="footnote" style={{ marginLeft: '.35rem' }}>
+                          {t('recurring.viaRule')}
+                        </span>
+                      )}
                     </td>
                     <td>{intervalLabel(x.intervalMonths)}</td>
                     <td className="num">
@@ -314,8 +321,10 @@ export function RecurringPage() {
         </p>
       )}
 
-      {drafts.data && drafts.data.items.length > 0 && (
-        <DraftList year={year} items={drafts.data.items} />
+      {/* `asList`, like every other list in the app: a payload that is not the
+          shape expected must not blank the screen. */}
+      {asList<Booking>(drafts.data?.items).length > 0 && (
+        <DraftList year={year} items={asList<Booking>(drafts.data?.items)} />
       )}
     </>
   );

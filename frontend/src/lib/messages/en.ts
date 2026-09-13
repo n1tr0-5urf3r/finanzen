@@ -222,6 +222,7 @@ export const en: Messages = {
   'recurring.interval.6': 'twice a year',
   'recurring.interval.12': 'yearly',
   'recurring.intervalEvery': 'every {count} months',
+  'recurring.viaRule': 'via rule',
   'recurring.estimate': 'amount varies',
   'recurring.estimateHint':
     'The amount is only an estimate. Such bookings arrive as a draft and count towards nothing until confirmed.',

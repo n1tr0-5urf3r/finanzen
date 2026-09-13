@@ -496,8 +496,14 @@ pub struct RecurringTemplate {
     /// materialising must produce a **draft** the user confirms with the real figure.
     pub amount_is_estimate: bool,
     pub category_id: Option<Uuid>,
+    /// The category this template books into: the override if it has one, otherwise
+    /// the one the rule table gives its comment. An empty cell in the list read as
+    /// "uncategorised", which was never true.
     pub category_name: Option<String>,
     pub category_type: Option<String>,
+    /// True when the name above comes from the rule table rather than from an
+    /// override — so a rule change will move it, and that is worth saying.
+    pub category_from_rule: bool,
     pub tax_relevant: bool,
     pub day_of_month: Option<u8>,
     /// 1 = monthly, 3 = quarterly, 12 = annual.
