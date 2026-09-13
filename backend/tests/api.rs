@@ -2095,6 +2095,267 @@ async fn paging_partitions_the_rows_in_both_directions() {
     }
 }
 
+// ------------------------------------------------------------- year on year
+
+/// The trap this endpoint exists to avoid.
+///
+/// A part year against a full one is not a comparison, it is a subtraction of the
+/// missing months. 2026 holds nine months in the real ledger and 2025 holds twelve,
+/// so the raw totals would report a 25 % improvement caused entirely by the calendar.
+#[tokio::test]
+async fn a_part_year_is_never_compared_with_a_full_one() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let miete = app.category_id("Miete").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Miete","categoryId":miete})),
+    )
+    .await;
+
+    // Last year: twelve months at 100,00 each.
+    for month in 1..=12 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2025,"month":month,"kind":"expense",
+                        "amountCents":10_000,"comment":"Miete"})),
+        )
+        .await;
+    }
+    // This year: three months at the very same 100,00.
+    for month in 1..=3 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":month,"kind":"expense",
+                        "amountCents":10_000,"comment":"Miete"})),
+        )
+        .await;
+    }
+
+    let (status, c) = app.send("GET", "/analysis/compare?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    assert_eq!(c["previousYear"], 2025);
+    assert_eq!(c["previousYearHasData"], true);
+
+    // The raw figures are reported honestly and are NOT a comparison.
+    assert_eq!(c["current"]["expenseCents"], 30_000);
+    assert_eq!(c["previous"]["expenseCents"], 120_000);
+    assert_eq!(c["current"]["monthsWithData"], 3);
+    assert_eq!(c["previous"]["monthsWithData"], 12);
+    assert_eq!(
+        c["fullyComparable"], false,
+        "drei Monate gegen zwölf ist kein Vergleich"
+    );
+
+    // Restricted to the months both years have, nothing changed at all — which is
+    // the truth about this household, and the opposite of what the raw totals say.
+    assert_eq!(c["comparableMonths"].as_array().unwrap().len(), 3);
+    assert_eq!(c["current"]["comparableExpenseCents"], 30_000);
+    assert_eq!(c["previous"]["comparableExpenseCents"], 30_000);
+
+    let row = c["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["categoryName"] == "Miete")
+        .expect("Miete");
+    assert_eq!(row["netCents"], 30_000);
+    assert_eq!(row["previousNetCents"], 120_000);
+    assert_eq!(row["deltaCents"], -90_000, "roh: neun Monate fehlen");
+    assert_eq!(
+        row["comparableDeltaCents"], 0,
+        "gemeinsame Monate: unverändert"
+    );
+    assert_eq!(row["comparableDeltaRatio"], 0.0);
+}
+
+/// A category that did not exist last year has no percentage, and says so.
+#[tokio::test]
+async fn a_new_category_reports_no_ratio_rather_than_infinity() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let miete = app.category_id("Miete").await;
+    let abos = app.category_id("Abos & Streaming").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Miete","categoryId":miete})),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Spotify","categoryId":abos})),
+    )
+    .await;
+    for (year, comment) in [(2025, "Miete"), (2026, "Miete"), (2026, "Spotify")] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":year,"month":1,"kind":"expense",
+                        "amountCents":5_000,"comment":comment})),
+        )
+        .await;
+    }
+
+    let (status, c) = app.send("GET", "/analysis/compare?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = c["rows"].as_array().unwrap();
+    let spotify = rows
+        .iter()
+        .find(|r| r["categoryName"] == "Abos & Streaming")
+        .expect("Spotify-Kategorie");
+    assert_eq!(spotify["previousNetCents"], 0);
+    assert!(spotify["deltaRatio"].is_null(), "kein Prozent gegen nichts");
+    assert_eq!(spotify["isNew"], true);
+    assert_eq!(spotify["isGone"], false);
+}
+
+/// An income category compares in the direction money moves, not in the direction
+/// its stored sign points.
+#[tokio::test]
+async fn earning_more_reads_as_more_money_not_as_a_bigger_cost() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let gehalt = app.category_id("Gehalt").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Gehalt","categoryId":gehalt})),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(json!({"year":2025,"month":1,"kind":"income",
+                    "amountCents":250_000,"comment":"Gehalt"})),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(json!({"year":2026,"month":1,"kind":"income",
+                    "amountCents":275_000,"comment":"Gehalt"})),
+    )
+    .await;
+
+    let (_, c) = app.send("GET", "/analysis/compare?year=2026", None).await;
+    let row = c["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["categoryName"] == "Gehalt")
+        .expect("Gehalt");
+    // Stored convention: income is negative, so earning 250,00 more is -25.000.
+    assert_eq!(row["netCents"], -275_000);
+    assert_eq!(row["previousNetCents"], -250_000);
+    assert_eq!(row["deltaCents"], -25_000);
+    assert_eq!(row["deltaRatio"], -0.1);
+}
+
+/// Twelve months ending in February means eleven of them are last year.
+#[tokio::test]
+async fn the_trailing_window_crosses_the_year_boundary() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let miete = app.category_id("Miete").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Miete","categoryId":miete})),
+    )
+    .await;
+    // One booking in every month of 2025, and two in Januar and Februar 2026.
+    for month in 1..=12 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2025,"month":month,"kind":"expense",
+                        "amountCents":1_000,"comment":"Miete"})),
+        )
+        .await;
+    }
+    for month in 1..=2 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":month,"kind":"expense",
+                        "amountCents":2_000,"comment":"Miete"})),
+        )
+        .await;
+    }
+
+    let (status, w) = app
+        .send("GET", "/analysis/trailing?year=2026&month=2", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    assert_eq!(w["fromYear"], 2025);
+    assert_eq!(w["fromMonth"], 3, "März 2025 bis Februar 2026");
+
+    let months = w["months"].as_array().unwrap();
+    assert_eq!(months.len(), 12, "immer zwölf, auch über die Jahresgrenze");
+    assert_eq!(months[0]["year"], 2025);
+    assert_eq!(months[0]["month"], 3);
+    assert_eq!(months[11]["year"], 2026);
+    assert_eq!(months[11]["month"], 2);
+
+    // Ten months of 2025 (März–Dezember) plus two of 2026.
+    assert_eq!(w["expenseCents"], 10 * 1_000 + 2 * 2_000);
+    assert_eq!(w["bookingCount"], 12);
+    assert_eq!(w["monthsWithData"], 12);
+
+    // The category's twelve values are in WINDOW order, not calendar order.
+    let row = &w["rows"].as_array().unwrap()[0];
+    assert_eq!(row["categoryName"], "Miete");
+    assert_eq!(row["monthlyNetCents"][0], 1_000, "März 2025");
+    assert_eq!(row["monthlyNetCents"][11], 2_000, "Februar 2026");
+}
+
+/// An empty month inside the window is present and empty, never dropped.
+#[tokio::test]
+async fn a_gap_inside_the_trailing_window_stays_a_gap() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let miete = app.category_id("Miete").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"Miete","categoryId":miete})),
+    )
+    .await;
+    for (year, month) in [(2025, 12), (2026, 2)] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":year,"month":month,"kind":"expense",
+                        "amountCents":1_000,"comment":"Miete"})),
+        )
+        .await;
+    }
+
+    let (_, w) = app
+        .send("GET", "/analysis/trailing?year=2026&month=2", None)
+        .await;
+    let months = w["months"].as_array().unwrap();
+    assert_eq!(months.len(), 12);
+    // Januar 2026 sits between them with nothing in it.
+    let januar = months
+        .iter()
+        .find(|m| m["year"] == 2026 && m["month"] == 1)
+        .unwrap();
+    assert_eq!(januar["bookingCount"], 0);
+    assert_eq!(januar["netCents"], 0);
+    assert_eq!(w["monthsWithData"], 2);
+
+    let (status, _) = app
+        .send("GET", "/analysis/trailing?year=2026&month=13", None)
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
 /// Twelve months for one comment — "how much do I spend on tanken, and is it
 /// getting worse". The spreadsheet's Filter tab answered this and it is the
 /// question a household asks more often than "what did the category cost".

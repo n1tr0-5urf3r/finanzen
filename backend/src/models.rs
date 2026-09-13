@@ -308,6 +308,157 @@ pub struct CategoryAnalysis {
     pub excluded_transfer_count: i64,
 }
 
+// ---------------------------------------------------------------- year on year
+
+/// One category, this year against last.
+///
+/// Every figure is in the stored expense-positive convention: a positive net is what
+/// something cost, and a positive `deltaCents` means it cost MORE than last year (or,
+/// for an income category, that less came in). The display flips that sign, exactly
+/// as it does everywhere else.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareRow {
+    pub category_id: Option<Uuid>,
+    pub category_name: String,
+    pub category_type: Option<String>,
+    pub net_cents: i64,
+    pub previous_net_cents: i64,
+    pub delta_cents: i64,
+    /// `delta / |previous|`. `None` when there was nothing last year to be a share
+    /// of — a percentage against zero is not a large number, it is not a number.
+    pub delta_ratio: Option<f64>,
+    /// The same four figures over the months BOTH years actually have. This is the
+    /// pair that may be compared; the ones above are the full years as they stand.
+    pub comparable_net_cents: i64,
+    pub comparable_previous_net_cents: i64,
+    pub comparable_delta_cents: i64,
+    pub comparable_delta_ratio: Option<f64>,
+    pub monthly_net_cents: Vec<i64>,
+    pub previous_monthly_net_cents: Vec<i64>,
+    pub booking_count: i64,
+    pub previous_booking_count: i64,
+    /// Nothing in this category last year, or nothing this year. Either makes the
+    /// percentage meaningless and both are worth saying out loud.
+    pub is_new: bool,
+    pub is_gone: bool,
+}
+
+/// One category type, this year against last.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareTypeRow {
+    pub type_code: String,
+    pub label: String,
+    pub net_cents: i64,
+    pub previous_net_cents: i64,
+    pub delta_cents: i64,
+    pub delta_ratio: Option<f64>,
+    pub comparable_net_cents: i64,
+    pub comparable_previous_net_cents: i64,
+    pub comparable_delta_cents: i64,
+}
+
+/// One year's headline figures, both as it stands and restricted to the months the
+/// other year also has.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareTotals {
+    pub year: i32,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    pub saldo_cents: i64,
+    pub booking_count: i64,
+    /// Months carrying at least one booking. A nine-month year and a twelve-month
+    /// year are not comparable, and this is what says so.
+    pub months_with_data: i64,
+    /// The last month of this year that holds a booking, or `None` for an empty
+    /// year. How far the year has actually got — which is where a trailing window
+    /// should end, and not something the client should have to infer.
+    pub last_month_with_data: Option<u8>,
+    pub comparable_income_cents: i64,
+    pub comparable_expense_cents: i64,
+    pub comparable_saldo_cents: i64,
+}
+
+/// A year against its predecessor.
+///
+/// The trap this endpoint exists to avoid: 2026 holds nine months and 2025 holds
+/// twelve, so the raw totals make this year look thrifty by three months' worth of
+/// spending. Every figure therefore comes twice — as it stands, and restricted to
+/// `comparableMonths`, the months both years actually have — and the UI leads with
+/// the restricted pair whenever the two years differ in length.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct YearComparison {
+    pub year: i32,
+    pub previous_year: i32,
+    pub current: CompareTotals,
+    pub previous: CompareTotals,
+    /// Month numbers 1..12 that BOTH years carry bookings in, ascending.
+    pub comparable_months: Vec<u8>,
+    /// True when the two years cover the same months, so the raw figures are already
+    /// a fair comparison.
+    pub fully_comparable: bool,
+    pub rows: Vec<CompareRow>,
+    pub by_type: Vec<CompareTypeRow>,
+    /// Empty when the previous year holds nothing at all — the UI then says so
+    /// rather than rendering a table of "+100 %".
+    pub previous_year_has_data: bool,
+}
+
+/// One month inside a trailing window. Carries its year, because the window crosses
+/// the year boundary and a bare "Januar" would be ambiguous in exactly the place this
+/// view exists to look at.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailingMonth {
+    pub year: i32,
+    pub month: u8,
+    pub month_name: String,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    pub saldo_cents: i64,
+    pub net_cents: i64,
+    pub booking_count: i64,
+}
+
+/// One category over a trailing window, with its twelve values in window order.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailingCategory {
+    pub category_id: Option<Uuid>,
+    pub category_name: String,
+    pub category_type: Option<String>,
+    pub net_cents: i64,
+    pub average_per_month_cents: i64,
+    pub booking_count: i64,
+    /// Twelve entries, oldest first, aligned with `months`.
+    pub monthly_net_cents: Vec<i64>,
+}
+
+/// Twelve months ending at a given period, whatever years they fall in.
+///
+/// A calendar year is an accounting convention, not a unit of behaviour: in January
+/// the year-to-date view has one month in it. This is the window that always has
+/// twelve, which is what makes a trend visible.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailingWindow {
+    pub year: i32,
+    pub month: u8,
+    /// The first month of the window, which is eleven months before the last.
+    pub from_year: i32,
+    pub from_month: u8,
+    pub months: Vec<TrailingMonth>,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    pub saldo_cents: i64,
+    pub booking_count: i64,
+    pub months_with_data: i64,
+    pub rows: Vec<TrailingCategory>,
+}
+
 /// A single subject's twelve months — one category, or one comment.
 ///
 /// The spreadsheet's `Filter` tab did exactly this and it is the question a

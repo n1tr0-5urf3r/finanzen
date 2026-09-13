@@ -118,6 +118,39 @@
         }
       }
     },
+    "/api/v1/analysis/compare": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "This year against last, per category and per type.",
+        "operationId": "compare",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr; verglichen wird mit dem Vorjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Jahr gegen Vorjahr, roh und auf gemeinsame Monate beschränkt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearComparison"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analysis/series": {
       "get": {
         "tags": [
@@ -205,6 +238,53 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/trailing": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "The twelve months ending at the given period, whatever years they fall in.",
+        "operationId": "trailing",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Jahr des letzten Monats im Fenster",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Monat 1..12 — das Fenster endet hier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zwölf Monate rückwärts, über die Jahresgrenze hinweg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrailingWindow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Monat außerhalb 1..12"
           }
         }
       }
@@ -3410,6 +3490,228 @@
           }
         }
       },
+      "CompareRow": {
+        "type": "object",
+        "description": "One category, this year against last.\n\nEvery figure is in the stored expense-positive convention: a positive net is what\nsomething cost, and a positive `deltaCents` means it cost MORE than last year (or,\nfor an income category, that less came in). The display flips that sign, exactly\nas it does everywhere else.",
+        "required": [
+          "categoryName",
+          "netCents",
+          "previousNetCents",
+          "deltaCents",
+          "comparableNetCents",
+          "comparablePreviousNetCents",
+          "comparableDeltaCents",
+          "monthlyNetCents",
+          "previousMonthlyNetCents",
+          "bookingCount",
+          "previousBookingCount",
+          "isNew",
+          "isGone"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comparableDeltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableDeltaRatio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "comparableNetCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The same four figures over the months BOTH years actually have. This is the\npair that may be compared; the ones above are the full years as they stand."
+          },
+          "comparablePreviousNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaRatio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "`delta / |previous|`. `None` when there was nothing last year to be a share\nof — a percentage against zero is not a large number, it is not a number."
+          },
+          "isGone": {
+            "type": "boolean"
+          },
+          "isNew": {
+            "type": "boolean",
+            "description": "Nothing in this category last year, or nothing this year. Either makes the\npercentage meaningless and both are worth saying out loud."
+          },
+          "monthlyNetCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousBookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousMonthlyNetCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "previousNetCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CompareTotals": {
+        "type": "object",
+        "description": "One year's headline figures, both as it stands and restricted to the months the\nother year also has.",
+        "required": [
+          "year",
+          "incomeCents",
+          "expenseCents",
+          "saldoCents",
+          "bookingCount",
+          "monthsWithData",
+          "comparableIncomeCents",
+          "comparableExpenseCents",
+          "comparableSaldoCents"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableExpenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableIncomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableSaldoCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastMonthWithData": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The last month of this year that holds a booking, or `None` for an empty\nyear. How far the year has actually got — which is where a trailing window\nshould end, and not something the client should have to infer.",
+            "minimum": 0
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Months carrying at least one booking. A nine-month year and a twelve-month\nyear are not comparable, and this is what says so."
+          },
+          "saldoCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CompareTypeRow": {
+        "type": "object",
+        "description": "One category type, this year against last.",
+        "required": [
+          "typeCode",
+          "label",
+          "netCents",
+          "previousNetCents",
+          "deltaCents",
+          "comparableNetCents",
+          "comparablePreviousNetCents",
+          "comparableDeltaCents"
+        ],
+        "properties": {
+          "comparableDeltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparablePreviousNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaRatio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "label": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "typeCode": {
+            "type": "string"
+          }
+        }
+      },
       "ConfirmBookingInput": {
         "type": "object",
         "properties": {
@@ -6359,6 +6661,173 @@
           }
         }
       },
+      "TrailingCategory": {
+        "type": "object",
+        "description": "One category over a trailing window, with its twelve values in window order.",
+        "required": [
+          "categoryName",
+          "netCents",
+          "averagePerMonthCents",
+          "bookingCount",
+          "monthlyNetCents"
+        ],
+        "properties": {
+          "averagePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monthlyNetCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Twelve entries, oldest first, aligned with `months`."
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TrailingMonth": {
+        "type": "object",
+        "description": "One month inside a trailing window. Carries its year, because the window crosses\nthe year boundary and a bare \"Januar\" would be ambiguous in exactly the place this\nview exists to look at.",
+        "required": [
+          "year",
+          "month",
+          "monthName",
+          "incomeCents",
+          "expenseCents",
+          "saldoCents",
+          "netCents",
+          "bookingCount"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saldoCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TrailingWindow": {
+        "type": "object",
+        "description": "Twelve months ending at a given period, whatever years they fall in.\n\nA calendar year is an accounting convention, not a unit of behaviour: in January\nthe year-to-date view has one month in it. This is the window that always has\ntwelve, which is what makes a trend visible.",
+        "required": [
+          "year",
+          "month",
+          "fromYear",
+          "fromMonth",
+          "months",
+          "incomeCents",
+          "expenseCents",
+          "saldoCents",
+          "bookingCount",
+          "monthsWithData",
+          "rows"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fromMonth": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "fromYear": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The first month of the window, which is eleven months before the last."
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrailingMonth"
+            }
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrailingCategory"
+            }
+          },
+          "saldoCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "User": {
         "type": "object",
         "required": [
@@ -6434,6 +6903,66 @@
           "openingSource": {
             "type": "string",
             "description": "`configured` for 2026 (40.000,00 entered by hand) versus `derived` from the\nprevious year's close."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "YearComparison": {
+        "type": "object",
+        "description": "A year against its predecessor.\n\nThe trap this endpoint exists to avoid: 2026 holds nine months and 2025 holds\ntwelve, so the raw totals make this year look thrifty by three months' worth of\nspending. Every figure therefore comes twice — as it stands, and restricted to\n`comparableMonths`, the months both years actually have — and the UI leads with\nthe restricted pair whenever the two years differ in length.",
+        "required": [
+          "year",
+          "previousYear",
+          "current",
+          "previous",
+          "comparableMonths",
+          "fullyComparable",
+          "rows",
+          "byType",
+          "previousYearHasData"
+        ],
+        "properties": {
+          "byType": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareTypeRow"
+            }
+          },
+          "comparableMonths": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Month numbers 1..12 that BOTH years carry bookings in, ascending."
+          },
+          "current": {
+            "$ref": "#/components/schemas/CompareTotals"
+          },
+          "fullyComparable": {
+            "type": "boolean",
+            "description": "True when the two years cover the same months, so the raw figures are already\na fair comparison."
+          },
+          "previous": {
+            "$ref": "#/components/schemas/CompareTotals"
+          },
+          "previousYear": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "previousYearHasData": {
+            "type": "boolean",
+            "description": "Empty when the previous year holds nothing at all — the UI then says so\nrather than rendering a table of \"+100 %\"."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareRow"
+            }
           },
           "year": {
             "type": "integer",

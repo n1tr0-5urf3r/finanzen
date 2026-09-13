@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage, SetupPage } from './features/auth/AuthPages';
 import { AnalysisPage } from './features/analysis/AnalysisPage';
+import { ComparePage } from './features/compare/ComparePage';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/buchungen" element={<BookingsPage />} />
           <Route path="/monate" element={<MonthsPage />} />
           <Route path="/auswertung" element={<AnalysisPage />} />
+          <Route path="/vergleich" element={<ComparePage />} />
           <Route path="/kategorien" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />

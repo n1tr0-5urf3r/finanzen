@@ -127,6 +127,111 @@ export interface Dashboard {
   topCategories: CategoryAnalysisRow[];
 }
 
+/**
+ * One category, this year against last.
+ *
+ * Every figure is in the stored expense-positive convention, so a positive
+ * `deltaCents` means it cost MORE than last year. The display flips that sign like
+ * everywhere else: `<FlowMoney netCents={deltaCents}>` reads as the direction money
+ * moved, which is the same for a cost that fell and an income that rose.
+ */
+export interface CompareRow {
+  categoryId: string | null;
+  categoryName: string;
+  categoryType: string | null;
+  netCents: number;
+  previousNetCents: number;
+  deltaCents: number;
+  /** Null when there was nothing last year to be a share of. */
+  deltaRatio: number | null;
+  comparableNetCents: number;
+  comparablePreviousNetCents: number;
+  comparableDeltaCents: number;
+  comparableDeltaRatio: number | null;
+  monthlyNetCents: number[];
+  previousMonthlyNetCents: number[];
+  bookingCount: number;
+  previousBookingCount: number;
+  isNew: boolean;
+  isGone: boolean;
+}
+
+export interface CompareTypeRow {
+  typeCode: string;
+  label: string;
+  netCents: number;
+  previousNetCents: number;
+  deltaCents: number;
+  deltaRatio: number | null;
+  comparableNetCents: number;
+  comparablePreviousNetCents: number;
+  comparableDeltaCents: number;
+}
+
+export interface CompareTotals {
+  year: number;
+  incomeCents: number;
+  expenseCents: number;
+  saldoCents: number;
+  bookingCount: number;
+  monthsWithData: number;
+  /** The last month of the year that holds a booking; null for an empty year. */
+  lastMonthWithData: number | null;
+  comparableIncomeCents: number;
+  comparableExpenseCents: number;
+  comparableSaldoCents: number;
+}
+
+export interface YearComparison {
+  year: number;
+  previousYear: number;
+  current: CompareTotals;
+  previous: CompareTotals;
+  /** Months 1..12 that BOTH years carry bookings in. */
+  comparableMonths: number[];
+  /** True when both years cover the same months, so the raw figures are fair. */
+  fullyComparable: boolean;
+  rows: CompareRow[];
+  byType: CompareTypeRow[];
+  previousYearHasData: boolean;
+}
+
+export interface TrailingMonth {
+  year: number;
+  month: number;
+  monthName: string;
+  incomeCents: number;
+  expenseCents: number;
+  saldoCents: number;
+  netCents: number;
+  bookingCount: number;
+}
+
+export interface TrailingCategory {
+  categoryId: string | null;
+  categoryName: string;
+  categoryType: string | null;
+  netCents: number;
+  averagePerMonthCents: number;
+  bookingCount: number;
+  /** Twelve entries, oldest first, aligned with `months`. */
+  monthlyNetCents: number[];
+}
+
+export interface TrailingWindow {
+  year: number;
+  month: number;
+  fromYear: number;
+  fromMonth: number;
+  months: TrailingMonth[];
+  incomeCents: number;
+  expenseCents: number;
+  saldoCents: number;
+  bookingCount: number;
+  monthsWithData: number;
+  rows: TrailingCategory[];
+}
+
 export interface MonthlyRow {
   month: number;
   monthName: string;
