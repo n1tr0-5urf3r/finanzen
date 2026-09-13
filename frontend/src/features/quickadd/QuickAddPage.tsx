@@ -166,6 +166,24 @@ export function QuickAddPage() {
         ))}
       </div>
 
+      {/* The comment has its own row, next to the category's.
+          It used to be reachable only through a "⌨" tile inside
+          `.quick__suggestions`, which is a flex child that scrolls — on a short
+          screen it collapses to a single row and that tile is simply not on the
+          page. The confirm bar then said "enter a comment" and pointed at nothing
+          the user could see. A row that is always there cannot collapse. */}
+      <button type="button" className="quick__category" onClick={() => setSheetOpen(true)}>
+        <span className="quick__category-label">{t('bookings.comment')}</span>
+        <span className="quick__category-value">
+          {state.comment.trim() ? (
+            <DataLabel>{state.comment}</DataLabel>
+          ) : (
+            <span className="quick__category-none">{t('quick.needComment')}</span>
+          )}
+        </span>
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+
       {/* The rule table predicts a category from the comment, but a fresh account
           has no rules and some bookings follow none — so the category is always
           visible here and always changeable, rather than only inferable. */}
@@ -187,10 +205,13 @@ export function QuickAddPage() {
         <ChevronRight size={16} aria-hidden="true" />
       </button>
 
+      {/* Missing a comment is not a dead end — the bar becomes the way to fix it.
+          Missing an amount still disables it, because the keypad is right there
+          and visible; there is nowhere to send anyone. */}
       <button
         className={`quick__confirm quick__confirm--${confirmTone}`}
-        disabled={!ready || create.isPending}
-        onClick={() => create.mutate()}
+        disabled={state.cents === 0 || create.isPending}
+        onClick={() => (ready ? create.mutate() : setSheetOpen(true))}
       >
         {missing ?? confirmLabel}
       </button>
