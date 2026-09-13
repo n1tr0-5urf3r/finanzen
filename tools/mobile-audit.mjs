@@ -96,7 +96,10 @@ for (const route of ROUTES) {
     // not scroll — the app scrolls inside its shell. Both together are what keep
     // the browser's URL bar out of the layout: it cannot hide if nothing scrolls
     // it, so there is no viewport transition for a bar to be caught in.
-    const bar = document.querySelector('.mobile-bar');
+    // The first nav item, not the bar's box: the box deliberately overhangs the
+    // bottom of the scrollport to cover the browser's toolbar animation, so its
+    // own rectangle says nothing about whether the bar is usable.
+    const bar = document.querySelector('.mobile-bar a, .mobile-bar__more');
     const barRect = bar ? bar.getBoundingClientRect() : null;
     return {
       authed,
@@ -138,28 +141,18 @@ for (const route of ROUTES) {
     if (report.docScrollHeight > report.innerHeight + 200) {
       const barRect = () =>
         page.evaluate(() => {
-          const el = document.querySelector('.mobile-bar');
+          const el = document.querySelector('.mobile-bar a, .mobile-bar__more');
           if (!el) return null;
           const r = el.getBoundingClientRect();
           return { top: Math.round(r.top), bottom: Math.round(r.bottom), y: Math.round(window.scrollY) };
         });
 
       await page.evaluate(() => window.scrollTo(0, 400));
-      await page.waitForTimeout(60);
-      const during = await barRect();
-      if (during && during.bottom <= VIEWPORT.height - 4) {
-        faults.push(
-          `bottom bar is still fully on screen mid-scroll (bottom ${during.bottom}) — ` +
-            'it should step out of the way while the viewport is moving',
-        );
-      }
-
-      // Settle (180ms) plus the transition back (180ms), with room to spare.
-      await page.waitForTimeout(700);
+      await page.waitForTimeout(400);
       const after = await barRect();
       if (!after || after.bottom > VIEWPORT.height + 1 || after.top < 0) {
         faults.push(
-          `bottom bar did not come back after scrolling to ${after?.y}px ` +
+          `bottom bar left the screen after scrolling to ${after?.y}px ` +
             `(top ${after?.top}, bottom ${after?.bottom})`,
         );
       }

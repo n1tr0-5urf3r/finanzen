@@ -83,27 +83,24 @@
      positioned against the viewport would part company with the bar the moment
      the two disagreed — which is the entire subject of this file. Anchored to the
      dock, it cannot. */
-  .mobile-dock {
-    display: block; position: sticky; bottom: 0; z-index: 30;
-    /* See useScrolling in AppShell: out of the way for the length of a scroll
-       gesture — which is exactly when the browser's own chrome is animating and
-       nothing anchored to the bottom of the screen holds still — and back the
-       moment the viewport stops moving. The transform is applied after layout, so
-       stickiness still computes normally underneath it. */
-    transition: transform .18s var(--ease, ease);
-    will-change: transform;
-  }
-  .mobile-dock[data-scrolling='true'] { transform: translateY(110%); }
-  @media (prefers-reduced-motion: reduce) {
-    .mobile-dock { transition: none; }
-  }
+  .mobile-dock { display: block; position: sticky; bottom: 0; z-index: 30; }
   .mobile-bar {
     display: flex;
-    /* Only iOS reports a non-zero inset here; Android already reserves its
-       gesture area outside the viewport, so adding the inset unconditionally
-       left a dead strip below the bar. `max()` keeps the iOS home indicator
-       clear without padding where there is nothing to clear. */
-    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    /* The bar's box runs 96px PAST the bottom of the scrollport, pulled back by
+       an equal negative margin so its contents stay exactly where they were.
+       
+       That overhang is not decoration. While the browser's toolbar animates, the
+       bar it has stuck to the bottom of the scrollport gets ahead of, or behind,
+       where the screen actually ends — and what that exposes is a strip of page
+       content below the bar, which is what reads as "it jumped". With the box
+       running past the edge there is nothing to expose: the worst case is a bar
+       that looks a few pixels taller for the length of the animation.
+       
+       Only iOS reports a non-zero safe-area inset; Android reserves its gesture
+       area outside the viewport, so `max()` keeps the iOS home indicator clear
+       without padding where there is nothing to clear. */
+    padding-bottom: calc(max(0px, env(safe-area-inset-bottom, 0px)) + 96px);
+    margin-bottom: -96px;
     background: var(--surface-inverse); color: var(--on-inverse);
     padding-top: .35rem; padding-inline: .25rem;
     justify-content: space-around; align-items: stretch;
@@ -157,3 +154,26 @@
   font-size: .9rem;
 }
 .mobile-more a[aria-current='page'] { background: var(--primary-soft); font-weight: 600; }
+
+/* ── installed to the home screen ─────────────────────────────────────────────
+   There is no browser chrome in standalone mode: no URL bar, no toolbar, nothing
+   that hides and reveals on scroll. That removes the problem this file has spent
+   five attempts working around, so this is the one place the bar can be held
+   still for nothing: the shell is exactly the screen, the content scrolls inside
+   it, and the bar is laid out at the bottom of the column rather than tracking
+   anything.
+
+   In a browser TAB the same layout would cost a permanent strip of screen — a
+   page that cannot scroll is a page whose toolbar can never hide — which is why
+   it is scoped here and the tab keeps the sticky bar instead. Each mode gets the
+   best arrangement available to it. */
+@media (max-width: 819px) and (display-mode: standalone) {
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  .app-shell { height: 100svh; min-height: 0; overflow: hidden; }
+  .main {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .mobile-dock { position: static; }
+}
