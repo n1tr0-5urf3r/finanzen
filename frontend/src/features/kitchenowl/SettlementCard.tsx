@@ -18,11 +18,11 @@ import type { KoSettlement } from '../../lib/types';
  * user's side and negative means they owe, and that has been rendered backwards
  * once already.
  *
- * The reasoning is on the card rather than in a commit message, because the one
- * thing a user will otherwise report as a bug is that booking a settlement leaves
- * the year's balance untouched. It does, and it should: the household's purchases
- * are already in the personal ledger at full value, so counting the settlement as
- * an expense would count them twice.
+ * The card states which kind of booking this will be and where it will land,
+ * BEFORE the button is pressed, because both change the year's figures. A
+ * settlement is an expense or an income — never a transfer between the user's own
+ * accounts — since the money goes to, or comes from, another person: it leaves the
+ * account for good and the balance has to show that.
  */
 export function SettlementCard({ onNotice }: { onNotice: (text: string) => void }) {
   const t = useT();
@@ -103,8 +103,22 @@ export function SettlementCard({ onNotice }: { onNotice: (text: string) => void 
               <p className="ko-settle__suggestion">
                 {t('ko.settleSuggestion')}{' '}
                 <DataLabel>{s.suggestedComment}</DataLabel> ·{' '}
-                <Money cents={s.amountCents} /> · {t('ko.settleAsTransfer')}
+                <Money
+                  cents={s.amountCents}
+                  tone={s.kind === 'income' ? 'income' : 'expense'}
+                />{' '}
+                ·{' '}
+                {t(s.kind === 'income' ? 'ko.settleAsIncome' : 'ko.settleAsExpense')}
+                {s.categoryName && (
+                  <>
+                    {' · '}
+                    <DataLabel>{s.categoryName}</DataLabel>
+                  </>
+                )}
               </p>
+            )}
+            {!nothingToSettle && s.categoryIsFallback && (
+              <p className="footnote">{t('ko.settleNoCategory')}</p>
             )}
             <Button
               onClick={() => book.mutate()}
@@ -118,7 +132,7 @@ export function SettlementCard({ onNotice }: { onNotice: (text: string) => void 
         )}
       </div>
 
-      <p className="footnote">{t('ko.settleNoBalanceChange')}</p>
+      <p className="footnote">{t('ko.settleMovesBalance')}</p>
     </section>
   );
 }

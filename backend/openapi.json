@@ -2548,6 +2548,22 @@
         "summary": "Books the settlement in the PERSONAL ledger. Writes nothing to KitchenOwl.",
         "description": "Returns 201 the first time and 200 with the same booking afterwards: asking\ntwice is what a double tap or a retried request looks like, and neither should\nproduce a second row.",
         "operationId": "settle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SettleRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Für diesen Monat bereits gebucht; dieselbe Buchung",
@@ -2560,7 +2576,7 @@
             }
           },
           "201": {
-            "description": "Ausgleich als Umbuchung gebucht",
+            "description": "Ausgleich gebucht — als Ausgabe oder Einnahme, nie als Umbuchung",
             "content": {
               "application/json": {
                 "schema": {
@@ -6069,6 +6085,7 @@
         "description": "Settling up with the household — the one place the two ledgers touch.\n\nA settlement is money moving between the user and the household, not money\nconsumed: the household's purchases are already in the personal ledger at full\nvalue, so booking the settlement as an expense would count them twice. It is\ntherefore a `transfer`, whose `net_cents` is 0 by construction, and it belongs\nto no category.",
         "required": [
           "direction",
+          "categoryIsFallback",
           "amountCents",
           "period",
           "suggestedComment",
@@ -6103,9 +6120,38 @@
               }
             ]
           },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Where it would land — `Haushaltsausgleich`, which is where the user's own\nthirteen historical settlements live."
+          },
+          "categoryIsFallback": {
+            "type": "boolean",
+            "description": "True when that category does not exist here, so the rule table decides and\nthe booking may come out uncategorised. Said out loud rather than discovered."
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "direction": {
             "type": "string",
             "description": "`i_owe` | `household_owes_me` | `settled` | `unknown`. The word the UI reads\nout, decided here so that the figure and the sentence beside it cannot\ndisagree — they have done exactly that once already."
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind",
+                "description": "What settling would book: `expense` when the user owes, `income` when the\nhousehold does, `null` when there is nothing to settle. NEVER `transfer` —\nthis money goes to another person, so it moves the balance."
+              }
+            ]
           },
           "period": {
             "$ref": "#/components/schemas/Period"
@@ -7510,6 +7556,20 @@
           "netCents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SettleRequest": {
+        "type": "object",
+        "description": "The optional body of a `POST`. Everything in it has a sensible default, which is\nwhy the body itself is optional.",
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Overrides `Haushaltsausgleich` for this one booking."
           }
         }
       },

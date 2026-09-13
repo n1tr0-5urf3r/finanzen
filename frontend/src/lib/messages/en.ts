@@ -388,14 +388,17 @@ export const en: Messages = {
   'ko.settleWhy':
     'The one place the two ledgers touch — and only when you ask them to.',
   'ko.settleSuggestion': 'This will book:',
-  'ko.settleAsTransfer': 'as a transfer',
+  'ko.settleAsExpense': 'as an expense',
+  'ko.settleAsIncome': 'as income',
+  'ko.settleNoCategory':
+    'There is no “Haushaltsausgleich” category here — the rule table decides, and otherwise the booking stays uncategorised.',
   'ko.settleAction': 'Book the settlement',
-  'ko.settleDone': 'Booked “{comment}” as a transfer.',
+  'ko.settleDone': 'Booked “{comment}”.',
   'ko.settleAlready': 'Booked for this month: “{comment}” · {when}',
   'ko.settleBasedOn': 'Balance at the time:',
   'ko.settleNoBalance': 'No balance in the mirror yet',
-  'ko.settleNoBalanceChange':
-    'A transfer is money moving, not money consumed. It belongs to no category and does not change the year’s balance: the household purchases are already in your bookings at full value, so counting the settlement as an expense would count them twice.',
+  'ko.settleMovesBalance':
+    'This money goes to another person — it is not a transfer between your own accounts. It really leaves the account, so it moves the balance, and it lands in “Haushaltsausgleich” like every settlement before it.',
   'ko.members': 'Members',
   'ko.tabLedger': 'Expenses',
   'ko.tabReview': 'Suggestions',

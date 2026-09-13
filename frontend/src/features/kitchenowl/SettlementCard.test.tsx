@@ -19,6 +19,10 @@ function settlement(over: Partial<KoSettlement>): KoSettlement {
   return {
     balanceCents: -14227,
     direction: 'i_owe',
+    kind: 'expense',
+    categoryId: 'cat-haushaltsausgleich',
+    categoryName: 'Haushaltsausgleich',
+    categoryIsFallback: false,
     amountCents: 14227,
     period: { year: 2026, month: 9 },
     suggestedComment: 'Ausgleich September',
@@ -89,16 +93,41 @@ describe('settling up', () => {
   });
 
   /**
-   * The one thing a user will otherwise report as a bug: a settlement books
-   * something and the year's balance does not move. It is a transfer, and the card
-   * says why rather than leaving it to be discovered.
+   * What it books has to be on the card before the button is pressed, because both
+   * the kind and the category change the year's figures. This money goes to another
+   * person — it is not a transfer between the user's own accounts — so the card says
+   * that outright rather than leaving it to be discovered in the balance.
    */
-  it('says outright that it books a transfer and moves no balance', async () => {
+  it('says which kind of booking it makes, and where it lands', async () => {
     const { container } = renderCard(settlement({}));
     await screen.findByText('Ausgleich September');
 
-    expect(container.textContent).toContain('Umbuchung');
-    expect(container.textContent).toContain('doppelt zählen');
+    expect(container.textContent).toContain('als Ausgabe');
+    expect(container.textContent).toContain('Haushaltsausgleich');
+    expect(container.textContent).toContain('verändert also die Bilanz');
+    // The claim this card used to make, which was the wrong way round.
+    expect(container.textContent).not.toContain('doppelt zählen');
+    expect(container.textContent).not.toContain('verändert die Jahresbilanz nicht');
+  });
+
+  /** The other direction books the opposite kind, and the card says so. */
+  it('calls it income when the household owes the user', async () => {
+    const { container } = renderCard(
+      settlement({ balanceCents: 14227, direction: 'household_owes_me', kind: 'income' }),
+    );
+    await screen.findByText('Ausgleich September');
+
+    expect(container.textContent).toContain('als Einnahme');
+  });
+
+  /** A missing category is announced, not discovered afterwards in the badge. */
+  it('warns when Haushaltsausgleich does not exist', async () => {
+    const { container } = renderCard(
+      settlement({ categoryId: null, categoryName: null, categoryIsFallback: true }),
+    );
+    await screen.findByText('Ausgleich September');
+
+    expect(container.textContent).toContain('Regeltabelle');
   });
 
   it('books the settlement and then stops offering it', async () => {

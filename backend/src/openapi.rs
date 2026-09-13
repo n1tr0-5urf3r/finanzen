@@ -146,7 +146,7 @@ use crate::{auth::AuthChallenge, error::ErrorBody, models::*};
         KoMember, KoCategory, KoMetadata, KoShare, KoExpense, KoExpensePage,
         KoMatchCandidate, KoDraft, KoDraftPage, KoSyncRun, KoStatus, KoSummary,
         KoPushIntent, KoPushShareInput, KoPushRequest, KoLinkRequest, KoSyncResult,
-        KoSettlement,
+        KoSettlement, crate::kitchenowl::settle::SettleRequest,
         KoCategoryAnalysis, KoCategoryAnalysisRow, KoPayerShare, KoMonthlySeries,
         KoSeriesMonth, KoSeriesSubject,
     )),

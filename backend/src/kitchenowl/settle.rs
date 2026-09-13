@@ -12,14 +12,23 @@
 //! figure, so the two cannot drift apart — a screen that read "+142,27 € · you owe
 //! the household" has been shipped once already.
 //!
-//! **A settlement is a `transfer`.** The household's purchases are in the personal
-//! ledger at FULL value — verified against the real data: Kaufland 19,07, Kino
-//! 22,50, Europapark 158,60 all match KitchenOwl's full amount — so the money paid
-//! in a settlement has largely been counted already. Booking it as an expense would
-//! count it twice. As a transfer its `net_cents` is 0 by construction, it belongs to
-//! no category, and no analysis figure moves. The year's balance does not move
-//! either, and the UI says so rather than letting the user wait for a change that
-//! is not coming.
+//! **A settlement is an expense or an income, never a `transfer`.** This was the
+//! other way round when the module was written, on the argument that the
+//! household's purchases already sit in the personal ledger at FULL value — which
+//! is true — and that booking the settlement again would count them twice — which
+//! is not. Work it through: I pay 20,00 at the supermarket for both of us and book
+//! 20,00, so my ledger says my food cost 20,00 when it really cost 10,00. It is
+//! ALREADY overstated, by exactly the settlement. When the flatmate hands me 10,00
+//! and that lands as income, the ledger comes to 10,00 and agrees with reality. The
+//! same in reverse: they pay, nothing enters my ledger, I owe 10,00, and the expense
+//! I book when I hand it over is the only record that my food cost anything at all.
+//!
+//! `transfer` models money moving between the user's OWN accounts: `net_cents` is 0
+//! by generated column, so it moves neither the balance nor any category. This money
+//! is gone — it went to another person. The user's own ledger has said so for three
+//! years: of the thirteen `Ausgleich` bookings in it, nine are expenses and four are
+//! income, not one is a transfer, and twelve carry the category `Haushaltsausgleich`
+//! as a manual assignment.
 //!
 //! **Idempotency is structural.** The booking carries
 //! `external_source = 'kitchenowl_settlement'` and the period as its `external_id`,
@@ -34,10 +43,10 @@ use uuid::Uuid;
 
 use crate::{
     auth::Ctx,
-    bookings::{SELECT_BOOKING, assert_year_unlocked, row_to_booking},
+    bookings::{SELECT_BOOKING, assert_year_unlocked, resolve_category, row_to_booking},
     error::{AppError, Result},
     locale::month_name_de,
-    models::{KoSettlement, Period},
+    models::{BookingKind, KoSettlement, Period},
 };
 
 /// Deliberately NOT `link::SOURCE`. A settlement references a balance, not an
@@ -57,6 +66,45 @@ fn current_period() -> Period {
         year: today.year(),
         month: today.month() as u8,
     }
+}
+
+/// The optional body of a `POST`. Everything in it has a sensible default, which is
+/// why the body itself is optional.
+#[derive(Debug, Default, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SettleRequest {
+    /// Overrides `Haushaltsausgleich` for this one booking.
+    pub category_id: Option<Uuid>,
+}
+
+/// The category a settlement lands in, matched by name.
+///
+/// Twelve of the user's thirteen historical `Ausgleich` bookings carry it, assigned
+/// by hand — the comment ends in a month name and rules match the whole comment
+/// exactly, so no rule could ever have done it. Landing in the same category is what
+/// puts a new settlement in the same row of the analysis as the old ones.
+const CATEGORY_NAME: &str = "Haushaltsausgleich";
+
+/// Which way the money goes, and therefore what kind of booking it is. Money handed
+/// to another person leaves the account for good; money received arrives in it.
+/// Neither is a transfer, which is for moving money between one's own accounts.
+fn kind_of(direction: &str) -> Option<BookingKind> {
+    match direction {
+        "i_owe" => Some(BookingKind::Expense),
+        "household_owes_me" => Some(BookingKind::Income),
+        _ => None,
+    }
+}
+
+/// `None` when the category does not exist for this tenant — a fresh instance has
+/// the 32 seeded categories and not this one. The caller then falls back to the rule
+/// table and says so, rather than inventing taxonomy behind the user's back.
+async fn settlement_category(conn: &mut PgConnection) -> Result<Option<(Uuid, String)>> {
+    let row = sqlx::query("SELECT id, name FROM categories WHERE lower(name) = lower($1) LIMIT 1")
+        .bind(CATEGORY_NAME)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(row.map(|r| (r.get::<Uuid, _>("id"), r.get::<String, _>("name"))))
 }
 
 /// Negative is the user owing the household. Stated once, used everywhere.
@@ -106,6 +154,7 @@ async fn snapshot_for(
 
 async fn view(conn: &mut PgConnection, period: Period) -> Result<KoSettlement> {
     let balance = my_balance(&mut *conn).await?;
+    let direction = direction_of(balance);
 
     let existing = sqlx::query(&format!(
         "{SELECT_BOOKING} WHERE b.external_source = $1 AND b.external_id = $2"
@@ -116,10 +165,18 @@ async fn view(conn: &mut PgConnection, period: Period) -> Result<KoSettlement> {
     .await?;
 
     let (settled_balance_cents, settled_at) = snapshot_for(&mut *conn, period).await?;
+    // Reported rather than left to be discovered after the fact: the UI has to be
+    // able to say which kind of booking this will be and where it will land BEFORE
+    // the button is pressed, because both of those change the year's figures.
+    let category = settlement_category(&mut *conn).await?;
 
     Ok(KoSettlement {
         balance_cents: balance,
-        direction: direction_of(balance).to_string(),
+        direction: direction.to_string(),
+        kind: kind_of(direction),
+        category_id: category.as_ref().map(|(id, _)| *id),
+        category_name: category.as_ref().map(|(_, name)| name.clone()),
+        category_is_fallback: category.is_none(),
         amount_cents: balance.unwrap_or(0).abs(),
         period,
         suggested_comment: format!("Ausgleich {}", month_name_de(period.month)),
@@ -152,13 +209,19 @@ pub async fn settlement(mut ctx: Ctx) -> Result<Json<KoSettlement>> {
     post,
     path = "/api/v1/kitchenowl/settlement",
     tag = "kitchenowl",
+    request_body = Option<SettleRequest>,
     responses(
-        (status = 201, description = "Ausgleich als Umbuchung gebucht", body = KoSettlement),
+        (status = 201, description = "Ausgleich gebucht — als Ausgabe oder Einnahme, nie als Umbuchung", body = KoSettlement),
         (status = 200, description = "Für diesen Monat bereits gebucht; dieselbe Buchung", body = KoSettlement),
         (status = 422, description = "Nichts auszugleichen", body = crate::error::ErrorBody),
     ),
 )]
-pub async fn settle(mut ctx: Ctx) -> Result<(StatusCode, Json<KoSettlement>)> {
+pub async fn settle(
+    mut ctx: Ctx,
+    // Optional: the button sends `{}` and the tests send no body at all. A missing
+    // body means "the default category", not a 400.
+    body: Option<Json<SettleRequest>>,
+) -> Result<(StatusCode, Json<KoSettlement>)> {
     let period = current_period();
     let current = view(ctx.tenant.conn(), period).await?;
 
@@ -181,27 +244,44 @@ pub async fn settle(mut ctx: Ctx) -> Result<(StatusCode, Json<KoSettlement>)> {
 
     assert_year_unlocked(ctx.tenant.conn(), period.year).await?;
 
+    let Some(kind) = kind_of(&current.direction) else {
+        return Err(AppError::Unprocessable(
+            "Die Richtung des Saldos ist unklar — erst synchronisieren".into(),
+        ));
+    };
+
+    // An explicit category from the caller wins; otherwise `Haushaltsausgleich`,
+    // which is where three years of these bookings already live. Either way it goes
+    // through the ordinary resolver, so the `category_source` state machine — a
+    // category may not be `unresolved`, and `rule` iff a rule id is present — is
+    // satisfied by the same code path every other booking uses.
+    let explicit = body
+        .and_then(|Json(b)| b.category_id)
+        .or(current.category_id);
+    let resolution =
+        resolve_category(ctx.tenant.conn(), &current.suggested_comment, explicit).await?;
+
     let id = Uuid::new_v4();
     let booked_on = chrono::NaiveDate::from_ymd_opt(period.year, period.month as u32, 1);
-    // No category, and `category_source = 'unresolved'` to satisfy the state
-    // machine: a transfer legitimately has none, and `calc::totals` excludes
-    // categoryless transfers from the uncategorised count for exactly this reason,
-    // so booking one does not put a badge on the dashboard that cannot be cleared.
     sqlx::query(
         "INSERT INTO bookings (id, user_id, period_year, period_month, booked_on, kind, \
                                amount_cents, comment, tax_relevant, category_id, \
                                category_source, resolved_rule_id, origin, \
                                external_source, external_id) \
-         VALUES ($1,$2,$3::smallint,$4::smallint,$5,'transfer',$6,$7,false,NULL, \
-                 'unresolved',NULL,'kitchenowl',$8,$9)",
+         VALUES ($1,$2,$3::smallint,$4::smallint,$5,$6,$7,$8,false,$9, \
+                 $10,$11,'kitchenowl',$12,$13)",
     )
     .bind(id)
     .bind(ctx.tenant.user_id())
     .bind(period.year)
     .bind(period.month as i16)
     .bind(booked_on)
+    .bind(kind.as_db())
     .bind(balance.abs())
     .bind(&current.suggested_comment)
+    .bind(resolution.category_id)
+    .bind(resolution.source)
+    .bind(resolution.rule_id)
     .bind(SOURCE)
     .bind(external_key(period))
     .execute(ctx.tenant.conn())

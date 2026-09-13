@@ -422,14 +422,17 @@ export const de = {
   'ko.settleWhy':
     'Die einzige Stelle, an der sich beide Bücher berühren — und nur, wenn du es auslöst.',
   'ko.settleSuggestion': 'Gebucht wird:',
-  'ko.settleAsTransfer': 'als Umbuchung',
+  'ko.settleAsExpense': 'als Ausgabe',
+  'ko.settleAsIncome': 'als Einnahme',
+  'ko.settleNoCategory':
+    'Die Kategorie „Haushaltsausgleich“ gibt es hier nicht — es entscheidet die Regeltabelle, sonst bleibt die Buchung ohne Kategorie.',
   'ko.settleAction': 'Ausgleich buchen',
-  'ko.settleDone': '„{comment}“ als Umbuchung gebucht.',
+  'ko.settleDone': '„{comment}“ gebucht.',
   'ko.settleAlready': 'Für diesen Monat gebucht: „{comment}“ · {when}',
   'ko.settleBasedOn': 'Saldo damals:',
   'ko.settleNoBalance': 'Noch kein Saldo im Spiegel',
-  'ko.settleNoBalanceChange':
-    'Eine Umbuchung ist Geld, das sich bewegt — kein Verbrauch. Sie gehört zu keiner Kategorie und verändert die Jahresbilanz nicht: Die Haushaltseinkäufe stehen bereits in voller Höhe in deinen Buchungen, den Ausgleich als Ausgabe zu zählen würde sie doppelt zählen.',
+  'ko.settleMovesBalance':
+    'Das Geld geht an eine andere Person — keine Umbuchung zwischen eigenen Konten. Es verlässt das Konto wirklich, verändert also die Bilanz und landet in „Haushaltsausgleich“, so wie die bisherigen Ausgleiche auch.',
   'ko.members': 'Mitglieder',
   'ko.tabLedger': 'Ausgaben',
   'ko.tabReview': 'Vorschläge',

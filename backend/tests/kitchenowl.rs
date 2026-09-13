@@ -57,6 +57,10 @@ struct MockState {
     /// rather than only what the mock chose to echo back.
     last_post_body: Option<Value>,
     page_requests: Vec<Option<i64>>,
+    /// Flips the sign of every member's `expense_balance`, so a test can put the
+    /// household in debt to the user instead of the other way round. The settlement
+    /// books a different KIND in that direction, which is the whole point.
+    owed_to_me: bool,
 }
 
 #[derive(Clone)]
@@ -120,16 +124,21 @@ fn offline() -> axum::response::Response {
 }
 
 async fn mock_household(State(mock): State<Mock>) -> axum::response::Response {
-    if mock.0.lock().expect("mock lock").offline {
+    let (offline_now, owed_to_me) = {
+        let m = mock.0.lock().expect("mock lock");
+        (m.offline, m.owed_to_me)
+    };
+    if offline_now {
         return offline();
     }
+    let sign = if owed_to_me { -1.0 } else { 1.0 };
     Json(json!([{
         "id": 1, "name": "Beispielhaushalt", "expenses_feature": true,
         "member": [
             {"id": 1, "name": "Fabi", "username": "fabi",
-             "expense_balance": -149.16999999999217, "owner": true, "admin": false},
+             "expense_balance": sign * -149.16999999999217, "owner": true, "admin": false},
             {"id": 2, "name": "Ada", "username": "ada",
-             "expense_balance": 149.16999999999217, "owner": false, "admin": true},
+             "expense_balance": sign * 149.16999999999217, "owner": false, "admin": true},
         ]
     }]))
     .into_response()
@@ -284,6 +293,11 @@ impl MockServer {
 
     fn seed(&self, expenses: Vec<Value>) {
         self.inner().expenses = expenses;
+    }
+
+    /// The household owes the user, rather than the other way round.
+    fn owe_the_user(&self) {
+        self.inner().owed_to_me = true;
     }
 
     fn inner(&self) -> std::sync::MutexGuard<'_, MockState> {
@@ -1513,12 +1527,18 @@ async fn the_sync_loop_can_see_who_opted_in() {
 /// booking, so it is the one that has to be hardest to get wrong.
 ///
 /// Four things, each with a plausible wrong answer: the balance keeps KitchenOwl's
-/// sign (negative is the user owing), the booking is a TRANSFER so no category and
-/// no net moves, pressing twice books once, and nothing at all is sent to
-/// KitchenOwl — a settlement is recorded locally and appears over there only as the
-/// balance changing.
+/// sign (negative is the user owing), the booking is an EXPENSE that moves the
+/// balance by its full amount, pressing twice books once, and nothing at all is sent
+/// to KitchenOwl — a settlement is recorded locally and appears over there only as
+/// the balance changing.
+///
+/// The kind is the one this module got wrong at first. A `transfer` has `net_cents`
+/// 0 by generated column, so it moves neither the balance nor any category — right
+/// for money between the user's own accounts, wrong for money handed to a flatmate,
+/// which is gone. The user's own ledger settles it: thirteen `Ausgleich` bookings
+/// over three years, nine expenses and four income, no transfers.
 #[tokio::test]
-async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
+async fn settling_up_books_one_expense_and_writes_nothing_to_kitchenowl() {
     let mock = MockServer::start().await;
     mock.seed(vec![expense(
         1,
@@ -1543,6 +1563,11 @@ async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
     assert_eq!(view["direction"], "i_owe", "negative means the user owes");
     assert_eq!(view["amountCents"], 14917, "what changes hands is positive");
     assert_eq!(view["alreadySettled"], false);
+    // Stated before the button is pressed, because it changes the year's figures.
+    assert_eq!(
+        view["kind"], "expense",
+        "owing the household is money about to leave: {view}"
+    );
     assert!(
         view["suggestedComment"]
             .as_str()
@@ -1557,14 +1582,12 @@ async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
 
     let (status, first) = app.send("POST", "/kitchenowl/settlement", None).await;
     assert_eq!(status, StatusCode::CREATED, "{first}");
-    assert_eq!(first["booking"]["kind"], "transfer");
+    assert_eq!(first["booking"]["kind"], "expense");
     assert_eq!(first["booking"]["amountCents"], 14917);
-    // Structural, not conventional: `net_cents` is a generated column.
-    assert_eq!(first["booking"]["netCents"], 0);
-    assert!(
-        first["booking"]["categoryId"].is_null(),
-        "a settlement consumes nothing, so it belongs to no category"
-    );
+    // Structural, not conventional: `net_cents` is a generated column, and for an
+    // expense it carries the full amount. A transfer would sit here at 0 and the
+    // money would have left the account without the ledger noticing.
+    assert_eq!(first["booking"]["netCents"], 14917);
     assert_eq!(first["alreadySettled"], true);
     assert_eq!(
         first["settledBalanceCents"], -14917,
@@ -1581,15 +1604,25 @@ async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
         .await;
     assert_eq!(page["total"], 1, "one settlement, not two: {page}");
 
-    // The whole point of the transfer kind: no category figure moves.
+    // The whole point of the correction: the money is gone, so the year says so.
     let (_, analysis) = app
         .send("GET", &format!("/analysis/categories?year={year}"), None)
         .await;
-    assert_eq!(analysis["totalNetCents"], 0);
-    assert_eq!(analysis["excludedTransferCount"], 1);
     assert_eq!(
-        analysis["uncategorizedCount"], 0,
-        "a categoryless transfer must not raise a badge that can never be cleared"
+        analysis["totalNetCents"], 14917,
+        "the settlement is a cost of the year, not an invisible movement: {analysis}"
+    );
+    assert_eq!(
+        analysis["excludedTransferCount"], 0,
+        "nothing here is a transfer any more"
+    );
+
+    let (_, dashboard) = app
+        .send("GET", &format!("/dashboard?year={year}"), None)
+        .await;
+    assert_eq!(
+        dashboard["balanceCents"], -14917,
+        "paying the household lowers the balance by exactly what was paid: {dashboard}"
     );
 
     // THE invariant: the live instance is untouched.
@@ -1597,6 +1630,98 @@ async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
         mock.inner().post_count,
         posts_before,
         "a settlement is recorded locally; KitchenOwl learns of it as a balance"
+    );
+}
+
+/// The other direction, which is not a mirror image: it books the opposite KIND.
+///
+/// When the household owes the user, the settlement is money ARRIVING, so it is
+/// income and the balance goes up. Under the old transfer modelling both directions
+/// produced the same invisible zero, which is how a bug like this hides.
+#[tokio::test]
+async fn being_owed_books_income_and_raises_the_balance() {
+    let mock = MockServer::start().await;
+    mock.owe_the_user();
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        1,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(view["balanceCents"], 14917, "positive: the household owes");
+    assert_eq!(view["direction"], "household_owes_me");
+    assert_eq!(view["kind"], "income", "money about to arrive: {view}");
+
+    let year = view["period"]["year"].as_i64().expect("year");
+    let (status, booked) = app.send("POST", "/kitchenowl/settlement", None).await;
+    assert_eq!(status, StatusCode::CREATED, "{booked}");
+    assert_eq!(booked["booking"]["kind"], "income");
+    // Income is stored negative by the netting rule, which is what makes the
+    // balance — `-sum(net)` — go UP by the amount received.
+    assert_eq!(booked["booking"]["netCents"], -14917);
+
+    let (_, dashboard) = app
+        .send("GET", &format!("/dashboard?year={year}"), None)
+        .await;
+    assert_eq!(
+        dashboard["balanceCents"], 14917,
+        "being paid back raises the balance: {dashboard}"
+    );
+}
+
+/// Where a settlement lands, and what happens when that category is absent.
+///
+/// The user's own twelve settlements sit in `Haushaltsausgleich`, assigned by hand
+/// — the comment ends in a month name, and rules match the whole comment, so no
+/// rule could have done it. A fresh instance has the 32 seeded categories and not
+/// that one, so the endpoint says outright that it is falling back instead of
+/// quietly inventing taxonomy.
+#[tokio::test]
+async fn a_settlement_lands_in_haushaltsausgleich_when_it_exists() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    // Nothing named that yet: the fallback is announced, not hidden.
+    let (_, before) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(before["categoryIsFallback"], true, "{before}");
+    assert!(before["categoryId"].is_null());
+
+    let (status, created) = app
+        .send(
+            "POST",
+            "/categories",
+            Some(json!({"name": "Haushaltsausgleich", "typeCode": "variabel"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+
+    let (_, after) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(after["categoryIsFallback"], false);
+    assert_eq!(after["categoryName"], "Haushaltsausgleich");
+
+    let (_, booked) = app.send("POST", "/kitchenowl/settlement", None).await;
+    assert_eq!(booked["booking"]["categoryName"], "Haushaltsausgleich");
+    assert_eq!(
+        booked["booking"]["categorySource"], "manual",
+        "an override, so a later rule change cannot move three years of settlements"
     );
 }
 

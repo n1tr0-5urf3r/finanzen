@@ -717,6 +717,16 @@ export interface KoSummary {
 export interface KoSettlement {
   balanceCents: number | null;
   direction: 'i_owe' | 'household_owes_me' | 'settled' | 'unknown';
+  /**
+   * What settling books: an expense when the user owes, an income when the
+   * household does. Never a transfer — the money goes to another person, so it
+   * moves the balance.
+   */
+  kind: BookingKind | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** True when `Haushaltsausgleich` is missing, so the rule table decides instead. */
+  categoryIsFallback: boolean;
   /** Always positive: what would change hands. */
   amountCents: number;
   period: Period;

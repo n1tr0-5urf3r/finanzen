@@ -1247,6 +1247,17 @@ pub struct KoSettlement {
     /// out, decided here so that the figure and the sentence beside it cannot
     /// disagree — they have done exactly that once already.
     pub direction: String,
+    /// What settling would book: `expense` when the user owes, `income` when the
+    /// household does, `null` when there is nothing to settle. NEVER `transfer` —
+    /// this money goes to another person, so it moves the balance.
+    pub kind: Option<BookingKind>,
+    /// Where it would land — `Haushaltsausgleich`, which is where the user's own
+    /// thirteen historical settlements live.
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    /// True when that category does not exist here, so the rule table decides and
+    /// the booking may come out uncategorised. Said out loud rather than discovered.
+    pub category_is_fallback: bool,
     /// Always positive: the sum that would change hands. `0` when settled.
     pub amount_cents: i64,
     pub period: Period,
