@@ -61,50 +61,46 @@
    the one thing the phone is used for. */
 .mobile-bar, .mobile-dock { display: none; }
 @media (max-width: 819px) {
-  /* The bar STICKS. It is neither fixed nor merely laid out.
+  /* The bar FLOATS, inset from every edge.
      
-     Fixed failed three times: a fixed element is placed against the LAYOUT
-     viewport while the URL bar hiding moves the VISUAL one, and nothing makes one
-     track the other mid-gesture. Making the shell non-scrolling fixed that
-     completely — and cost the strip of screen the URL bar then never gives back,
-     because a page that cannot scroll is a page whose URL bar cannot hide.
+     Five attempts held it flush against the bottom of the screen — fixed, then
+     with svh, then a compositor hint, then visualViewport correction, then a
+     non-scrolling shell, then sticky — and every one of them was beaten by the
+     browser's toolbar animating in or out. The mistake was not the positioning
+     method. It was flushness: a bar welded to the screen edge has no tolerance,
+     so the few pixels the browser is out by during the animation tear a visible
+     strip of page out of the bottom of the screen, and that strip is what reads
+     as jumping.
      
-     So the document scrolls again, and the bar is `position: sticky` at the
-     bottom of that scroll. Sticky is the one of the three that is defined against
-     the SCROLLPORT: the browser moves it with the scroll it belongs to, on the
-     compositor, including while its own chrome is animating out of the way. The
-     screen comes back, and the bar has nothing left to disagree with. */
+     Inset by .6rem on three sides it is an island. Page content is SUPPOSED to be
+     visible around and under it, so the same few pixels of movement are just the
+     island shifting slightly — there is no edge for it to come away from. Taken
+     from coffee-tracker, which does exactly this and does not have the problem.
+     
+     `fixed` is then the right method after all: it is measured against the visual
+     viewport, which is what the user is looking at. */
   .app-shell { flex-direction: column; min-height: 100svh; }
   .sidebar { display: none; }
-  /* Fills the column so the bar is at the bottom even on a short page. The page
-     itself is the scroller again. */
-  .main { flex: 1 1 auto; min-width: 0; padding-bottom: .75rem; }
-  /* The dock is the sticky thing, and the "Mehr" sheet lives inside it. A sheet
-     positioned against the viewport would part company with the bar the moment
-     the two disagreed — which is the entire subject of this file. Anchored to the
-     dock, it cannot. */
-  .mobile-dock { display: block; position: sticky; bottom: 0; z-index: 30; }
+  /* Enough room under the content for the island plus its inset, so the last row
+     of a list is never parked underneath it. */
+  .main {
+    flex: 1 1 auto; min-width: 0;
+    padding-bottom: calc(5.75rem + max(0px, env(safe-area-inset-bottom, 0px)));
+  }
+  /* The dock carries both the island and the "Mehr" sheet, so the sheet rides
+     with it by construction rather than by agreement. */
+  .mobile-dock {
+    display: block; position: fixed; z-index: 40;
+    inset: auto .6rem calc(.6rem + max(0px, env(safe-area-inset-bottom, 0px))) .6rem;
+  }
   .mobile-bar {
     display: flex;
-    /* The bar's box runs 96px PAST the bottom of the scrollport, pulled back by
-       an equal negative margin so its contents stay exactly where they were.
-       
-       That overhang is not decoration. While the browser's toolbar animates, the
-       bar it has stuck to the bottom of the scrollport gets ahead of, or behind,
-       where the screen actually ends — and what that exposes is a strip of page
-       content below the bar, which is what reads as "it jumped". With the box
-       running past the edge there is nothing to expose: the worst case is a bar
-       that looks a few pixels taller for the length of the animation.
-       
-       Only iOS reports a non-zero safe-area inset; Android reserves its gesture
-       area outside the viewport, so `max()` keeps the iOS home indicator clear
-       without padding where there is nothing to clear. */
-    padding-bottom: calc(max(0px, env(safe-area-inset-bottom, 0px)) + 96px);
-    margin-bottom: -96px;
     background: var(--surface-inverse); color: var(--on-inverse);
-    padding-top: .35rem; padding-inline: .25rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: var(--r-xl);
+    padding: .3rem .3rem;
     justify-content: space-around; align-items: stretch;
-    box-shadow: 0 -2px 12px rgba(0,0,0,.25);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
   }
   /* Anchors AND the "Mehr" button: selecting only `a` left the button unstyled
      and collapsed the row. `min-width: 0` is what stops a long label — English
@@ -113,24 +109,28 @@
   .mobile-bar__more {
     flex: 1 1 0; min-width: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: .15rem; padding: .4rem .15rem;
+    gap: .15rem; padding: .35rem .15rem;
     background: transparent; border: 0;
     color: var(--on-inverse-muted);
     font-size: .66rem; line-height: 1.15; text-decoration: none;
-    border-radius: var(--r-md); min-height: var(--tap);
+    border-radius: calc(var(--r-xl) - .3rem); min-height: var(--tap);
   }
   /* One line, ellipsised, rather than wrapping and pushing the bar taller. */
   .mobile-bar a > :not(svg),
   .mobile-bar__more > :not(svg) {
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .mobile-bar a[aria-current='page'] { color: var(--on-inverse); }
+  .mobile-bar a[aria-current='page'] {
+    color: var(--on-inverse); background: rgba(255,255,255,.10);
+  }
   .mobile-bar__more.is-open { color: var(--on-inverse); background: rgba(255,255,255,.1); }
-  /* The one fixed-width item; everything else shares what is left. */
+  /* The one fixed-width item; everything else shares what is left. It sits INSIDE
+     the island now — a button poking out of the top of a floating pill is exactly
+     the kind of hard edge this layout is getting rid of. */
   .mobile-bar .mobile-bar__add {
     color: var(--on-primary); background: var(--primary);
-    margin: -.6rem .2rem 0; border-radius: var(--r-lg);
-    flex: 0 0 58px; min-width: 58px;
+    margin: 0 .2rem; border-radius: calc(var(--r-xl) - .3rem);
+    flex: 0 0 56px; min-width: 56px;
   }
 }
 
@@ -139,10 +139,10 @@
    there is no sidebar to fall back to below 820px. */
 .sheet-scrim { position: fixed; inset: 0; z-index: 35; background: rgba(14,17,19,.5); }
 .mobile-more {
-  /* Anchored to the dock directly above the bar, so it rides with it by
+  /* Anchored to the dock directly above the island, so it rides with it by
      construction rather than by agreement. */
   position: absolute; z-index: 36;
-  inset: auto .5rem calc(100% + .35rem) .5rem;
+  inset: auto 0 calc(100% + .4rem) 0;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); box-shadow: var(--shadow-3);
   display: grid; padding: .35rem;
@@ -155,25 +155,6 @@
 }
 .mobile-more a[aria-current='page'] { background: var(--primary-soft); font-weight: 600; }
 
-/* ── installed to the home screen ─────────────────────────────────────────────
-   There is no browser chrome in standalone mode: no URL bar, no toolbar, nothing
-   that hides and reveals on scroll. That removes the problem this file has spent
-   five attempts working around, so this is the one place the bar can be held
-   still for nothing: the shell is exactly the screen, the content scrolls inside
-   it, and the bar is laid out at the bottom of the column rather than tracking
-   anything.
-
-   In a browser TAB the same layout would cost a permanent strip of screen — a
-   page that cannot scroll is a page whose toolbar can never hide — which is why
-   it is scoped here and the tab keeps the sticky bar instead. Each mode gets the
-   best arrangement available to it. */
-@media (max-width: 819px) and (display-mode: standalone) {
-  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
-  .app-shell { height: 100svh; min-height: 0; overflow: hidden; }
-  .main {
-    flex: 1 1 auto; min-height: 0;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-  }
-  .mobile-dock { position: static; }
-}
+/* Installed to the home screen there is no browser chrome at all — no toolbar to
+   animate, nothing for the island to be out of step with. It needs no special
+   layout there; it is simply at its calmest. */

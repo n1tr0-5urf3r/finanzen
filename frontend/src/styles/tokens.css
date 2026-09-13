@@ -81,7 +81,7 @@
   --info:var(--accent); --info-soft:var(--accent-soft);
 
   /* ── geometry and motion ────────────────────────────────────────────────── */
-  --r-sm:3px; --r-md:6px; --r-lg:12px; --r-pill:999px;
+  --r-sm:3px; --r-md:6px; --r-lg:12px; --r-xl:20px; --r-pill:999px;
   --shadow-1:0 1px 2px rgba(14,17,19,.07), 0 1px 3px rgba(14,17,19,.05);
   --shadow-2:0 6px 16px rgba(14,17,19,.10);
   --shadow-3:0 24px 60px rgba(14,17,19,.22);
