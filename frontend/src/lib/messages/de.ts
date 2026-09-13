@@ -222,7 +222,6 @@ export const de = {
 
   'quick.title': 'Schnellerfassung',
   'quick.frequent': 'Häufig',
-  'quick.otherComment': 'Anderer Kommentar',
   'quick.commentSearch': 'Kommentar suchen oder neu eingeben',
   'quick.useAsNew': '„{comment}“ als neuen Kommentar verwenden',
   'quick.categorySearch': 'Kategorie suchen',

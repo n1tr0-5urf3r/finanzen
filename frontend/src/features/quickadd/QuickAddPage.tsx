@@ -141,12 +141,6 @@ export function QuickAddPage() {
               onSelect={() => dispatch({ type: 'setComment', comment: tile.comment })}
             />
           ))}
-          <button className="tile tile--more" onClick={() => setSheetOpen(true)}>
-            <span className="tile__comment" style={{ textAlign: 'center' }}>⌨</span>
-            <span className="tile__category" style={{ textAlign: 'center' }}>
-              {t('quick.otherComment')}
-            </span>
-          </button>
         </div>
       </div>
 

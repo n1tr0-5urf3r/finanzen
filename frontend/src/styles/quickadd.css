@@ -29,16 +29,37 @@
 .amount-display--transfer { color: #a3a7d6; }
 .quick__meta { font-size: .8rem; color: var(--on-inverse-muted); }
 
+/* One row that scrolls SIDEWAYS, and never shrinks.
+   
+   As a growable 3-column grid this was the only flexible element in a fixed-height
+   column, so every pixel anything else needed came out of it — add one row below
+   and the frequent comments collapse to a sliver, which is what happened the
+   moment the comment row arrived. A fixed-height strip cannot be squeezed, and
+   sideways is where a phone has room to spare: five or six comments are one swipe
+   away instead of a second row that costs 62px of height nobody has. */
 .quick__suggestions {
-  flex: 1; min-height: 0; overflow-y: auto;
+  flex: 0 0 auto;
   padding: 0 .6rem .5rem;
 }
+.tile-grid {
+  display: flex; gap: .45rem;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  /* Chrome parks a freshly-populated strip at its far end, because scroll
+     anchoring treats the growing content as a reason to keep the last element
+     where it was. The tiles arrive after their query resolves, so without this
+     the strip opens showing the LAST suggestions and the most frequent one is
+     off-screen to the left — the opposite of the point. */
+  overflow-anchor: none;
+  /* The strip bleeds to both edges so a half-visible tile says "swipe me". */
+  margin-inline: -.6rem; padding-inline: .6rem;
+  scrollbar-width: none;
+}
+.tile-grid::-webkit-scrollbar { display: none; }
+.tile-grid > * { flex: 0 0 auto; width: 9.5rem; }
 .quick__section-label {
   font-size: .68rem; letter-spacing: .09em; text-transform: uppercase;
   color: var(--on-inverse-muted); padding: .35rem .25rem; font-weight: 700;
 }
-.tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; }
-
 .tile {
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08);
   border-radius: var(--r-md); color: var(--on-inverse);
@@ -64,14 +85,21 @@
   font-size: .62rem; color: var(--accent-bright); font-weight: 700;
   background: rgba(0,0,0,.25); border-radius: var(--r-pill); padding: .05rem .3rem;
 }
-.tile--more { align-items: center; justify-content: center; color: var(--on-inverse-muted); }
 
+/* The keypad absorbs what is left instead. Its rows share the slack, and the
+   minimum keeps every key a real tap target on a short screen — a key that shrinks
+   a little is a far better trade than a row of suggestions that disappears. */
 .keypad {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem;
-  padding: .5rem .6rem;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, minmax(var(--tap), 1fr));
+  gap: .4rem; padding: .5rem .6rem;
+  flex: 1 1 auto; min-height: 0;
 }
+/* `--tap-lg` as a floor would fight the grid's `minmax(--tap, 1fr)` on a short
+   screen and push the confirm bar off the bottom. The row sets the height; the
+   button fills it and never goes under a real tap target. */
 .keypad button {
-  min-height: var(--tap-lg);
+  min-height: var(--tap); height: 100%;
   background: rgba(255,255,255,.09); border: 0; border-radius: var(--r-md);
   color: var(--on-inverse); font-size: 1.35rem; font-weight: 600;
 }

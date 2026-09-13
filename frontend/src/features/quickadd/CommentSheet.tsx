@@ -59,7 +59,7 @@ export function CommentSheet({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={t('quick.otherComment')}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={t('bookings.comment')}>
         <div className="sheet__header">
           <input
             className="input"

@@ -200,7 +200,6 @@ export const en: Messages = {
   'import.reviewDone': 'The review queue is empty.',
   'quick.title': 'Quick add',
   'quick.frequent': 'Frequent',
-  'quick.otherComment': 'Another comment',
   'quick.commentSearch': 'Search or type a new comment',
   'quick.useAsNew': 'Use “{comment}” as a new comment',
   'quick.categorySearch': 'Search categories',
