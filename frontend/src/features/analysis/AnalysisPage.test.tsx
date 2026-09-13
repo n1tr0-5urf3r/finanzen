@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../lib/i18n';
@@ -14,6 +14,7 @@ vi.mock('../../lib/api', async () => {
 });
 
 const { AnalysisPage } = await import('./AnalysisPage');
+const { CompareRedirect } = await import('../compare/CompareRedirect');
 
 function row(over: Partial<CategoryAnalysisRow>): CategoryAnalysisRow {
   return {
@@ -92,9 +93,27 @@ function renderPage(locale: 'de' | 'en' = 'de') {
 
 afterEach(cleanup);
 
+/** Enough of a comparison for the tab to mount; its own suite tests the figures. */
+const COMPARISON = {
+  year: 2026,
+  previousYear: 2025,
+  current: { year: 2026, monthsWithData: 9, lastMonthWithData: 9 },
+  previous: { year: 2025, monthsWithData: 12, lastMonthWithData: 12 },
+  comparableMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  fullyComparable: false,
+  rows: [],
+  byType: [],
+  previousYearHasData: true,
+};
+
 beforeEach(() => {
   api.mockReset();
-  api.mockResolvedValue(ANALYSIS);
+  api.mockImplementation((path: string) => {
+    const p = String(path);
+    if (p.startsWith('/analysis/compare')) return Promise.resolve(COMPARISON as never);
+    if (p.startsWith('/analysis/trailing')) return Promise.resolve({ months: [] } as never);
+    return Promise.resolve(ANALYSIS as never);
+  });
 });
 
 function tableRows(container: HTMLElement) {
@@ -206,4 +225,61 @@ describe('the category analysis', () => {
       expect(label.getAttribute('lang')).toBe('de');
     }
   });
+
+  /**
+   * The comparison used to be a screen of its own, which is exactly the split the
+   * household's identical pair never had. Both halves are reachable from here
+   * now, and the year survives the switch — going from the breakdown of a year to
+   * the comparison of that same year must not quietly send you back to today.
+   */
+  it('reaches the comparison from the same screen, keeping the year', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Miete');
+
+    await user.click(screen.getByRole('tab', { name: 'Jahresvergleich' }));
+
+    await waitFor(() =>
+      expect(api.mock.calls.map(([path]) => String(path))).toContain(
+        '/analysis/compare?year=2026',
+      ),
+    );
+    expect(screen.getByRole('tab', { name: 'Jahresvergleich' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('opens on the category breakdown when no tab is named', async () => {
+    renderPage();
+    await screen.findAllByText('Miete');
+    expect(screen.getByRole('tab', { name: 'Nach Kategorie' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(api.mock.calls.map(([p]) => String(p))).not.toContain('/analysis/compare?year=2026');
+  });
 });
+
+describe('the address the comparison used to live at', () => {
+  /**
+   * A URL that worked an hour ago should not 404 because the screens were tidied,
+   * and the year in it is the whole point of having bookmarked it.
+   */
+  it('still lands on the comparison, with its query string intact', () => {
+    render(
+      <MemoryRouter initialEntries={['/vergleich?jahr=2024']}>
+        <Routes>
+          <Route path="/vergleich" element={<CompareRedirect />} />
+          <Route path="/auswertung" element={<Landed />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('landed').textContent).toBe('?jahr=2024&ansicht=vergleich');
+  });
+});
+
+function Landed() {
+  const { search } = useLocation();
+  return <span data-testid="landed">{search}</span>;
+}

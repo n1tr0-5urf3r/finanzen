@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { FlowMoney, Money, ScopeNote } from '../../components/Money';
@@ -8,11 +7,10 @@ import {
   Banner,
   EmptyState,
   ErrorState,
+  Kpi,
   LoadingState,
-  PageHeader,
   StatusPill,
 } from '../../components/ui';
-import { YearPicker } from '../../components/YearPicker';
 import { api, asList } from '../../lib/api';
 import { formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
@@ -82,10 +80,8 @@ const COLUMNS: { key: SortKey; labelKey: MessageKey; numeric: boolean }[] = [
  * different months the restricted figures lead, the raw ones are one click away,
  * and the banner says which is which rather than leaving it to be noticed.
  */
-export function ComparePage() {
+export function CompareTab({ year }: { year: number }) {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const year = Number(params.get('jahr')) || new Date().getFullYear();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'delta', desc: true });
   const [basisOverride, setBasisOverride] = useState<Basis | null>(null);
   // Which category the month-by-month pair is drawn for. Empty means "the one at
@@ -99,7 +95,9 @@ export function ComparePage() {
 
   // The window ends where the year's data ends: a trailing twelve months that ran
   // to December of a year still in progress would be four empty months of nothing.
-  const endMonth = query.data?.current.lastMonthWithData ?? 12;
+  // Optional all the way down: `data` guarded but `current` assumed is how a
+  // partial payload white-screens the tab instead of degrading to a default.
+  const endMonth = query.data?.current?.lastMonthWithData ?? 12;
   const trailing = useQuery({
     queryKey: qk.derived.trailing(year, endMonth),
     queryFn: () => api<TrailingWindow>(`/analysis/trailing?year=${year}&month=${endMonth}`),
@@ -152,37 +150,6 @@ export function ComparePage() {
 
   return (
     <>
-      <PageHeader title={t('compare.title')} subtitle={t('compare.intro')} />
-
-      <div
-        className="panel panel--pad"
-        style={{
-          marginBottom: '1rem',
-          display: 'flex',
-          gap: '.75rem',
-          flexWrap: 'wrap',
-          alignItems: 'flex-end',
-        }}
-      >
-        <div style={{ minWidth: '8rem' }}>
-          <YearPicker
-            id="compare-year"
-            value={year}
-            onChange={(next) =>
-              setParams(
-                (prev) => {
-                  const p = new URLSearchParams(prev);
-                  p.set('jahr', String(next));
-                  return p;
-                },
-                { replace: true },
-              )
-            }
-          />
-        </div>
-        <ScopeNote transfersIncluded={false} />
-      </div>
-
       {query.isLoading && <LoadingState />}
       {query.isError && <ErrorState error={query.error} retry={() => query.refetch()} />}
 
@@ -216,47 +183,32 @@ export function ComparePage() {
 
           {totals && (
             <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
-              <div className="kpi">
-                <span className="kpi__label">{t('compare.saldoChange')}</span>
-                <span className="kpi__value">
-                  <FlowMoney flowCents={totals.current - totals.previous} />
-                </span>
-                <span className="kpi__scope">
-                  {t('compare.versus', { year: data.previousYear })}
-                </span>
-              </div>
-              <div className="kpi">
-                <span className="kpi__label">{t('compare.expenseChange')}</span>
-                <span className="kpi__value">
-                  <FlowMoney netCents={totals.currentExpense - totals.previousExpense} />
-                </span>
-                <span className="kpi__scope">
-                  {t('compare.versus', { year: data.previousYear })}
-                </span>
-              </div>
-              <div className="kpi">
-                <span className="kpi__label">{t('compare.incomeChange')}</span>
-                <span className="kpi__value">
-                  <FlowMoney flowCents={totals.currentIncome - totals.previousIncome} />
-                </span>
-                <span className="kpi__scope">
-                  {t('compare.versus', { year: data.previousYear })}
-                </span>
-              </div>
-              <div className="kpi">
-                <span className="kpi__label">{t('compare.basis')}</span>
-                <span className="kpi__value" style={{ fontSize: '1rem' }}>
+              <Kpi label={t('compare.saldoChange')} scope="without">
+                <FlowMoney flowCents={totals.current - totals.previous} />
+              </Kpi>
+              <Kpi label={t('compare.expenseChange')} scope="without">
+                <FlowMoney netCents={totals.currentExpense - totals.previousExpense} />
+              </Kpi>
+              <Kpi label={t('compare.incomeChange')} scope="without">
+                <FlowMoney flowCents={totals.currentIncome - totals.previousIncome} />
+              </Kpi>
+              {/* Not a figure from the ledger but a statement about which figures
+                  the other three are, so the transfers question does not arise.
+                  The months behind it are in the banner above when they differ. */}
+              <Kpi
+                label={t('compare.basis')}
+                scope="none"
+                hint={t('compare.monthsCovered', {
+                  current: data.current.monthsWithData,
+                  previous: data.previous.monthsWithData,
+                })}
+              >
+                <span style={{ fontSize: '1rem' }}>
                   {basis === 'comparable'
                     ? t('compare.basisComparable', { count: data.comparableMonths.length })
                     : t('compare.basisRaw')}
                 </span>
-                <span className="kpi__scope">
-                  {t('compare.monthsCovered', {
-                    current: data.current.monthsWithData,
-                    previous: data.previous.monthsWithData,
-                  })}
-                </span>
-              </div>
+              </Kpi>
             </div>
           )}
 
@@ -430,7 +382,7 @@ export function ComparePage() {
 
           {asList<CompareTypeRow>(data.byType).length > 0 && (
             <div className="panel panel--pad" style={{ marginTop: '1rem' }}>
-              <h2 style={{ marginBottom: '.6rem' }}>{t('compare.byType')}</h2>
+              <h2>{t('compare.byType')}</h2>
               <div className="table-wrap">
                 <table className="data-table">
                   <tbody>

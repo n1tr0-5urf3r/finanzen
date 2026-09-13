@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  ArrowDownUp, BarChart3, CalendarRange, FileSpreadsheet, GitCompareArrows,
+  ArrowDownUp, BarChart3, CalendarRange, FileSpreadsheet,
   LayoutDashboard, MoreHorizontal, PiggyBank, Plus, Receipt, Repeat, Search,
   Settings, Tags, WalletMinimal,
 } from 'lucide-react';
@@ -16,7 +16,6 @@ const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] 
   { to: '/suche', labelKey: 'nav.search', icon: Search },
   { to: '/monate', labelKey: 'nav.months', icon: CalendarRange },
   { to: '/auswertung', labelKey: 'nav.analysis', icon: BarChart3 },
-  { to: '/vergleich', labelKey: 'nav.compare', icon: GitCompareArrows },
   { to: '/steuer', labelKey: 'nav.tax', icon: Receipt },
   { to: '/vorlagen', labelKey: 'nav.recurring', icon: Repeat },
   { to: '/ruecklagen', labelKey: 'nav.funds', icon: PiggyBank },
