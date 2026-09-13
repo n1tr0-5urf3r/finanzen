@@ -39,7 +39,7 @@ const TABS: [Tab, MessageKey][] = [
 export function SettingsPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
-  const raw = params.get('bereich');
+  const raw = params.get('ansicht');
   const tab: Tab = (TABS.find(([value]) => value === raw)?.[0] ?? 'jahre') as Tab;
 
   return (
@@ -58,8 +58,8 @@ export function SettingsPage() {
               setParams(
                 (prev) => {
                   const next = new URLSearchParams(prev);
-                  if (value === 'jahre') next.delete('bereich');
-                  else next.set('bereich', value);
+                  if (value === 'jahre') next.delete('ansicht');
+                  else next.set('ansicht', value);
                   return next;
                 },
                 { replace: true },

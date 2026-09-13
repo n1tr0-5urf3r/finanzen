@@ -108,6 +108,16 @@ beforeEach(() => {
   });
 });
 
+/**
+ * Both views are in the DOM at once and CSS picks, so a template's checkbox exists
+ * twice. These tests speak to the table's copy; `.screen-cards` is asserted on its
+ * own further down.
+ */
+function tick(container: HTMLElement, name: string) {
+  const table = container.querySelector('.screen-table') as HTMLElement;
+  return within(table).getByLabelText(name);
+}
+
 describe('the monthly checklist', () => {
   /**
    * The day-to-day win in one assertion: everything due and not yet booked is
@@ -115,28 +125,28 @@ describe('the monthly checklist', () => {
    * change makes the user tick eighteen boxes by hand, this breaks.
    */
   it('preselects exactly what is due and not already booked', async () => {
-    renderPage();
-    await screen.findByLabelText('Miete');
+    const { container } = renderPage();
+    await screen.findAllByLabelText('Miete');
 
-    expect(screen.getByLabelText('Miete')).toBeChecked();
-    expect(screen.getByLabelText('Spotify')).toBeChecked();
+    expect(tick(container, 'Miete')).toBeChecked();
+    expect(tick(container, 'Spotify')).toBeChecked();
     // Already booked: visible, but neither ticked nor tickable — pressing the
     // button again must not look like it would double-book.
-    expect(screen.getByLabelText('Strom')).not.toBeChecked();
-    expect(screen.getByLabelText('Strom')).toBeDisabled();
+    expect(tick(container, 'Strom')).not.toBeChecked();
+    expect(tick(container, 'Strom')).toBeDisabled();
     // Not due this month.
-    expect(screen.getByLabelText('Versicherung')).not.toBeChecked();
-    expect(screen.getByLabelText('Versicherung')).toBeDisabled();
+    expect(tick(container, 'Versicherung')).not.toBeChecked();
+    expect(tick(container, 'Versicherung')).toBeDisabled();
 
     expect(screen.getByRole('button', { name: /Alle buchen/ })).toBeEnabled();
   });
 
   it('books exactly the ticked templates and nothing else', async () => {
     const user = userEvent.setup();
-    renderPage();
-    await screen.findByLabelText('Miete');
+    const { container } = renderPage();
+    await screen.findAllByLabelText('Miete');
 
-    await user.click(screen.getByLabelText('Spotify'));
+    await user.click(tick(container, 'Spotify'));
     // Unticking one changes the button from "alle" to a count, so the user can see
     // that this is no longer the whole list.
     const button = await screen.findByRole('button', { name: /1 buchen/ });
@@ -182,7 +192,7 @@ describe('the monthly checklist', () => {
       });
     });
     renderPage();
-    await screen.findByLabelText('Miete');
+    await screen.findAllByLabelText('Miete');
     await user.click(screen.getByRole('button', { name: /Alle buchen/ }));
 
     // A draft counts towards nothing until confirmed, so silence about it would be
@@ -228,5 +238,22 @@ describe('the template list', () => {
     expect(within(row).getAllByText('Sport').length).toBeGreaterThan(0);
     // ...and it says where that came from, because a rule change will move it.
     expect(row.textContent).toContain('über Regel');
+  });
+
+  /**
+   * Seven columns do not fit a phone, and this screen's whole point is ticking
+   * boxes — so the card view carries the checkbox itself rather than showing a
+   * read-only summary you would have to rotate the phone to act on.
+   */
+  it('offers the same ticking on a phone as in the table', async () => {
+    const { container } = renderPage();
+    await screen.findAllByText('Miete');
+
+    const cards = container.querySelector('.screen-cards') as HTMLElement;
+    expect(cards).toBeTruthy();
+    // Every template is present in both views; CSS picks which one is seen.
+    expect(within(cards).getByLabelText('Miete')).toBeChecked();
+    // Already booked stays visible and untickable here too.
+    expect(within(cards).getByLabelText('Strom')).toBeDisabled();
   });
 });

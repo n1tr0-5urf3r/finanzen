@@ -29,6 +29,12 @@ export function CategoriesPage() {
   const [params, setParams] = useSearchParams();
   const tab: Tab = params.get('ansicht') === 'regeln' ? 'regeln' : 'kategorien';
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * Lifted out of the tabs so the button can sit in `PageHeader`, where every
+   * other screen keeps its primary action. The tab still owns the FORM; it is
+   * only the trigger that moved.
+   */
+  const [creating, setCreating] = useState(false);
 
   const categories = useQuery({
     queryKey: qk.taxonomy.categories(),
@@ -42,6 +48,7 @@ export function CategoriesPage() {
 
   function setTab(next: Tab) {
     setNotice(null);
+    setCreating(false);
     setParams(
       (prev) => {
         const p = new URLSearchParams(prev);
@@ -55,7 +62,16 @@ export function CategoriesPage() {
 
   return (
     <>
-      <PageHeader title={t('categories.title')} subtitle={t('categories.intro')} />
+      <PageHeader
+        title={t('categories.title')}
+        subtitle={t('categories.intro')}
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={15} aria-hidden="true" />
+            {t(tab === 'regeln' ? 'categories.newRule' : 'categories.newCategory')}
+          </Button>
+        }
+      />
 
       <div className="segmented tabs" role="tablist">
         {(
@@ -91,9 +107,16 @@ export function CategoriesPage() {
             categories={categories.data}
             types={types.data}
             onNotice={setNotice}
+            creating={creating}
+            onCreatingDone={() => setCreating(false)}
           />
         ) : (
-          <RulesTab categories={categories.data} onNotice={setNotice} />
+          <RulesTab
+            categories={categories.data}
+            onNotice={setNotice}
+            creating={creating}
+            onCreatingDone={() => setCreating(false)}
+          />
         ))}
     </>
   );
@@ -103,10 +126,14 @@ function CategoriesTab({
   categories,
   types,
   onNotice,
+  creating,
+  onCreatingDone,
 }: {
   categories: Category[];
   types: CategoryTypeSummary[];
   onNotice: (message: string) => void;
+  creating: boolean;
+  onCreatingDone: () => void;
 }) {
   const t = useT();
   const client = useQueryClient();
@@ -125,6 +152,7 @@ function CategoriesTab({
     onSuccess: (_, vars) => {
       invalidateAfterTaxonomyChange(client);
       setEditing(null);
+      onCreatingDone();
       setFailure(null);
       onNotice(t(vars.id ? 'categories.saved' : 'categories.created'));
     },
@@ -158,22 +186,23 @@ function CategoriesTab({
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '.75rem' }}>
-        <Button onClick={() => setEditing('new')}>
-          <Plus size={15} aria-hidden="true" /> {t('categories.newCategory')}
-        </Button>
-      </div>
-
       {failure != null && <ErrorState error={failure} />}
 
-      {editing && (
+      {(editing || creating) && (
         <CategoryForm
-          category={editing === 'new' ? null : editing}
+          category={editing && editing !== 'new' ? editing : null}
           types={types}
           busy={save.isPending}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            setEditing(null);
+            onCreatingDone();
+          }}
           onSubmit={(name, typeCode) =>
-            save.mutate({ id: editing === 'new' ? undefined : editing.id, name, typeCode })
+            save.mutate({
+              id: editing && editing !== 'new' ? editing.id : undefined,
+              name,
+              typeCode,
+            })
           }
         />
       )}

@@ -169,7 +169,7 @@ export function SearchPage() {
 
               {/* The reason this screen exists, so it comes first. */}
               <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
-                <h2 style={{ margin: '0 0 .6rem' }}>{t('search.byYear')}</h2>
+                <h2>{t('search.byYear')}</h2>
                 {/* Five money columns do not fit 390px however hard they try.
                     `.table-wrap` is the house answer: the table scrolls inside
                     its own box and the PAGE never gets wider than the phone —
@@ -225,7 +225,7 @@ export function SearchPage() {
 
               {comments.length > 1 && (
                 <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
-                  <h2 style={{ margin: '0 0 .5rem' }}>{t('search.spellings')}</h2>
+                  <h2>{t('search.spellings')}</h2>
                   {/* Hand-typed comments drift. Saying which spellings were folded
                       together is the difference between a total you trust and one
                       you re-check by hand. */}
@@ -247,7 +247,7 @@ export function SearchPage() {
                 </div>
               )}
 
-              <h2 style={{ margin: '0 0 .5rem' }}>{t('search.allBookings')}</h2>
+              <h2>{t('search.allBookings')}</h2>
               {/* Cards at every width, not only on a phone: a search result is a
                   handful of rows from different years, and the year belongs on the
                   row rather than in a column header that is no longer true. */}

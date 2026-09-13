@@ -132,7 +132,7 @@ describe('Rücklagen', () => {
     const { container } = renderPage();
     await screen.findAllByText('Nebenkosten');
 
-    const totals = container.querySelector('.funds__totals') as HTMLElement;
+    const totals = container.querySelector('.grid--kpi') as HTMLElement;
     expect(within(totals).getByText(/307,00/)).toBeInTheDocument();
     expect(totals.textContent).not.toContain('1.822,53');
   });

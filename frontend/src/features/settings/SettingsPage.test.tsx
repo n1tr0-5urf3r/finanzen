@@ -122,14 +122,14 @@ describe('settings', () => {
   });
 
   it('links to the templates screen instead of duplicating it', async () => {
-    renderPage('/einstellungen?bereich=vorlagen');
+    renderPage('/einstellungen?ansicht=vorlagen');
     const link = await screen.findByRole('link', { name: /Vorlagen öffnen/ });
     expect(link.getAttribute('href')).toBe('/vorlagen');
   });
 
   it('refuses a password change where the two entries disagree', async () => {
     const user = userEvent.setup();
-    renderPage('/einstellungen?bereich=konto');
+    renderPage('/einstellungen?ansicht=konto');
     await screen.findByLabelText('Aktuelles Passwort');
 
     await user.type(screen.getByLabelText('Aktuelles Passwort'), 'altespasswort');
@@ -142,7 +142,7 @@ describe('settings', () => {
   });
 
   it('offers the export in both shapes, with the round-trippable one labelled', async () => {
-    renderPage('/einstellungen?bereich=export');
+    renderPage('/einstellungen?ansicht=export');
     const json = await screen.findByRole('button', { name: /JSON/ });
     expect(json.getAttribute('title')).toContain('wiederherstellen');
   });

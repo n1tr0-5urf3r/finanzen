@@ -91,8 +91,7 @@ export function TaxPage() {
       {failure != null && <ErrorState error={failure} />}
 
       <div
-        className="panel panel--pad"
-        style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+        className="panel panel--pad filter-bar"
       >
         <div style={{ minWidth: '7rem' }}>
           <YearPicker id="tax-year" value={year} onChange={(next) =>

@@ -3,46 +3,22 @@ import { useSearchParams } from 'react-router-dom';
 
 import { CategoryChip } from '../../components/DataLabel';
 import { FlowMoney, Money, NetBreakdown, ScopeNote } from '../../components/Money';
-import { ErrorState, LoadingState, PageHeader } from '../../components/ui';
+import { ErrorState, Kpi, LoadingState, PageHeader } from '../../components/ui';
+import { YearPicker } from '../../components/YearPicker';
 import { api } from '../../lib/api';
 import { formatEuro, formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { Dashboard } from '../../lib/types';
-import type { MessageKey } from '../../lib/messages/de';
 import { KitchenOwlWidget } from '../kitchenowl/KitchenOwlWidget';
 import { useMaskAmount } from '../../lib/privacy';
 import { AnomalyNotes } from './AnomalyNotes';
 import { ForecastPanel } from './ForecastPanel';
 
-function Kpi({
-  labelKey,
-  children,
-  hint,
-  transfersIncluded,
-  tone,
-}: {
-  labelKey: MessageKey;
-  children: React.ReactNode;
-  hint?: MessageKey;
-  /** Required: a figure must declare whether transfers are inside it. */
-  transfersIncluded: boolean;
-  tone?: 'warn' | 'accent';
-}) {
-  const t = useT();
-  return (
-    <div className={`kpi ${tone ? `kpi--${tone}` : ''}`} title={hint ? t(hint) : undefined}>
-      <span className="kpi__label">{t(labelKey)}</span>
-      <span className="kpi__value">{children}</span>
-      <ScopeNote transfersIncluded={transfersIncluded} />
-    </div>
-  );
-}
-
 export function DashboardPage() {
   const t = useT();
   const maskAmount = useMaskAmount();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const year = Number(params.get('jahr')) || new Date().getFullYear();
   // The current month in the current year, the last month otherwise: asking a past
   // year about "this month" would compare December with nothing.
@@ -62,6 +38,26 @@ export function DashboardPage() {
     <>
       <PageHeader title={t('dashboard.title', { year })} />
 
+      {/* The dashboard read `jahr` from the URL and offered no way to set it, so
+          its own year was reachable only by typing one. Same picker, same place,
+          as every other screen. */}
+      <div className="panel panel--pad filter-bar">
+        <YearPicker
+          id="dashboard-year"
+          value={year}
+          onChange={(next) =>
+            setParams(
+              (prev) => {
+                const p = new URLSearchParams(prev);
+                p.set('jahr', String(next));
+                return p;
+              },
+              { replace: true },
+            )
+          }
+        />
+      </div>
+
       {/* The carryover gap is not reported here any more. It is a permanent,
           known property of the legacy import — the 2026 opening balance is a
           CONFIGURED figure and the 2023–2025 rows do not add up to it — so a
@@ -70,18 +66,18 @@ export function DashboardPage() {
           still shown in Einstellungen, which is where the opening balance is set
           and therefore the only place it is actionable. */}
       <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
-        <Kpi labelKey="dashboard.income" transfersIncluded={false}>
+        <Kpi label={t('dashboard.income')} scope="without">
           <Money cents={d.incomeCents} tone="income" />
         </Kpi>
-        <Kpi labelKey="dashboard.expense" transfersIncluded={false}>
+        <Kpi label={t('dashboard.expense')} scope="without">
           <Money cents={d.expenseCents} tone="expense" />
         </Kpi>
-        <Kpi labelKey="dashboard.balance" transfersIncluded={false}>
+        <Kpi label={t('dashboard.balance')} scope="without">
           <FlowMoney flowCents={d.balanceCents} />
         </Kpi>
         {/* Deliberately adjacent to the balance, and deliberately a different
             scope — that contrast is what ScopeNote exists to explain. */}
-        <Kpi labelKey="dashboard.closingBalance" transfersIncluded tone="accent">
+        <Kpi label={t('dashboard.closingBalance')} scope="with" tone="accent">
           <Money cents={d.closingBalanceCents} />
         </Kpi>
       </div>
@@ -92,9 +88,9 @@ export function DashboardPage() {
             & Anlage, and the one figure here that can be checked against a bank
             statement. Per month, which is how a standing order is thought of. */}
         <Kpi
-          labelKey="dashboard.savingsDeposit"
-          hint="dashboard.savingsDepositHint"
-          transfersIncluded={false}
+          label={t('dashboard.savingsDeposit')}
+          hint={t('dashboard.savingsDepositHint')}
+          scope="without"
           tone="accent"
         >
           <Money cents={d.savingsDepositPerMonthCents} />
@@ -106,9 +102,9 @@ export function DashboardPage() {
           </span>
         </Kpi>
         <Kpi
-          labelKey="dashboard.savingsRateConsumption"
-          hint="dashboard.savingsRateConsumptionHint"
-          transfersIncluded={false}
+          label={t('dashboard.savingsRateConsumption')}
+          hint={t('dashboard.savingsRateConsumptionHint')}
+          scope="without"
         >
           {formatPercent(d.savingsRateConsumption)}
           {/* The spreadsheet's own rate, kept because a figure that was on every
@@ -118,27 +114,27 @@ export function DashboardPage() {
             {t('dashboard.savingsRateNaiveNote', { percent: formatPercent(d.savingsRateNaive) })}
           </span>
         </Kpi>
-        <Kpi labelKey="dashboard.averageExpense" transfersIncluded={false}>
+        <Kpi label={t('dashboard.averageExpense')} scope="without">
           <Money cents={d.averageExpensePerMonthCents} />
         </Kpi>
-        <Kpi labelKey="dashboard.fixedCosts" transfersIncluded={false}>
+        <Kpi label={t('dashboard.fixedCosts')} scope="without">
           <Money cents={d.fixedCostsPerMonthCents} basis="net" />
         </Kpi>
       </div>
 
       <div className="grid grid--kpi" style={{ marginBottom: '1.5rem' }}>
-        <Kpi labelKey="dashboard.carryover" transfersIncluded>
+        <Kpi label={t('dashboard.carryover')} scope="with">
           <Money cents={d.openingBalanceCents} />
         </Kpi>
-        <Kpi labelKey="dashboard.bookings" transfersIncluded>
+        <Kpi label={t('dashboard.bookings')} scope="with">
           {d.bookingCount}
         </Kpi>
-        <Kpi labelKey="dashboard.taxRelevant" transfersIncluded={false}>
+        <Kpi label={t('dashboard.taxRelevant')} scope="without">
           {d.taxRelevantCount}
         </Kpi>
         <Kpi
-          labelKey="dashboard.uncategorized"
-          transfersIncluded={false}
+          label={t('dashboard.uncategorized')}
+          scope="without"
           tone={d.uncategorizedCount > 0 ? 'warn' : undefined}
         >
           {d.uncategorizedCount}
@@ -149,7 +145,7 @@ export function DashboardPage() {
       <ForecastPanel year={year} />
 
       <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
-        <h2 style={{ marginBottom: '.6rem' }}>{t('dashboard.byType')}</h2>
+        <h2>{t('dashboard.byType')}</h2>
         <ScopeNote transfersIncluded={false} />
         <div className="table-wrap">
           <table className="data-table">
@@ -178,7 +174,7 @@ export function DashboardPage() {
       </div>
 
       <div className="panel panel--pad">
-        <h2 style={{ marginBottom: '.6rem' }}>{t('dashboard.topCategories')}</h2>
+        <h2>{t('dashboard.topCategories')}</h2>
         <p style={{ fontSize: '.8rem', color: 'var(--muted)', marginBottom: '.5rem' }}>
           {t('dashboard.costNote')}
         </p>

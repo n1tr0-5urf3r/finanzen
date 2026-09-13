@@ -129,7 +129,7 @@ export function BookingsPage() {
       {downloaded && <Banner tone="info">{t('export.downloaded', { filename: downloaded })}</Banner>}
       {download.isError && <ErrorState error={download.error} />}
 
-      <div className="panel panel--pad" style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div className="panel panel--pad filter-bar">
         <div style={{ minWidth: '8rem' }}>
           <YearPicker id="f-year" value={year} onChange={(next) => update('jahr', String(next))} />
         </div>
