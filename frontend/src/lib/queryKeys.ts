@@ -37,6 +37,9 @@ export const qk = {
     series: (year: number, mode: string, subject: string) =>
       ['derived', year, 'series', mode, subject] as const,
     seriesSubjects: (year: number) => ['derived', year, 'series-subjects'] as const,
+    compare: (year: number) => ['derived', year, 'compare'] as const,
+    trailing: (year: number, month: number) =>
+      ['derived', year, 'trailing', month] as const,
   },
   years: () => ['years'] as const,
   /**

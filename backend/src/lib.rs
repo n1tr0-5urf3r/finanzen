@@ -3,6 +3,7 @@ pub mod auth;
 pub mod bookings;
 pub mod calc;
 pub mod categories;
+pub mod compare;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -140,6 +141,8 @@ pub fn router(state: AppState) -> Router {
         .route("/analysis/categories", get(analysis::categories))
         .route("/analysis/series", get(analysis::series))
         .route("/analysis/series/subjects", get(analysis::series_subjects))
+        .route("/analysis/compare", get(compare::compare))
+        .route("/analysis/trailing", get(compare::trailing))
         .route("/tax", get(analysis::tax))
         .route("/tax/export.csv", get(export::tax_csv))
         .route("/tax/export.pdf", get(export::tax_pdf))
