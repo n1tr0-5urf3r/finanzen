@@ -6,7 +6,10 @@ backend/target/
 **/*.rs.bk
 
 # node
-frontend/node_modules/
+# No trailing slash: a worktree agent symlinks this rather than installing it, and
+# a trailing slash matches a directory but not a symlink — which would let a
+# careless `git add -A` commit a link to someone else's checkout.
+node_modules
 frontend/dist/
 *.tsbuildinfo
 
