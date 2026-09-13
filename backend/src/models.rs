@@ -946,6 +946,99 @@ pub struct KoSummary {
     pub warning: Option<String>,
 }
 
+/// One KitchenOwl category over a year.
+///
+/// Both figures, always: `amountCents` is what the household spent and
+/// `ownShareCents` is the user's slice of it. They are different numbers with
+/// different meanings and adding them is meaningless.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategoryAnalysisRow {
+    /// Null for expenses with no KitchenOwl category — the normal case for a third
+    /// of the live corpus, never an error.
+    pub ko_category_id: Option<i64>,
+    pub ko_category_name: Option<String>,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    /// Of the household's total, not of the user's share.
+    pub share_of_total: f64,
+    pub average_per_month_cents: i64,
+    pub average_own_share_per_month_cents: i64,
+    pub monthly_amount_cents: Vec<i64>,
+    pub monthly_own_share_cents: Vec<i64>,
+}
+
+/// Who paid, which only a shared ledger can ask.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoPayerShare {
+    pub member_id: Option<i64>,
+    pub name: String,
+    pub amount_cents: i64,
+    pub expense_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategoryAnalysis {
+    pub year: i32,
+    pub rows: Vec<KoCategoryAnalysisRow>,
+    pub total_amount_cents: i64,
+    pub total_own_share_cents: i64,
+    pub expense_count: i64,
+    pub months_with_data: i64,
+    pub uncategorized_count: i64,
+    /// Expenses KitchenOwl itself keeps out of its statistics, so this analysis
+    /// does too. Reported rather than hidden.
+    pub excluded_count: i64,
+    pub paid_by: Vec<KoPayerShare>,
+    /// The years the mirror holds anything for, newest first — the year picker
+    /// cannot borrow the personal ledger's years, which start earlier.
+    pub years: Vec<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSeriesMonth {
+    pub month: u8,
+    /// German month name; data, not chrome.
+    pub month_name: String,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+}
+
+/// One KitchenOwl category or one recurring name across twelve months.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoMonthlySeries {
+    pub year: i32,
+    /// `category`, `name` or `uncategorized`.
+    pub mode: String,
+    pub subject: String,
+    pub ko_category_id: Option<i64>,
+    pub months: Vec<KoSeriesMonth>,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    /// Divided by the months that hold THIS subject, never by twelve.
+    pub average_per_active_month_cents: i64,
+    pub average_own_share_per_active_month_cents: i64,
+    pub months_with_data: i64,
+}
+
+/// A name worth charting, as the picker offers it.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSeriesSubject {
+    pub name: String,
+    pub expense_count: i64,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub ko_category_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KoPushIntent {

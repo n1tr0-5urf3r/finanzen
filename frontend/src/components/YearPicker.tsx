@@ -18,10 +18,16 @@ import type { Year } from '../lib/types';
 export function YearPicker({
   value,
   onChange,
+  years: extra,
   id = 'year-picker',
 }: {
   value: number;
   onChange: (year: number) => void;
+  /**
+   * Years from somewhere other than the personal ledger — the KitchenOwl mirror
+   * has its own span and would otherwise be offered the wrong list.
+   */
+  years?: number[];
   id?: string;
 }) {
   const t = useT();
@@ -33,7 +39,7 @@ export function YearPicker({
 
   const options = (() => {
     const known = Array.isArray(years.data) ? years.data.map((y) => y.year) : [];
-    const set = new Set<number>(known);
+    const set = new Set<number>([...known, ...(extra ?? [])]);
     set.add(new Date().getFullYear());
     // Whatever is selected must be offered, or the select would silently show
     // something other than what the page is displaying.

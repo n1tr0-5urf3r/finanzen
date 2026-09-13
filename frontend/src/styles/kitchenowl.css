@@ -142,3 +142,25 @@
   display: flex; align-items: center; justify-content: center; padding: 1rem;
   background: rgba(14, 17, 19, .55); overflow: auto;
 }
+
+/* ── the household's own analysis ─────────────────────────────────────────────
+   Deliberately the same furniture as the personal Auswertung — same table, same
+   cards, same chart frame — because it answers the same questions. What is NOT
+   shared is the colour: these bars are the KitchenOwl accent, never the personal
+   ledger's income/expense pair, so no figure here can be mistaken for a booking. */
+.ko-analysis__controls {
+  margin-bottom: 1rem; display: flex; gap: .75rem 1.25rem;
+  flex-wrap: wrap; align-items: flex-end;
+}
+.ko-analysis__totals {
+  margin-bottom: 1rem; display: grid; gap: .75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 620px) {
+  .ko-analysis__totals { grid-template-columns: repeat(4, 1fr); }
+}
+.ko-analysis__totals > * { min-width: 0; }
+.ko-analysis__payers { display: flex; flex-direction: column; gap: .15rem; font-size: .85rem; }
+
+.chart__bar--household { fill: var(--accent); opacity: .32; }
+.chart__bar--share { fill: var(--accent); }

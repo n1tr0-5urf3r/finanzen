@@ -1538,6 +1538,139 @@
         }
       }
     },
+    "/api/v1/kitchenowl/analysis/categories": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Every KitchenOwl category over one year, with the twelve months behind it.",
+        "operationId": "categories",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Haushaltsbetrag UND eigener Anteil je Kategorie — nie summiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoCategoryAnalysis"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/analysis/series": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Twelve months for one KitchenOwl category or one recurring name.",
+        "operationId": "series",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "koCategoryId",
+            "in": "query",
+            "description": "KitchenOwl-Kategorie",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Name der Ausgabe, z. B. Kaufland",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "uncategorized",
+            "in": "query",
+            "description": "Ausgaben ohne KitchenOwl-Kategorie",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zwölf Monate, Haushaltsbetrag und eigener Anteil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoMonthlySeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Weder oder mehrere Parameter angegeben"
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/analysis/series/subjects": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "The recurring names worth charting, most frequent first.",
+        "operationId": "series_subjects",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Namen mit mehr als einer Ausgabe, häufigste zuerst",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KoSeriesSubject"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/drafts": {
       "get": {
         "tags": [
@@ -1719,6 +1852,25 @@
             "name": "linked",
             "in": "query",
             "description": "Nur (nicht) verknüpfte",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "koCategoryId",
+            "in": "query",
+            "description": "Eine KitchenOwl-Kategorie",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "uncategorized",
+            "in": "query",
+            "description": "Nur Ausgaben ohne KitchenOwl-Kategorie",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -3939,6 +4091,141 @@
           }
         }
       },
+      "KoCategoryAnalysis": {
+        "type": "object",
+        "required": [
+          "year",
+          "rows",
+          "totalAmountCents",
+          "totalOwnShareCents",
+          "expenseCount",
+          "monthsWithData",
+          "uncategorizedCount",
+          "excludedCount",
+          "paidBy",
+          "years"
+        ],
+        "properties": {
+          "excludedCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expenses KitchenOwl itself keeps out of its statistics, so this analysis\ndoes too. Reported rather than hidden."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "paidBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoPayerShare"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoCategoryAnalysisRow"
+            }
+          },
+          "totalAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "The years the mirror holds anything for, newest first — the year picker\ncannot borrow the personal ledger's years, which start earlier."
+          }
+        }
+      },
+      "KoCategoryAnalysisRow": {
+        "type": "object",
+        "description": "One KitchenOwl category over a year.\n\nBoth figures, always: `amountCents` is what the household spent and\n`ownShareCents` is the user's slice of it. They are different numbers with\ndifferent meanings and adding them is meaningless.",
+        "required": [
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "shareOfTotal",
+          "averagePerMonthCents",
+          "averageOwnSharePerMonthCents",
+          "monthlyAmountCents",
+          "monthlyOwnShareCents"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averageOwnSharePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averagePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Null for expenses with no KitchenOwl category — the normal case for a third\nof the live corpus, never an error."
+          },
+          "koCategoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monthlyAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "monthlyOwnShareCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shareOfTotal": {
+            "type": "number",
+            "format": "double",
+            "description": "Of the household's total, not of the user's share."
+          }
+        }
+      },
       "KoDraft": {
         "type": "object",
         "required": [
@@ -4308,6 +4595,102 @@
           }
         }
       },
+      "KoMonthlySeries": {
+        "type": "object",
+        "description": "One KitchenOwl category or one recurring name across twelve months.",
+        "required": [
+          "year",
+          "mode",
+          "subject",
+          "months",
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "averagePerActiveMonthCents",
+          "averageOwnSharePerActiveMonthCents",
+          "monthsWithData"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averageOwnSharePerActiveMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averagePerActiveMonthCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Divided by the months that hold THIS subject, never by twelve."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "mode": {
+            "type": "string",
+            "description": "`category`, `name` or `uncategorized`."
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoSeriesMonth"
+            }
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "KoPayerShare": {
+        "type": "object",
+        "description": "Who paid, which only a shared ledger can ask.",
+        "required": [
+          "name",
+          "amountCents",
+          "expenseCount"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "memberId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "KoPushIntent": {
         "type": "object",
         "required": [
@@ -4451,6 +4834,72 @@
             "description": "Integer weight. `1` each is an even split; `{12, 7}` occurs in the real data."
           },
           "memberId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoSeriesMonth": {
+        "type": "object",
+        "required": [
+          "month",
+          "monthName",
+          "amountCents",
+          "ownShareCents",
+          "expenseCount"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string",
+            "description": "German month name; data, not chrome."
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoSeriesSubject": {
+        "type": "object",
+        "description": "A name worth charting, as the picker offers it.",
+        "required": [
+          "name",
+          "expenseCount",
+          "amountCents",
+          "ownShareCents"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownShareCents": {
             "type": "integer",
             "format": "int64"
           }

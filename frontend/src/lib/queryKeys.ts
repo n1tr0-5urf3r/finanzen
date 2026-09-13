@@ -56,6 +56,10 @@ export const qk = {
       ['kitchenowl', 'expenses', filters] as const,
     drafts: (status: string) => ['kitchenowl', 'drafts', status] as const,
     push: () => ['kitchenowl', 'push'] as const,
+    analysis: (year: number) => ['kitchenowl', 'analysis', year] as const,
+    series: (year: number, mode: string, subject: string) =>
+      ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,
+    seriesSubjects: (year: number) => ['kitchenowl', 'analysis', year, 'subjects'] as const,
   },
   admin: {
     users: () => ['admin', 'users'] as const,

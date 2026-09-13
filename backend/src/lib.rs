@@ -165,6 +165,18 @@ pub fn router(state: AppState) -> Router {
         .route("/kitchenowl/summary", get(kitchenowl::routes::summary))
         .route("/kitchenowl/metadata", get(kitchenowl::routes::metadata))
         .route("/kitchenowl/sync", post(kitchenowl::routes::sync_now))
+        .route(
+            "/kitchenowl/analysis/categories",
+            get(kitchenowl::analysis::categories),
+        )
+        .route(
+            "/kitchenowl/analysis/series",
+            get(kitchenowl::analysis::series),
+        )
+        .route(
+            "/kitchenowl/analysis/series/subjects",
+            get(kitchenowl::analysis::series_subjects),
+        )
         .route("/kitchenowl/expenses", get(kitchenowl::routes::expenses))
         .route(
             "/kitchenowl/expenses/{id}/link",

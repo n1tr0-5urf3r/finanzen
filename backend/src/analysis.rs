@@ -385,7 +385,11 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
         (Some(_), None) => ("category", String::new(), "b.category_id = $2"),
         // Matched case-insensitively on the trimmed comment, exactly as the rule
         // table matches, so "Tanken" and "tanken" are one subject and not two.
-        (None, Some(c)) => ("comment", c.trim().to_string(), "b.match_key = lower(btrim($2))"),
+        (None, Some(c)) => (
+            "comment",
+            c.trim().to_string(),
+            "b.match_key = lower(btrim($2))",
+        ),
         _ => {
             return Err(AppError::Validation(
                 "Genau eine von categoryId oder comment angeben".into(),
@@ -477,7 +481,10 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
     params(("year" = i32, Query, description = "Kalenderjahr")),
     responses((status = 200, description = "Kommentare mit mehr als einer Buchung, häufigste zuerst", body = Vec<SeriesSubject>)),
 )]
-pub async fn series_subjects(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Vec<SeriesSubject>>> {
+pub async fn series_subjects(
+    mut ctx: Ctx,
+    Query(q): Query<YearQuery>,
+) -> Result<Json<Vec<SeriesSubject>>> {
     let rows = sqlx::query(
         "SELECT b.comment, count(*)::bigint AS n, \
                 COALESCE(SUM(b.net_cents), 0)::bigint AS net, \

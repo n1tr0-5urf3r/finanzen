@@ -465,6 +465,12 @@ pub struct ExpenseQuery {
     pub year: Option<i32>,
     pub month: Option<u8>,
     pub linked: Option<bool>,
+    /// One KitchenOwl category, so the analysis can hand the ledger the rows behind
+    /// a bar. `uncategorized` is the other half of that: "no category" is a third
+    /// of the corpus and has to be reachable too.
+    pub ko_category_id: Option<i64>,
+    #[serde(default)]
+    pub uncategorized: bool,
     pub search: Option<String>,
     #[serde(default)]
     pub include_archived: bool,
@@ -493,6 +499,13 @@ fn expense_filter(q: &ExpenseQuery) -> (String, Vec<String>) {
         let p = next(&mut binds, v.to_string());
         clauses.push(format!("date_part('month', e.expense_date) = {p}::int"));
     }
+    if let Some(v) = q.ko_category_id {
+        let p = next(&mut binds, v.to_string());
+        clauses.push(format!("e.ko_category_id = {p}::bigint"));
+    }
+    if q.uncategorized {
+        clauses.push("e.ko_category_id IS NULL".into());
+    }
     match q.linked {
         Some(true) => clauses.push("e.linked_booking_id IS NOT NULL".into()),
         Some(false) => clauses.push("e.linked_booking_id IS NULL".into()),
@@ -513,7 +526,7 @@ fn expense_filter(q: &ExpenseQuery) -> (String, Vec<String>) {
     get,
     path = "/api/v1/kitchenowl/expenses",
     tag = "kitchenowl",
-    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("linked" = Option<bool>, Query, description = "Nur (nicht) verknüpfte"), ("search" = Option<String>, Query, description = "Name oder Beschreibung enthält"), ("includeArchived" = Option<bool>, Query, description = "Auch in KitchenOwl gelöschte"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..200, Standard 50")),
+    params(("year" = Option<i32>, Query, description = "Kalenderjahr"), ("month" = Option<u8>, Query, description = "Monat 1..12"), ("linked" = Option<bool>, Query, description = "Nur (nicht) verknüpfte"), ("koCategoryId" = Option<i64>, Query, description = "Eine KitchenOwl-Kategorie"), ("uncategorized" = Option<bool>, Query, description = "Nur Ausgaben ohne KitchenOwl-Kategorie"), ("search" = Option<String>, Query, description = "Name oder Beschreibung enthält"), ("includeArchived" = Option<bool>, Query, description = "Auch in KitchenOwl gelöschte"), ("page" = Option<u32>, Query, description = "Seite, ab 0"), ("pageSize" = Option<u32>, Query, description = "1..200, Standard 50")),
     responses((status = 200, description = "Der Spiegel — Gesamtbetrag UND eigener Anteil, nie summiert", body = KoExpensePage)),
 )]
 pub async fn expenses(mut ctx: Ctx, Query(q): Query<ExpenseQuery>) -> Result<Json<KoExpensePage>> {

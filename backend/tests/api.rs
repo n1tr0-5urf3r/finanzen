@@ -2069,8 +2069,12 @@ async fn a_comment_can_be_charted_across_the_year() {
     let mut app = app!();
     app.setup_admin().await;
     let auto = app.category_id("Auto & Parken").await;
-    app.send("POST", "/rules", Some(json!({"comment":"tanken","categoryId":auto})))
-        .await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"tanken","categoryId":auto})),
+    )
+    .await;
 
     for (month, cents) in [(1, 6_500), (1, 5_500), (3, 7_200), (9, 8_100)] {
         app.send(
@@ -2119,8 +2123,12 @@ async fn the_series_takes_a_category_or_a_comment_but_not_both() {
     let mut app = app!();
     app.setup_admin().await;
     let auto = app.category_id("Auto & Parken").await;
-    app.send("POST", "/rules", Some(json!({"comment":"tanken","categoryId":auto})))
-        .await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment":"tanken","categoryId":auto})),
+    )
+    .await;
     app.send(
         "POST",
         "/bookings",
@@ -2169,6 +2177,9 @@ async fn a_comment_series_folds_case_the_way_the_rules_do() {
     let (_, s) = app
         .send("GET", "/analysis/series?year=2026&comment=TANKEN", None)
         .await;
-    assert_eq!(s["bookingCount"], 3, "alle drei Schreibweisen sind dasselbe");
+    assert_eq!(
+        s["bookingCount"], 3,
+        "alle drei Schreibweisen sind dasselbe"
+    );
     assert_eq!(s["months"][1]["netCents"], 15_000);
 }

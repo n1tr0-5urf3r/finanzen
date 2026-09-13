@@ -353,6 +353,75 @@ export interface KoExpensePage {
   linkedCount: number;
 }
 
+/**
+ * The household ledger's own analysis. Two figures everywhere: `amountCents` is
+ * what the household spent, `ownShareCents` is the user's slice. They are never
+ * added — not to each other and not to anything from the personal ledger.
+ */
+export interface KoCategoryAnalysisRow {
+  koCategoryId: number | null;
+  koCategoryName: string | null;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  shareOfTotal: number;
+  averagePerMonthCents: number;
+  averageOwnSharePerMonthCents: number;
+  monthlyAmountCents: number[];
+  monthlyOwnShareCents: number[];
+}
+
+export interface KoPayerShare {
+  memberId: number | null;
+  name: string;
+  amountCents: number;
+  expenseCount: number;
+}
+
+export interface KoCategoryAnalysis {
+  year: number;
+  rows: KoCategoryAnalysisRow[];
+  totalAmountCents: number;
+  totalOwnShareCents: number;
+  expenseCount: number;
+  monthsWithData: number;
+  uncategorizedCount: number;
+  /** What KitchenOwl itself keeps out of its statistics, so this does too. */
+  excludedCount: number;
+  paidBy: KoPayerShare[];
+  years: number[];
+}
+
+export interface KoSeriesMonth {
+  month: number;
+  monthName: string;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+}
+
+export interface KoMonthlySeries {
+  year: number;
+  mode: 'category' | 'name' | 'uncategorized';
+  subject: string;
+  koCategoryId: number | null;
+  months: KoSeriesMonth[];
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  averagePerActiveMonthCents: number;
+  averageOwnSharePerActiveMonthCents: number;
+  monthsWithData: number;
+}
+
+export interface KoSeriesSubject {
+  name: string;
+  expenseCount: number;
+  amountCents: number;
+  ownShareCents: number;
+  koCategoryName: string | null;
+}
+
 export interface KoMatchCandidate {
   bookingId: string;
   comment: string;
