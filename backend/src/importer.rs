@@ -664,6 +664,17 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
     .fetch_one(ctx.tenant.conn())
     .await?;
 
+    // An import is the one event that invalidates every KitchenOwl suggestion at
+    // once: those are statements about two ledgers, and a year of bookings has
+    // just appeared in one of them. Without this they keep the empty candidate
+    // list they were born with — which is what happened when 459 drafts were
+    // written seven minutes before the bookings arrived. In the same transaction,
+    // so a rolled-back import cannot leave the suggestions talking about rows that
+    // no longer exist. A failure here must not fail the import, which is done.
+    if let Err(e) = crate::kitchenowl::matching::rescan_open(ctx.tenant.conn(), 0.80).await {
+        tracing::warn!(error = %e, "Vorschläge konnten nach dem Import nicht neu berechnet werden");
+    }
+
     ctx.tenant.commit().await?;
     Ok(Json(CommitResult {
         inserted,

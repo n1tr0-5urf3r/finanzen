@@ -2407,3 +2407,55 @@ async fn an_unknown_category_is_refused_before_the_first_request() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(mock.update_count(), 0);
 }
+
+/// A suggestion is a statement about TWO ledgers, and it was only ever recomputed
+/// when one of them moved.
+///
+/// Drafts are scored when their expense is pulled and re-scored only when that
+/// expense changes upstream. Import the bookings afterwards — which is the normal
+/// order, since the mirror syncs on boot — and every draft keeps the empty
+/// candidate list it was born with. That is not hypothetical: 459 real drafts were
+/// written seven minutes before the real bookings arrived, and 457 of them still
+/// said "no match" against a ledger holding 165 exact amount matches.
+#[tokio::test]
+async fn a_rescan_finds_the_matches_that_appeared_after_the_drafts_did() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        1,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+
+    // The mirror first, with nothing to match against.
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, before) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(before["items"][0]["candidates"].as_array().map(Vec::len), Some(0));
+    assert_eq!(before["items"][0]["status"], "open");
+
+    // The booking arrives afterwards, at the full amount and in the same month.
+    app.booking("Supermarkt", 1907, 3).await;
+
+    // Nothing has asked the question again, so the draft still says no match.
+    let (_, stale) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(stale["items"][0]["candidates"].as_array().map(Vec::len), Some(0));
+
+    let (status, out) = app.send("POST", "/kitchenowl/drafts/rescan", None).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["scanned"], 1);
+    assert_eq!(out["withCandidates"], 1);
+    assert_eq!(out["likelyDuplicates"], 1);
+
+    let (_, after) = app.send("GET", "/kitchenowl/drafts", None).await;
+    let candidates = after["items"][0]["candidates"].as_array().expect("candidates");
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0]["amountCents"], 1907);
+    assert_eq!(candidates[0]["basis"], "fullAmount");
+    // ...and the draft is now flagged, which is what puts it in front of the user.
+    assert_eq!(after["items"][0]["status"], "likely_duplicate");
+}

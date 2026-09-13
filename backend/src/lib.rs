@@ -215,6 +215,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/kitchenowl/drafts", get(kitchenowl::routes::drafts))
         .route(
+            "/kitchenowl/drafts/rescan",
+            post(kitchenowl::routes::rescan_drafts),
+        )
+        .route(
             "/kitchenowl/drafts/{id}/link",
             post(kitchenowl::routes::link_draft),
         )

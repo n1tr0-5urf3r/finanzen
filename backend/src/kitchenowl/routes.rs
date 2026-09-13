@@ -586,6 +586,34 @@ pub struct DraftQuery {
     pub page_size: Option<u32>,
 }
 
+/// Re-scores every open suggestion against the bookings as they stand now.
+///
+/// Suggestions are a statement about TWO ledgers, but they were only ever computed
+/// when one of them moved — written when an expense is pulled, rewritten only when
+/// that expense changes upstream. Import a year of bookings afterwards and every
+/// existing draft keeps the empty candidate list it was born with. That is not
+/// hypothetical: the drafts here were written at 20:51 and the bookings arrived at
+/// 20:58, so 459 suggestions had been scored against an empty ledger and nothing
+/// ever asked them again.
+#[utoipa::path(
+    post,
+    path = "/api/v1/kitchenowl/drafts/rescan",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Vorschläge neu berechnet", body = super::matching::RescanResult)),
+)]
+pub async fn rescan_drafts(
+    State(state): State<AppState>,
+    mut ctx: Ctx,
+) -> Result<Json<super::matching::RescanResult>> {
+    let out = super::matching::rescan_open(
+        ctx.tenant.conn(),
+        state.config.kitchenowl_duplicate_threshold,
+    )
+    .await?;
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/kitchenowl/drafts",

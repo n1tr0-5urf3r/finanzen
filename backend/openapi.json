@@ -2236,6 +2236,28 @@
         }
       }
     },
+    "/api/v1/kitchenowl/drafts/rescan": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Re-scores every open suggestion against the bookings as they stand now.",
+        "description": "Suggestions are a statement about TWO ledgers, but they were only ever computed\nwhen one of them moved — written when an expense is pulled, rewritten only when\nthat expense changes upstream. Import a year of bookings afterwards and every\nexisting draft keeps the empty candidate list it was born with. That is not\nhypothetical: the drafts here were written at 20:51 and the bookings arrived at\n20:58, so 459 suggestions had been scored against an empty ledger and nothing\never asked them again.",
+        "operationId": "rescan_drafts",
+        "responses": {
+          "200": {
+            "description": "Vorschläge neu berechnet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RescanResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/drafts/{id}/dismiss": {
       "post": {
         "tags": [
@@ -8002,6 +8024,29 @@
           },
           "taxRelevant": {
             "type": "boolean"
+          }
+        }
+      },
+      "RescanResult": {
+        "type": "object",
+        "description": "What a rescan found.",
+        "required": [
+          "scanned",
+          "withCandidates",
+          "likelyDuplicates"
+        ],
+        "properties": {
+          "likelyDuplicates": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scanned": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "withCandidates": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

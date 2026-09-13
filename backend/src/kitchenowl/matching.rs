@@ -251,6 +251,91 @@ pub async fn refresh_draft(
     Ok(())
 }
 
+/// What a rescan found.
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RescanResult {
+    pub scanned: i64,
+    pub with_candidates: i64,
+    pub likely_duplicates: i64,
+}
+
+/// Re-score every open draft against the bookings as they are NOW.
+///
+/// A suggestion is a statement about two ledgers, but it was only ever computed
+/// when one of them moved: candidates are written when an expense is pulled and
+/// rewritten only when that expense CHANGES remotely. Import a year of bookings
+/// afterwards and every existing draft keeps the empty candidate list it was born
+/// with — which is exactly what happened here. The drafts were created at 20:51
+/// and the bookings arrived at 20:58, so 459 of them had been scored against an
+/// empty ledger and none of them were ever asked again.
+///
+/// This is the "ask again" — cheap, because every query is local and indexed on
+/// `(period_ord, amount_cents)`, and idempotent, because it only writes the answer
+/// the current data gives.
+pub async fn rescan_open(conn: &mut PgConnection, threshold: f64) -> Result<RescanResult> {
+    let rows = sqlx::query(
+        "SELECT d.id, e.external_id, e.name, e.expense_date, e.amount_cents, \
+                e.own_share_cents \
+           FROM ko_drafts d \
+           JOIN ko_expenses e ON e.id = d.ko_expense_id \
+          WHERE d.status IN ('open','likely_duplicate','possible_duplicate','ignored_by_default') \
+            AND e.archived_at IS NULL \
+          ORDER BY e.expense_date DESC",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let mut out = RescanResult {
+        scanned: rows.len() as i64,
+        with_candidates: 0,
+        likely_duplicates: 0,
+    };
+
+    for row in &rows {
+        let draft_id: Uuid = row.get("id");
+        // Scoring reads five fields; the rest are carried only so the shared
+        // `candidates` is the one implementation of "what might this be".
+        let expense = MirrorExpense {
+            external_id: row.get("external_id"),
+            name: row.get("name"),
+            description: None,
+            expense_date: row.get("expense_date"),
+            amount_cents: row.get("amount_cents"),
+            own_share_cents: row.get("own_share_cents"),
+            paid_by_id: None,
+            shares: Vec::new(),
+            ko_category_id: None,
+            ko_category_name: None,
+            exclude_from_statistics: false,
+            remote_hash: String::new(),
+        };
+        let found = candidates(&mut *conn, &expense, 5).await?;
+        let best = found.first().map(|c| c.score);
+        let status = if found.is_empty() {
+            "open"
+        } else if best.unwrap_or(0.0) >= threshold {
+            "likely_duplicate"
+        } else {
+            "possible_duplicate"
+        };
+        if !found.is_empty() {
+            out.with_candidates += 1;
+        }
+        if status == "likely_duplicate" {
+            out.likely_duplicates += 1;
+        }
+        sqlx::query("UPDATE ko_drafts SET status = $2, match_candidates = $3 WHERE id = $1")
+            .bind(draft_id)
+            .bind(status)
+            .bind(serde_json::to_value(&found).unwrap_or_else(|_| serde_json::json!([])))
+            .execute(&mut *conn)
+            .await?;
+    }
+
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
