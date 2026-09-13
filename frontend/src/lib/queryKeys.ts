@@ -39,6 +39,16 @@ export const qk = {
     seriesSubjects: (year: number) => ['derived', year, 'series-subjects'] as const,
   },
   years: () => ['years'] as const,
+  /**
+   * Rücklagen. Their status depends on bookings, so a booking change invalidates
+   * it — see `invalidateAfterBookingChange`.
+   */
+  funds: {
+    root: ['funds'] as const,
+    list: () => ['funds', 'list'] as const,
+    status: (year: number, month: number) => ['funds', 'status', year, month] as const,
+    suggestions: (year: number) => ['funds', 'suggestions', year] as const,
+  },
   recurring: {
     root: ['recurring'] as const,
     /** Scoped by period: due/booked flags are answers about one month. */
@@ -83,6 +93,8 @@ export const qk = {
 export function invalidateAfterBookingChange(client: QueryClient, years: number[]) {
   client.invalidateQueries({ queryKey: qk.bookings.root });
   client.invalidateQueries({ queryKey: qk.years() });
+  // A fund's spent-so-far is a sum over bookings, so it moved too.
+  client.invalidateQueries({ queryKey: qk.funds.root });
   for (const year of new Set(years)) {
     client.invalidateQueries({ queryKey: qk.derived.year(year) });
   }

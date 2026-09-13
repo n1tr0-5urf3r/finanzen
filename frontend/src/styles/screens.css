@@ -220,3 +220,17 @@
 .search-spellings { display: flex; flex-wrap: wrap; gap: .4rem; }
 .search-spellings .chip { display: inline-flex; align-items: center; gap: .35rem; }
 .search-results { display: grid; gap: .6rem; }
+/* ── Rücklagen ───────────────────────────────────────────────────────────────
+   Same furniture as every other report screen; only the totals strip is its own,
+   because the headline figure ("what is still coming") needs room for the
+   sentence that explains it. */
+.funds__totals {
+  margin-bottom: 1rem; display: grid; gap: .75rem; grid-template-columns: 1fr;
+}
+.funds__totals > * { min-width: 0; }
+@media (min-width: 620px) { .funds__totals { grid-template-columns: repeat(4, 1fr); } }
+.funds__suggestions {
+  display: grid; gap: .6rem; margin-top: .6rem; grid-template-columns: 1fr;
+}
+.funds__suggestions > * { min-width: 0; }
+@media (min-width: 720px) { .funds__suggestions { grid-template-columns: repeat(3, 1fr); } }

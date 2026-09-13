@@ -12,6 +12,7 @@ import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
 import { MonthsPage } from './features/months/MonthsPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
 import { RecurringPage } from './features/recurring/RecurringPage';
+import { FundsPage } from './features/funds/FundsPage';
 import { SearchPage } from './features/search/SearchPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TaxPage } from './features/tax/TaxPage';
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/vorlagen" element={<RecurringPage />} />
+          <Route path="/ruecklagen" element={<FundsPage />} />
           {/* A proper name, so the slug stays the proper name in both languages. */}
           <Route path="/kitchenowl" element={<KitchenOwlPage />} />
           <Route path="/steuer" element={<TaxPage />} />
