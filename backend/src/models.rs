@@ -1379,6 +1379,142 @@ pub struct KoMonthlySeries {
     pub months_with_data: i64,
 }
 
+/// One KitchenOwl category, this year against last.
+///
+/// Both figures are carried through the comparison, and so are both deltas. A
+/// household that spent 200 € more of which the user carries 100 € more is two
+/// facts, and collapsing them to one would be the same mistake the single-year
+/// view is built to avoid.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCompareRow {
+    pub ko_category_id: Option<i64>,
+    pub ko_category_name: Option<String>,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    pub previous_amount_cents: i64,
+    pub previous_own_share_cents: i64,
+    pub previous_expense_count: i64,
+    pub delta_amount_cents: i64,
+    pub delta_own_share_cents: i64,
+    /// `delta / previous`, absent when there is no previous to be a share of —
+    /// "+∞ %" for a category that did not exist last year is worse than nothing,
+    /// and `isNew` says what actually happened.
+    pub delta_ratio: Option<f64>,
+    /// The same figures restricted to the months both years carry. The mirror
+    /// started on 2024-12-22, so 2024 against 2025 is a part year against a full
+    /// one and the raw totals would be a statement about the calendar.
+    pub comparable_amount_cents: i64,
+    pub comparable_own_share_cents: i64,
+    pub comparable_previous_amount_cents: i64,
+    pub comparable_previous_own_share_cents: i64,
+    pub comparable_delta_amount_cents: i64,
+    pub comparable_delta_own_share_cents: i64,
+    pub comparable_delta_ratio: Option<f64>,
+    pub monthly_amount_cents: Vec<i64>,
+    pub monthly_own_share_cents: Vec<i64>,
+    pub previous_monthly_amount_cents: Vec<i64>,
+    pub previous_monthly_own_share_cents: Vec<i64>,
+    pub is_new: bool,
+    pub is_gone: bool,
+}
+
+/// One year's side of the comparison.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCompareTotals {
+    pub year: i32,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    pub months_with_data: i64,
+    /// Where the year's data stops, so a trailing window can end there instead of
+    /// running into months that have not happened.
+    pub last_month_with_data: Option<u8>,
+    pub comparable_amount_cents: i64,
+    pub comparable_own_share_cents: i64,
+    pub comparable_expense_count: i64,
+    /// What KitchenOwl itself keeps out of its statistics, per year.
+    pub excluded_count: i64,
+}
+
+/// Who paid, this year against last.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoComparePayer {
+    pub member_id: Option<i64>,
+    pub name: String,
+    pub amount_cents: i64,
+    pub previous_amount_cents: i64,
+    pub delta_cents: i64,
+    pub expense_count: i64,
+    pub previous_expense_count: i64,
+}
+
+/// The household's year against the one before it.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoYearComparison {
+    pub year: i32,
+    pub previous_year: i32,
+    pub current: KoCompareTotals,
+    pub previous: KoCompareTotals,
+    /// The months both years actually carry expenses in.
+    pub comparable_months: Vec<u8>,
+    /// False when the two years cover different months, which is when the raw
+    /// totals stop being a comparison.
+    pub fully_comparable: bool,
+    pub previous_year_has_data: bool,
+    pub rows: Vec<KoCompareRow>,
+    pub paid_by: Vec<KoComparePayer>,
+    /// Every year the mirror holds, newest first — the picker's options.
+    pub years: Vec<i32>,
+}
+
+/// One month of a trailing window, in window order.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTrailingMonth {
+    pub year: i32,
+    pub month: u8,
+    pub month_name: String,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+}
+
+/// One category over a trailing window, its twelve values in window order.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTrailingCategory {
+    pub ko_category_id: Option<i64>,
+    pub ko_category_name: Option<String>,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    pub average_per_month_cents: i64,
+    pub average_own_share_per_month_cents: i64,
+    pub monthly_amount_cents: Vec<i64>,
+    pub monthly_own_share_cents: Vec<i64>,
+}
+
+/// Twelve months ending wherever asked, ignoring the year boundary.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTrailingWindow {
+    pub year: i32,
+    pub month: u8,
+    pub from_year: i32,
+    pub from_month: u8,
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub expense_count: i64,
+    pub months_with_data: i64,
+    pub months: Vec<KoTrailingMonth>,
+    pub rows: Vec<KoTrailingCategory>,
+}
+
 /// A name worth charting, as the picker offers it.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

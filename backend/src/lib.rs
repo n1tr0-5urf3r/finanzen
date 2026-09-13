@@ -192,6 +192,14 @@ pub fn router(state: AppState) -> Router {
             get(kitchenowl::analysis::series_subjects),
         )
         .route(
+            "/kitchenowl/analysis/compare",
+            get(kitchenowl::analysis::compare),
+        )
+        .route(
+            "/kitchenowl/analysis/trailing",
+            get(kitchenowl::analysis::trailing),
+        )
+        .route(
             "/kitchenowl/settlement",
             get(kitchenowl::settle::settlement).post(kitchenowl::settle::settle),
         )

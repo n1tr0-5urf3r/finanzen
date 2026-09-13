@@ -1754,3 +1754,212 @@ async fn a_settlement_booking_can_be_deleted_again() {
     let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
     assert_eq!(view["alreadySettled"], false);
 }
+
+// ------------------------------------------------- the household, year on year
+
+/// Two years in the mirror, with a deliberately uneven shape.
+///
+/// 2025 carries February and June; 2026 carries February only. That makes June the
+/// months-only-one-year-has, which is exactly the case the comparison has to refuse
+/// to read as a saving.
+fn two_years() -> Vec<serde_json::Value> {
+    vec![
+        // 2025: Wocheneinkauf in Februar and Juni, Ausflug in Februar.
+        expense(
+            1,
+            "Kaufland",
+            40.00,
+            on(2025, 2, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            2,
+            "Kaufland",
+            60.00,
+            on(2025, 6, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            3,
+            "Kino",
+            30.00,
+            on(2025, 2, 20),
+            Some((2, "Ausflug")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+        // 2026: Wocheneinkauf in Februar only, and a category that is new this year.
+        expense(
+            4,
+            "Kaufland",
+            50.00,
+            on(2026, 2, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            5,
+            "Baumarkt",
+            20.00,
+            on(2026, 2, 12),
+            Some((3, "Haushalt")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+    ]
+}
+
+/// The household's year against the one before it — and the trap that a part year
+/// against a full one is not a comparison.
+#[tokio::test]
+async fn the_household_year_is_compared_only_over_the_months_both_years_hold() {
+    let mock = MockServer::start().await;
+    mock.seed(two_years());
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, c) = app
+        .send("GET", "/kitchenowl/analysis/compare?year=2026", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    assert_eq!(c["previousYear"], 2025);
+    assert_eq!(c["previousYearHasData"], true);
+
+    // 2026 has one month, 2025 has two, and only Februar is shared.
+    assert_eq!(c["fullyComparable"], false);
+    assert_eq!(c["comparableMonths"], serde_json::json!([2]));
+    assert_eq!(c["current"]["monthsWithData"], 1);
+    assert_eq!(c["previous"]["monthsWithData"], 2);
+    assert_eq!(c["current"]["lastMonthWithData"], 2);
+
+    // Raw: 70,00 against 130,00 — which would read as a 46 % saving caused entirely
+    // by June not having happened yet.
+    assert_eq!(c["current"]["amountCents"], 7000);
+    assert_eq!(c["previous"]["amountCents"], 13000);
+    // Restricted to Februar, the honest pair: 70,00 against 70,00.
+    assert_eq!(c["current"]["comparableAmountCents"], 7000);
+    assert_eq!(c["previous"]["comparableAmountCents"], 7000);
+    // Both figures, always: the user's half of each.
+    assert_eq!(c["current"]["ownShareCents"], 3500);
+    assert_eq!(c["previous"]["ownShareCents"], 6500);
+    assert_eq!(c["current"]["comparableOwnShareCents"], 3500);
+    assert_eq!(c["previous"]["comparableOwnShareCents"], 3500);
+
+    let rows = c["rows"].as_array().expect("rows");
+    let find = |name: &str| {
+        rows.iter()
+            .find(|r| r["koCategoryName"] == name)
+            .unwrap_or_else(|| panic!("row {name} missing"))
+    };
+
+    // Wocheneinkauf: 50,00 this year against 100,00 raw, but 40,00 in the shared
+    // month — so the raw delta says −50,00 and the honest one says +10,00. Getting
+    // this backwards is the whole reason the restricted figures exist.
+    let wocheneinkauf = find("Wocheneinkauf");
+    assert_eq!(wocheneinkauf["amountCents"], 5000);
+    assert_eq!(wocheneinkauf["previousAmountCents"], 10000);
+    assert_eq!(wocheneinkauf["deltaAmountCents"], -5000);
+    assert_eq!(wocheneinkauf["comparableAmountCents"], 5000);
+    assert_eq!(wocheneinkauf["comparablePreviousAmountCents"], 4000);
+    assert_eq!(wocheneinkauf["comparableDeltaAmountCents"], 1000);
+    // The share moves with it and is reported separately, never folded in.
+    assert_eq!(wocheneinkauf["ownShareCents"], 2500);
+    assert_eq!(wocheneinkauf["comparableDeltaOwnShareCents"], 500);
+    assert_eq!(wocheneinkauf["monthlyAmountCents"][1], 5000);
+    assert_eq!(wocheneinkauf["previousMonthlyAmountCents"][5], 6000);
+
+    // A category that did not exist last year is new, not infinitely more expensive.
+    let haushalt = find("Haushalt");
+    assert_eq!(haushalt["isNew"], true);
+    assert_eq!(haushalt["previousAmountCents"], 0);
+    assert!(haushalt["deltaRatio"].is_null());
+
+    // ...and one that has stopped is marked rather than dropped.
+    let ausflug = find("Ausflug");
+    assert_eq!(ausflug["isGone"], true);
+    assert_eq!(ausflug["amountCents"], 0);
+    assert_eq!(ausflug["previousAmountCents"], 3000);
+
+    // Who paid, both years. Ada paid the Kino in 2025 and the Baumarkt in 2026.
+    let payers = c["paidBy"].as_array().expect("paidBy");
+    let ada = payers
+        .iter()
+        .find(|p| p["name"] == "Ada")
+        .expect("Ada paid something");
+    assert_eq!(ada["amountCents"], 2000);
+    assert_eq!(ada["previousAmountCents"], 3000);
+    assert_eq!(ada["deltaCents"], -1000);
+
+    // THE invariant of this whole module: comparing the mirror writes no booking.
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(bookings["total"], 0);
+}
+
+/// The rolling window ignores the calendar, which is the only reason it exists.
+#[tokio::test]
+async fn the_household_trailing_window_crosses_the_year_boundary() {
+    let mock = MockServer::start().await;
+    mock.seed(two_years());
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    // Twelve months ending Februar 2026 start in März 2025 — so Juni 2025 is inside
+    // the window and Februar 2025 has just fallen out of it.
+    let (status, w) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/trailing?year=2026&month=2",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    assert_eq!(w["fromYear"], 2025);
+    assert_eq!(w["fromMonth"], 3);
+    assert_eq!(w["months"].as_array().expect("months").len(), 12);
+
+    // Juni 2025 (60,00) plus Februar 2026 (50,00 + 20,00). Februar 2025 is excluded
+    // by the window, which is the assertion that matters: a calendar year would
+    // have included it or dropped Juni.
+    assert_eq!(w["amountCents"], 6000 + 5000 + 2000);
+    assert_eq!(w["ownShareCents"], 3000 + 2500 + 1000);
+    assert_eq!(w["monthsWithData"], 2);
+
+    let months = w["months"].as_array().expect("months");
+    assert_eq!(months[0]["year"], 2025);
+    assert_eq!(months[0]["month"], 3);
+    // Position 3 in the window is Juni 2025; position 11 is Februar 2026.
+    assert_eq!(months[3]["month"], 6);
+    assert_eq!(months[3]["amountCents"], 6000);
+    assert_eq!(months[11]["year"], 2026);
+    assert_eq!(months[11]["month"], 2);
+    assert_eq!(months[11]["amountCents"], 7000);
+
+    // Categories are bucketed by WINDOW position, not by calendar month.
+    let rows = w["rows"].as_array().expect("rows");
+    let wocheneinkauf = rows
+        .iter()
+        .find(|r| r["koCategoryName"] == "Wocheneinkauf")
+        .expect("Wocheneinkauf");
+    assert_eq!(wocheneinkauf["monthlyAmountCents"][3], 6000);
+    assert_eq!(wocheneinkauf["monthlyAmountCents"][11], 5000);
+    // Averaged over the months the household was active in the window, not twelve.
+    assert_eq!(wocheneinkauf["averagePerMonthCents"], 5500);
+
+    // A month outside 1..12 is a 400, not a window that silently slides.
+    let (status, _) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/trailing?year=2026&month=13",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

@@ -12,6 +12,7 @@ import { formatEuroCompact, formatPercent, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useMaskAmount } from '../../lib/privacy';
 import { qk } from '../../lib/queryKeys';
+import { KoCompare } from './KoCompare';
 import type {
   KoCategoryAnalysis,
   KoExpense,
@@ -43,6 +44,10 @@ export function KoAnalysis() {
   const maskAmount = useMaskAmount();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [subject, setSubject] = useState<Subject | null>(null);
+  // One year, or that year against the one before it. Two views rather than one
+  // long screen: the comparison doubles every column, and a table that wide stops
+  // being readable on the phone this app is mostly used on.
+  const [view, setView] = useState<'year' | 'compare'>('year');
 
   const analysis = useQuery({
     queryKey: qk.kitchenowl.analysis(year),
@@ -81,17 +86,35 @@ export function KoAnalysis() {
             }}
           />
         </div>
+        <div className="segmented" role="group" aria-label={t('ko.tabAnalysis')}>
+          <button type="button" aria-pressed={view === 'year'} onClick={() => setView('year')}>
+            {t('ko.viewYear')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === 'compare'}
+            onClick={() => setView('compare')}
+          >
+            {t('ko.viewCompare')}
+          </button>
+        </div>
         <p className="footnote" style={{ margin: 0 }}>
           {t('ko.analysisScope')}
         </p>
       </div>
 
-      {analysis.isPending && <LoadingState />}
-      {analysis.isError && <ErrorState error={analysis.error} retry={() => analysis.refetch()} />}
+      {view === 'compare' && <KoCompare year={year} />}
 
-      {analysis.data && rows.length === 0 && <EmptyState hint={t('ko.analysisEmpty')} />}
+      {view === 'year' && analysis.isPending && <LoadingState />}
+      {view === 'year' && analysis.isError && (
+        <ErrorState error={analysis.error} retry={() => analysis.refetch()} />
+      )}
 
-      {analysis.data && rows.length > 0 && (
+      {view === 'year' && analysis.data && rows.length === 0 && (
+        <EmptyState hint={t('ko.analysisEmpty')} />
+      )}
+
+      {view === 'year' && analysis.data && rows.length > 0 && (
         <>
           {analysis.data.excludedCount > 0 && (
             <Banner tone="info">

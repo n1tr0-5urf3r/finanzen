@@ -618,6 +618,105 @@ export interface KoSeriesSubject {
   koCategoryName: string | null;
 }
 
+/** One KitchenOwl category, this year against last. Both figures, both deltas. */
+export interface KoCompareRow {
+  koCategoryId: number | null;
+  koCategoryName: string | null;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  previousAmountCents: number;
+  previousOwnShareCents: number;
+  previousExpenseCount: number;
+  deltaAmountCents: number;
+  deltaOwnShareCents: number;
+  /** Null when there was no previous year to be a share of. */
+  deltaRatio: number | null;
+  comparableAmountCents: number;
+  comparableOwnShareCents: number;
+  comparablePreviousAmountCents: number;
+  comparablePreviousOwnShareCents: number;
+  comparableDeltaAmountCents: number;
+  comparableDeltaOwnShareCents: number;
+  comparableDeltaRatio: number | null;
+  monthlyAmountCents: number[];
+  monthlyOwnShareCents: number[];
+  previousMonthlyAmountCents: number[];
+  previousMonthlyOwnShareCents: number[];
+  isNew: boolean;
+  isGone: boolean;
+}
+
+export interface KoCompareTotals {
+  year: number;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  monthsWithData: number;
+  lastMonthWithData: number | null;
+  comparableAmountCents: number;
+  comparableOwnShareCents: number;
+  comparableExpenseCount: number;
+  excludedCount: number;
+}
+
+export interface KoComparePayer {
+  memberId: number | null;
+  name: string;
+  amountCents: number;
+  previousAmountCents: number;
+  deltaCents: number;
+  expenseCount: number;
+  previousExpenseCount: number;
+}
+
+export interface KoYearComparison {
+  year: number;
+  previousYear: number;
+  current: KoCompareTotals;
+  previous: KoCompareTotals;
+  comparableMonths: number[];
+  fullyComparable: boolean;
+  previousYearHasData: boolean;
+  rows: KoCompareRow[];
+  paidBy: KoComparePayer[];
+  years: number[];
+}
+
+export interface KoTrailingMonth {
+  year: number;
+  month: number;
+  monthName: string;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+}
+
+export interface KoTrailingCategory {
+  koCategoryId: number | null;
+  koCategoryName: string | null;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  averagePerMonthCents: number;
+  averageOwnSharePerMonthCents: number;
+  monthlyAmountCents: number[];
+  monthlyOwnShareCents: number[];
+}
+
+export interface KoTrailingWindow {
+  year: number;
+  month: number;
+  fromYear: number;
+  fromMonth: number;
+  amountCents: number;
+  ownShareCents: number;
+  expenseCount: number;
+  monthsWithData: number;
+  months: KoTrailingMonth[];
+  rows: KoTrailingCategory[];
+}
+
 export interface KoMatchCandidate {
   bookingId: string;
   comment: string;

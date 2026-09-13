@@ -2003,6 +2003,39 @@
         }
       }
     },
+    "/api/v1/kitchenowl/analysis/compare": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "The household's year against the one before it, per KitchenOwl category.",
+        "operationId": "compare",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr; verglichen wird mit dem Vorjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Haushalt und eigener Anteil, Jahr gegen Vorjahr — roh und auf gemeinsame Monate beschränkt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoYearComparison"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/analysis/series": {
       "get": {
         "tags": [
@@ -2099,6 +2132,53 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/analysis/trailing": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "The twelve months ending at the given period, whatever years they fall in.",
+        "operationId": "trailing",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Jahr des letzten Monats im Fenster",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Monat 1..12 — das Fenster endet hier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zwölf Monate rückwärts, über die Jahresgrenze hinweg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoTrailingWindow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Monat außerhalb 1..12"
           }
         }
       }
@@ -5401,6 +5481,260 @@
           }
         }
       },
+      "KoComparePayer": {
+        "type": "object",
+        "description": "Who paid, this year against last.",
+        "required": [
+          "name",
+          "amountCents",
+          "previousAmountCents",
+          "deltaCents",
+          "expenseCount",
+          "previousExpenseCount"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "memberId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "previousAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousExpenseCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoCompareRow": {
+        "type": "object",
+        "description": "One KitchenOwl category, this year against last.\n\nBoth figures are carried through the comparison, and so are both deltas. A\nhousehold that spent 200 € more of which the user carries 100 € more is two\nfacts, and collapsing them to one would be the same mistake the single-year\nview is built to avoid.",
+        "required": [
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "previousAmountCents",
+          "previousOwnShareCents",
+          "previousExpenseCount",
+          "deltaAmountCents",
+          "deltaOwnShareCents",
+          "comparableAmountCents",
+          "comparableOwnShareCents",
+          "comparablePreviousAmountCents",
+          "comparablePreviousOwnShareCents",
+          "comparableDeltaAmountCents",
+          "comparableDeltaOwnShareCents",
+          "monthlyAmountCents",
+          "monthlyOwnShareCents",
+          "previousMonthlyAmountCents",
+          "previousMonthlyOwnShareCents",
+          "isNew",
+          "isGone"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableAmountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The same figures restricted to the months both years carry. The mirror\nstarted on 2024-12-22, so 2024 against 2025 is a part year against a full\none and the raw totals would be a statement about the calendar."
+          },
+          "comparableDeltaAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableDeltaOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableDeltaRatio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "comparableOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparablePreviousAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparablePreviousOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deltaRatio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "`delta / previous`, absent when there is no previous to be a share of —\n\"+∞ %\" for a category that did not exist last year is worse than nothing,\nand `isNew` says what actually happened."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isGone": {
+            "type": "boolean"
+          },
+          "isNew": {
+            "type": "boolean"
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monthlyAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "monthlyOwnShareCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousExpenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previousMonthlyAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "previousMonthlyOwnShareCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "previousOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoCompareTotals": {
+        "type": "object",
+        "description": "One year's side of the comparison.",
+        "required": [
+          "year",
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "monthsWithData",
+          "comparableAmountCents",
+          "comparableOwnShareCents",
+          "comparableExpenseCount",
+          "excludedCount"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableExpenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparableOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "excludedCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What KitchenOwl itself keeps out of its statistics, per year."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastMonthWithData": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Where the year's data stops, so a trailing window can end there instead of\nrunning into months that have not happened.",
+            "minimum": 0
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "KoDraft": {
         "type": "object",
         "required": [
@@ -6506,6 +6840,238 @@
           "updatedCount": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "KoTrailingCategory": {
+        "type": "object",
+        "description": "One category over a trailing window, its twelve values in window order.",
+        "required": [
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "averagePerMonthCents",
+          "averageOwnSharePerMonthCents",
+          "monthlyAmountCents",
+          "monthlyOwnShareCents"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averageOwnSharePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averagePerMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monthlyAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "monthlyOwnShareCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoTrailingMonth": {
+        "type": "object",
+        "description": "One month of a trailing window, in window order.",
+        "required": [
+          "year",
+          "month",
+          "monthName",
+          "amountCents",
+          "ownShareCents",
+          "expenseCount"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "KoTrailingWindow": {
+        "type": "object",
+        "description": "Twelve months ending wherever asked, ignoring the year boundary.",
+        "required": [
+          "year",
+          "month",
+          "fromYear",
+          "fromMonth",
+          "amountCents",
+          "ownShareCents",
+          "expenseCount",
+          "monthsWithData",
+          "months",
+          "rows"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fromMonth": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "fromYear": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoTrailingMonth"
+            }
+          },
+          "monthsWithData": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoTrailingCategory"
+            }
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "KoYearComparison": {
+        "type": "object",
+        "description": "The household's year against the one before it.",
+        "required": [
+          "year",
+          "previousYear",
+          "current",
+          "previous",
+          "comparableMonths",
+          "fullyComparable",
+          "previousYearHasData",
+          "rows",
+          "paidBy",
+          "years"
+        ],
+        "properties": {
+          "comparableMonths": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "The months both years actually carry expenses in."
+          },
+          "current": {
+            "$ref": "#/components/schemas/KoCompareTotals"
+          },
+          "fullyComparable": {
+            "type": "boolean",
+            "description": "False when the two years cover different months, which is when the raw\ntotals stop being a comparison."
+          },
+          "paidBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoComparePayer"
+            }
+          },
+          "previous": {
+            "$ref": "#/components/schemas/KoCompareTotals"
+          },
+          "previousYear": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "previousYearHasData": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoCompareRow"
+            }
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "Every year the mirror holds, newest first — the picker's options."
           }
         }
       },
