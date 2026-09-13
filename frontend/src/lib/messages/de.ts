@@ -504,6 +504,8 @@ export const de = {
   'ko.archived': 'In KitchenOwl gelöscht',
   'ko.excluded': 'Von der Statistik ausgenommen',
   'ko.searchPlaceholder': 'Name oder Beschreibung',
+  'ko.searchLabel': 'Suche',
+  'ko.filterLabel': 'Verknüpfung',
   'ko.filterAll': 'Alle',
   'ko.filterLinked': 'Nur verknüpfte',
   'ko.filterUnlinked': 'Nur ohne Verknüpfung',

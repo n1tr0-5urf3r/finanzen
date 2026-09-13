@@ -470,6 +470,8 @@ export const en: Messages = {
   'ko.archived': 'Deleted in KitchenOwl',
   'ko.excluded': 'Excluded from statistics',
   'ko.searchPlaceholder': 'Name or description',
+  'ko.searchLabel': 'Search',
+  'ko.filterLabel': 'Link',
   'ko.filterAll': 'All',
   'ko.filterLinked': 'Linked only',
   'ko.filterUnlinked': 'Unlinked only',

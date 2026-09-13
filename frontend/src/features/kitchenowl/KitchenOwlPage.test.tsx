@@ -150,6 +150,23 @@ function route(path = '/kitchenowl') {
   );
 }
 
+/**
+ * The ledger renders twice — the wide table and the phone cards are both in the
+ * DOM and CSS picks one — so a bare `getByText` finds two of everything. Every
+ * other dual-view screen's tests scope to `.screen-table` the same way.
+ */
+function tableRow(container: HTMLElement, text: string) {
+  const row = [...container.querySelectorAll('.screen-table tbody tr')].find((r) =>
+    r.textContent?.includes(text),
+  );
+  if (!row) throw new Error(`no table row containing ${text}`);
+  return row as HTMLElement;
+}
+
+function inTable(container: HTMLElement) {
+  return within(container.querySelector('.screen-table') as HTMLElement);
+}
+
 beforeEach(() => {
   api.mockReset();
   api.mockImplementation((path: string) => {
@@ -163,8 +180,9 @@ beforeEach(() => {
 
 describe('the KitchenOwl ledger', () => {
   it('shows the household amount and the own share as two labelled figures', async () => {
-    route();
-    const row = (await screen.findByText('Supermarkt')).closest('tr')!;
+    const { container } = route();
+    await screen.findAllByText('Supermarkt');
+    const row = tableRow(container, 'Supermarkt');
 
     // Both numbers, in their own columns, each carrying its basis in the
     // accessible name. This pair is the most confusable in the feature.
@@ -178,23 +196,28 @@ describe('the KitchenOwl ledger', () => {
   });
 
   it('never sums the two ledgers in the footer either', async () => {
-    route();
-    await screen.findByText('Supermarkt');
-    expect(screen.getByText(/26,97/).getAttribute('aria-label')).toContain(
+    const { container } = route();
+    await screen.findAllByText('Supermarkt');
+    // The footer totals exist only in the table; the cards have no footer.
+    expect(inTable(container).getByText(/26,97/).getAttribute('aria-label')).toContain(
       'Gesamtbetrag des Haushalts',
     );
-    expect(screen.getByText(/17,44/).getAttribute('aria-label')).toContain('mein Anteil');
+    expect(inTable(container).getByText(/17,44/).getAttribute('aria-label')).toContain(
+      'mein Anteil',
+    );
   });
 
   it('renders the missing KitchenOwl category as a real state, not an empty cell', async () => {
-    route();
-    const row = (await screen.findByText('Kiosk')).closest('tr')!;
+    const { container } = route();
+    await screen.findAllByText('Kiosk');
+    const row = tableRow(container, 'Kiosk');
     expect(within(row).getByText('ohne KitchenOwl-Kategorie')).toBeInTheDocument();
   });
 
   it('does not style a KitchenOwl category like one of the app categories', async () => {
-    route();
-    const chip = await screen.findByText('Wocheneinkauf');
+    const { container } = route();
+    await screen.findAllByText('Wocheneinkauf');
+    const chip = inTable(container).getByText('Wocheneinkauf');
     const box = chip.closest('span')!.parentElement!;
     // Two unrelated taxonomies. Looking alike would teach that they map onto each
     // other, and nothing in this feature ever maps them.
@@ -203,8 +226,9 @@ describe('the KitchenOwl ledger', () => {
   });
 
   it('states that an unlinked expense is normal rather than flagging it', async () => {
-    route();
-    const row = (await screen.findByText('Kiosk')).closest('tr')!;
+    const { container } = route();
+    await screen.findAllByText('Kiosk');
+    const row = tableRow(container, 'Kiosk');
     const state = within(row).getByText('Ohne Verknüpfung');
     expect(state.className).toContain('ko-link--none');
     // Not the uncategorised/warning treatment used for a booking with no category.
@@ -213,7 +237,7 @@ describe('the KitchenOwl ledger', () => {
 
   it('says outright that the two ledgers are separate, and when it last synced', async () => {
     route();
-    await screen.findByText('Supermarkt');
+    await screen.findAllByText('Supermarkt');
     expect(screen.getByText(/werden nie zu deinen Buchungen addiert/)).toBeInTheDocument();
     expect(screen.getByText(/^Zuletzt:/)).toBeInTheDocument();
     expect(screen.getByText(/^Nächste:/)).toBeInTheDocument();
@@ -252,7 +276,7 @@ describe('the KitchenOwl ledger', () => {
     expect(await screen.findByText(/nicht erreichbar/)).toBeInTheDocument();
     expect(screen.getByText(/keine Verbindung/)).toBeInTheDocument();
     // The mirror is still readable — it is the last true state, not a guess.
-    expect(await screen.findByText('Supermarkt')).toBeInTheDocument();
+    expect((await screen.findAllByText('Supermarkt')).length).toBeGreaterThan(0);
   });
 
   it('tells the user a sync is not configured rather than showing an empty page', async () => {
@@ -268,7 +292,7 @@ describe('the KitchenOwl ledger', () => {
   it('runs a manual sync and reports what it did', async () => {
     const user = userEvent.setup();
     route();
-    await screen.findByText('Supermarkt');
+    await screen.findAllByText('Supermarkt');
 
     api.mockImplementation((path: string, init?: RequestInit) => {
       if (path === '/kitchenowl/sync' && init?.method === 'POST') {
@@ -286,5 +310,37 @@ describe('the KitchenOwl ledger', () => {
 
     await user.click(screen.getByRole('button', { name: /Jetzt synchronisieren/ }));
     expect(await screen.findByText(/2 neu, 1 geändert/)).toBeInTheDocument();
+  });
+
+  /**
+   * The switcher is the first thing under the header, on this screen as on every
+   * other. It used to sit below the sync strip and the settlement card, which on a
+   * phone put five tabs below the fold — the complaint that prompted the whole
+   * consistency pass.
+   */
+  it('puts the tab bar directly under the header, above everything else', async () => {
+    const { container } = route();
+    await screen.findAllByText('Supermarkt');
+
+    const tabs = container.querySelector('[role="tablist"]')!;
+    const strip = container.querySelector('.ko-strip')!;
+    expect(tabs).toBeTruthy();
+    expect(strip).toBeTruthy();
+    // Document order: the tabs come first.
+    expect(tabs.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Only what is true of every tab may precede them: what this screen is, and
+    // whether it is current.
+    const beforeTabs = [...container.querySelectorAll('.banner, [role="tablist"]')];
+    expect(beforeTabs.length).toBeGreaterThan(1); // the separate-ledger banner is there
+    expect(beforeTabs[beforeTabs.length - 1]).toBe(tabs);
+  });
+
+  /** The sync strip and the settlement belong to the ledger, not to all five tabs. */
+  it('leaves the sync strip and the settlement behind when another tab is open', async () => {
+    const { container } = route('/kitchenowl?ansicht=push');
+    await screen.findByRole('tablist');
+    expect(container.querySelector('.ko-strip')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ausgleich buchen/ })).toBeNull();
   });
 });

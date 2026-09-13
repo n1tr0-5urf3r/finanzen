@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
-import { Banner, EmptyState, ErrorState, LoadingState, StatusPill } from '../../components/ui';
+import { Banner, EmptyState, ErrorState, Kpi, LoadingState, StatusPill } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { GroupedMonthBars } from '../../charts/GroupedMonthBars';
 import { formatPercent } from '../../lib/format';
@@ -145,45 +145,38 @@ export function KoCompare({ year }: { year: number }) {
       )}
 
       {totals && (
-        <div className="ko-analysis__totals panel panel--pad">
-          <div>
-            <span className="kpi__label">{t('ko.compareHouseholdChange')}</span>
-            <span className="kpi__value">
-              <Money
-                cents={totals.amount - totals.previousAmount}
-                basis="household"
-                signed
-                tone={totals.amount >= totals.previousAmount ? 'expense' : 'income'}
-              />
-            </span>
-          </div>
-          <div>
-            <span className="kpi__label">{t('ko.compareShareChange')}</span>
-            <span className="kpi__value">
-              <Money
-                cents={totals.share - totals.previousShare}
-                basis="share"
-                signed
-                tone={totals.share >= totals.previousShare ? 'expense' : 'income'}
-              />
-            </span>
-          </div>
-          <div>
-            <span className="kpi__label">{t('ko.compareBasis')}</span>
-            <span className="kpi__value" style={{ fontSize: '1rem' }}>
+        <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+          <Kpi label={t('ko.compareHouseholdChange')} scope="none">
+            <Money
+              cents={totals.amount - totals.previousAmount}
+              basis="household"
+              signed
+              tone={totals.amount >= totals.previousAmount ? 'expense' : 'income'}
+            />
+          </Kpi>
+          <Kpi label={t('ko.compareShareChange')} scope="none">
+            <Money
+              cents={totals.share - totals.previousShare}
+              basis="share"
+              signed
+              tone={totals.share >= totals.previousShare ? 'expense' : 'income'}
+            />
+          </Kpi>
+          <Kpi
+            label={t('ko.compareBasis')}
+            scope="none"
+            hint={t('ko.compareMonthsCovered', {
+              current: data.current.monthsWithData,
+              previous: data.previous.monthsWithData,
+            })}
+          >
+            <span style={{ fontSize: '1rem' }}>
               {basis === 'comparable'
                 ? t('ko.compareBasisComparable', { count: data.comparableMonths.length })
                 : t('ko.compareBasisRaw')}
             </span>
-            <span className="kpi__scope">
-              {t('ko.compareMonthsCovered', {
-                current: data.current.monthsWithData,
-                previous: data.previous.monthsWithData,
-              })}
-            </span>
-          </div>
-          <div>
-            <span className="kpi__label">{t('ko.comparePayers')}</span>
+          </Kpi>
+          <Kpi label={t('ko.comparePayers')} scope="none">
             <span className="ko-analysis__payers">
               {payers.map((p) => (
                 <span key={p.name}>
@@ -197,7 +190,7 @@ export function KoCompare({ year }: { year: number }) {
                 </span>
               ))}
             </span>
-          </div>
+          </Kpi>
         </div>
       )}
 

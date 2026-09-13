@@ -4,7 +4,7 @@ import { Check, Tag } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
-import { Banner, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
+import { Banner, Button, EmptyState, ErrorState, Kpi, LoadingState } from '../../components/ui';
 import { api, asList, jsonBody } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
@@ -146,27 +146,19 @@ export function KoTagging() {
         <EmptyState title={t('ko.tagNothingLeft')} hint={t('ko.tagNothingLeftHint')} />
       ) : (
         <>
-          <div className="ko-analysis__totals panel panel--pad">
-            <div>
-              <span className="kpi__label">{t('ko.tagNames')}</span>
-              <span className="kpi__value num">{rows.length}</span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.expenseCount')}</span>
-              <span className="kpi__value num">{totals.expenses}</span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.household')}</span>
-              <span className="kpi__value">
-                <Money cents={totals.amount} basis="household" />
-              </span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.myShare')}</span>
-              <span className="kpi__value">
-                <Money cents={totals.share} basis="share" />
-              </span>
-            </div>
+          <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+            <Kpi label={t('ko.tagNames')} scope="none">
+              <span className="num">{rows.length}</span>
+            </Kpi>
+            <Kpi label={t('ko.expenseCount')} scope="none">
+              <span className="num">{totals.expenses}</span>
+            </Kpi>
+            <Kpi label={t('ko.household')} scope="none">
+              <Money cents={totals.amount} basis="household" />
+            </Kpi>
+            <Kpi label={t('ko.myShare')} scope="none">
+              <Money cents={totals.share} basis="share" />
+            </Kpi>
           </div>
 
           {apply.isError && <ErrorState error={apply.error} />}
