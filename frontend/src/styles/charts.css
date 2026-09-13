@@ -80,3 +80,18 @@
 .chart__bar--credit { fill: var(--credit); }
 .chart__bar--expense { fill: var(--expense); }
 .series__drilldown { font-size: .85rem; margin-bottom: .6rem; }
+
+/* Two years side by side: the pair is coloured by PERIOD, not by direction —
+   which side of the baseline a bar sits on already says that. */
+.chart__bar--now  { fill: var(--accent); }
+.chart__bar--then { fill: var(--anthrazit-300); }
+.chart-legend {
+  display: flex; flex-wrap: wrap; gap: .35rem 1rem;
+  font-size: .78rem; color: var(--muted); margin: 0 0 .4rem;
+}
+.chart-legend__item { display: inline-flex; align-items: center; gap: .35rem; }
+.chart-legend__swatch {
+  width: .7rem; height: .7rem; border-radius: 2px; display: inline-block;
+}
+.chart-legend__swatch--now  { background: var(--accent); }
+.chart-legend__swatch--then { background: var(--anthrazit-300); }

@@ -17,6 +17,7 @@ import { api, asList } from '../../lib/api';
 import { formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
+import { GroupedMonthBars } from '../../charts/GroupedMonthBars';
 import { TrailingChart } from './TrailingChart';
 import type { MessageKey } from '../../lib/messages/de';
 import type {
@@ -87,6 +88,9 @@ export function ComparePage() {
   const year = Number(params.get('jahr')) || new Date().getFullYear();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'delta', desc: true });
   const [basisOverride, setBasisOverride] = useState<Basis | null>(null);
+  // Which category the month-by-month pair is drawn for. Empty means "the one at
+  // the top of the table", so the chart answers something before it is touched.
+  const [charted, setCharted] = useState<string>('');
 
   const query = useQuery({
     queryKey: qk.derived.compare(year),
@@ -119,6 +123,11 @@ export function ComparePage() {
         : { key, desc: key !== 'name' && key !== 'type' },
     );
   }
+
+  // Falls back to the first row rather than to nothing, and survives a year change
+  // that no longer contains the chosen category.
+  const chartedRow =
+    rows.find((r) => (r.categoryId ?? r.categoryName) === charted) ?? rows[0] ?? null;
 
   const totals = (() => {
     if (!data) return null;
@@ -254,6 +263,42 @@ export function ComparePage() {
           {trailing.data && (
             <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
               <TrailingChart months={asList(trailing.data.months)} />
+              <ScopeNote transfersIncluded={false} />
+            </div>
+          )}
+
+          {/* The table says which year was larger. Only the months say WHEN — a new
+              standing cost from March and one holiday in August are the same
+              number in a total and nothing alike. */}
+          {chartedRow && (
+            <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
+              <div className="field" style={{ maxWidth: '22rem', marginBottom: '.6rem' }}>
+                <label htmlFor="compare-chart-category">{t('bookings.category')}</label>
+                <select
+                  id="compare-chart-category"
+                  className="select"
+                  value={chartedRow.categoryId ?? chartedRow.categoryName}
+                  onChange={(e) => setCharted(e.target.value)}
+                >
+                  {rows.map((row) => (
+                    <option
+                      key={row.categoryId ?? row.categoryName}
+                      value={row.categoryId ?? row.categoryName}
+                    >
+                      {row.categoryName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <GroupedMonthBars
+                title={`${chartedRow.categoryName} · ${year} / ${data.previousYear}`}
+                note={t('compare.monthlyNote')}
+                labelCurrent={String(year)}
+                labelPrevious={String(data.previousYear)}
+                current={chartedRow.monthlyNetCents}
+                previous={chartedRow.previousMonthlyNetCents}
+                valueBasis="net"
+              />
               <ScopeNote transfersIncluded={false} />
             </div>
           )}

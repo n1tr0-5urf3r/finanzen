@@ -5,6 +5,7 @@ import { DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
 import { Banner, EmptyState, ErrorState, LoadingState, StatusPill } from '../../components/ui';
 import { api, asList } from '../../lib/api';
+import { GroupedMonthBars } from '../../charts/GroupedMonthBars';
 import { formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
@@ -58,6 +59,11 @@ function pick(row: KoCompareRow, basis: Basis) {
 export function KoCompare({ year }: { year: number }) {
   const t = useT();
   const [basisOverride, setBasisOverride] = useState<Basis | null>(null);
+  const [charted, setCharted] = useState<string>('');
+  // Which of the pair the bars draw. The household amount and the user's share are
+  // different numbers with different meanings, so the chart has to say which one it
+  // is showing rather than let the reader assume.
+  const [showShare, setShowShare] = useState(false);
 
   const query = useQuery({
     queryKey: qk.kitchenowl.compare(year),
@@ -80,6 +86,9 @@ export function KoCompare({ year }: { year: number }) {
 
   const rows = useMemo(() => asList<KoCompareRow>(data?.rows), [data]);
   const payers = asList<KoComparePayer>(data?.paidBy);
+
+  const chartedRow =
+    rows.find((r) => String(r.koCategoryId ?? 'none') === charted) ?? rows[0] ?? null;
 
   const totals = data
     ? basis === 'comparable'
@@ -195,6 +204,54 @@ export function KoCompare({ year }: { year: number }) {
       {trailing.data && (
         <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
           <KoTrailingChart months={asList(trailing.data.months)} />
+        </div>
+      )}
+
+      {chartedRow && data && (
+        <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
+          <div
+            style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end',
+                     marginBottom: '.6rem' }}
+          >
+            <div className="field" style={{ minWidth: '13rem' }}>
+              <label htmlFor="ko-compare-chart">{t('ko.category')}</label>
+              <select
+                id="ko-compare-chart"
+                className="select"
+                value={String(chartedRow.koCategoryId ?? 'none')}
+                onChange={(e) => setCharted(e.target.value)}
+              >
+                {rows.map((row) => (
+                  <option key={row.koCategoryId ?? 'none'} value={String(row.koCategoryId ?? 'none')}>
+                    {row.koCategoryName ?? t('ko.noCategory')}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="chip" style={{ cursor: 'pointer', minHeight: 'var(--tap)' }}>
+              <input
+                type="checkbox"
+                checked={showShare}
+                onChange={(e) => setShowShare(e.target.checked)}
+              />
+              {t('ko.compareShowShare')}
+            </label>
+          </div>
+          <GroupedMonthBars
+            title={`${chartedRow.koCategoryName ?? t('ko.noCategory')} · ${
+              showShare ? t('ko.myShare') : t('ko.household')
+            } · ${year} / ${data.previousYear}`}
+            note={t('ko.compareMonthlyNote')}
+            labelCurrent={String(year)}
+            labelPrevious={String(data.previousYear)}
+            current={showShare ? chartedRow.monthlyOwnShareCents : chartedRow.monthlyAmountCents}
+            previous={
+              showShare
+                ? chartedRow.previousMonthlyOwnShareCents
+                : chartedRow.previousMonthlyAmountCents
+            }
+            valueBasis="gross"
+          />
         </div>
       )}
 

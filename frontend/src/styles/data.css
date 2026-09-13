@@ -32,8 +32,11 @@
   border-radius: var(--r-lg); padding: .85rem .95rem;
   display: flex; flex-direction: column; gap: .1rem; min-width: 0;
 }
-.kpi__label { font-size: .78rem; color: var(--muted); font-weight: 600; }
-.kpi__value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+/* Both are block: a label and its figure on one line read as one sentence, and
+   "Basis9 shared months" is what that looks like when the figure is long. The
+   `.kpi` grid relies on this too. */
+.kpi__label { display: block; font-size: .78rem; color: var(--muted); font-weight: 600; }
+.kpi__value { display: block; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
 .kpi__scope { font-size: .68rem; color: var(--muted); margin-top: .2rem; }
 .kpi--warn { border-color: var(--uncategorized); background: var(--uncategorized-soft); }
 .kpi--accent .kpi__value { color: var(--accent); }
