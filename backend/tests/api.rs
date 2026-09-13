@@ -21,6 +21,8 @@ use uuid::Uuid;
 
 use finanzen::{AppState, Config, db::Db};
 
+mod common;
+
 const ORIGIN: &str = "http://localhost:3100";
 
 struct TestApp {
@@ -40,8 +42,12 @@ impl TestApp {
             .await
             .ok()?;
 
-        let name = format!("fin_api_{}", Uuid::new_v4().simple());
-        let role = format!("fin_api_role_{}", Uuid::new_v4().simple());
+        // Databases from earlier runs, dropped before another is made. An hour
+        // is longer than any run, so nothing in use is ever a candidate.
+        common::reap_stale(&admin, 900).await;
+
+        let name = common::database_name("fin_api");
+        let role = common::role_name("fin_api", &name);
         sqlx::query(&format!(
             "CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS"
         ))

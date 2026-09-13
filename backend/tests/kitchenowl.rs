@@ -35,9 +35,10 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
 use tower::ServiceExt;
-use uuid::Uuid;
 
 use finanzen::{AppState, Config, db::Db};
+
+mod common;
 
 const ORIGIN: &str = "http://localhost:3100";
 
@@ -444,8 +445,12 @@ impl TestApp {
             .connect(&url)
             .await
             .ok()?;
-        let name = format!("fin_ko_{}", Uuid::new_v4().simple());
-        let role = format!("fin_ko_role_{}", Uuid::new_v4().simple());
+        // Databases from earlier runs, dropped before another is made. An hour
+        // is longer than any run, so nothing in use is ever a candidate.
+        common::reap_stale(&admin, 900).await;
+
+        let name = common::database_name("fin_ko");
+        let role = common::role_name("fin_ko", &name);
         sqlx::query(&format!(
             "CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS"
         ))
@@ -2435,7 +2440,10 @@ async fn a_rescan_finds_the_matches_that_appeared_after_the_drafts_did() {
     let (status, _) = app.sync().await;
     assert_eq!(status, StatusCode::OK);
     let (_, before) = app.send("GET", "/kitchenowl/drafts", None).await;
-    assert_eq!(before["items"][0]["candidates"].as_array().map(Vec::len), Some(0));
+    assert_eq!(
+        before["items"][0]["candidates"].as_array().map(Vec::len),
+        Some(0)
+    );
     assert_eq!(before["items"][0]["status"], "open");
 
     // The booking arrives afterwards, at the full amount and in the same month.
@@ -2443,7 +2451,10 @@ async fn a_rescan_finds_the_matches_that_appeared_after_the_drafts_did() {
 
     // Nothing has asked the question again, so the draft still says no match.
     let (_, stale) = app.send("GET", "/kitchenowl/drafts", None).await;
-    assert_eq!(stale["items"][0]["candidates"].as_array().map(Vec::len), Some(0));
+    assert_eq!(
+        stale["items"][0]["candidates"].as_array().map(Vec::len),
+        Some(0)
+    );
 
     let (status, out) = app.send("POST", "/kitchenowl/drafts/rescan", None).await;
     assert_eq!(status, StatusCode::OK, "{out}");
@@ -2452,7 +2463,9 @@ async fn a_rescan_finds_the_matches_that_appeared_after_the_drafts_did() {
     assert_eq!(out["likelyDuplicates"], 1);
 
     let (_, after) = app.send("GET", "/kitchenowl/drafts", None).await;
-    let candidates = after["items"][0]["candidates"].as_array().expect("candidates");
+    let candidates = after["items"][0]["candidates"]
+        .as_array()
+        .expect("candidates");
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0]["amountCents"], 1907);
     assert_eq!(candidates[0]["basis"], "fullAmount");

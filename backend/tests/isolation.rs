@@ -13,6 +13,8 @@
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 use uuid::Uuid;
 
+mod common;
+
 /// Tables read before a tenant context exists — resolving a session cookie is what
 /// establishes `app.user_id` in the first place, so a policy on them would deadlock.
 /// Any OTHER table growing a `user_id` column without RLS is a bug, which is what
@@ -39,8 +41,12 @@ async fn pool() -> Option<PgPool> {
         .await
         .expect("connect to TEST_DATABASE_URL");
 
-    let name = format!("fin_test_{}", Uuid::new_v4().simple());
-    let role = format!("fin_role_{}", Uuid::new_v4().simple());
+    // Databases from earlier runs, dropped before another is made. An hour
+    // is longer than any run, so nothing in use is ever a candidate.
+    common::reap_stale(&admin, 900).await;
+
+    let name = common::database_name("fin_test");
+    let role = common::role_name("fin_test", &name);
     sqlx::query(&format!("CREATE DATABASE {name}"))
         .execute(&admin)
         .await
