@@ -203,8 +203,9 @@ export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
   const rowHeight = 34;
   // "Variable Kosten" is the widest label in the set and the month charts' 58-unit
   // gutter cuts it in half. The viewBox is 720 units wide regardless of the
-  // rendered size, so this is measured in the same units as LEFT/RIGHT.
-  const labelGutter = 132;
+  // rendered size, so this is measured in the same units as LEFT/RIGHT — and the
+  // gutter has to hold the label at the 22-unit type a phone renders it in.
+  const labelGutter = 150;
   const height = Math.max(90, slices.length * rowHeight + 34);
   // A horizontal chart needs the same nice, zero-containing domain, mapped along x.
   const ticks = niceTicks(

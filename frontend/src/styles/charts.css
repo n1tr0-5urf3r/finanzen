@@ -3,7 +3,10 @@
    data table beside each chart is sr-only on a wide screen and VISIBLE on a
    narrow one: twelve bands on a 400px phone are decoration, the numbers are not. */
 
-.chart { margin: 0; }
+.chart { margin: 0; min-width: 0; }
+/* The chart's own box never exceeds its panel; if a future chart does need more
+   room than the screen, it scrolls inside here and the page stays put. */
+.chart__canvas { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .chart__title { font-size: .9rem; font-weight: 650; margin-bottom: .35rem; }
 .chart__svg { width: 100%; height: auto; overflow: visible; }
 .chart__note { font-size: .72rem; color: var(--muted); margin-top: .3rem; }
@@ -40,13 +43,15 @@
    different question than the one the chart was drawn for. The table remains
    underneath as the accessible equivalent, now visible rather than instead. */
 @media (max-width: 559px) {
-  .chart__svg {
-    /* The viewBox is 720 units wide; letting it scale to a 358px panel shrinks
-       the 13px labels to about 6px. Keeping a floor and allowing a horizontal
-       scroll is more honest than illegible text. */
-    min-width: 460px;
-  }
-  .chart__canvas { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* The viewBox is 720 units wide, so a chart drawn into a 358px panel is scaled
+     to about half size and 13px labels land at 6px. The fix is to draw the text
+     BIGGER IN VIEWBOX UNITS, not to give the chart a minimum width: a chart wider
+     than the screen makes the whole page wider than the screen, and a page wider
+     than the screen is what makes Chrome shrink the entire layout — navigation
+     bar included — and breaks scrolling in both directions. Nothing in this app
+     may be wider than the viewport on a phone. */
+  .chart__svg text { font-size: 22px; }
+  .chart__tick--label { font-size: 22px; }
   .chart__data {
     position: static; width: auto; height: auto; margin: .5rem 0 0;
     overflow-x: auto; clip: auto; white-space: normal;

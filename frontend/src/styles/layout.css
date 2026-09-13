@@ -44,7 +44,11 @@
 }
 .panel--pad { padding: 1rem; }
 
+/* A grid item's default `min-width: auto` refuses to shrink below its content's
+   minimum. One wide child — a chart, a long unbroken word — then widens the track,
+   the page and finally the viewport. This is the guard, applied once. */
 .grid { display: grid; gap: .75rem; }
+.grid > *, .chart-grid > * { min-width: 0; }
 .grid--kpi { grid-template-columns: 1fr; }
 @media (min-width: 520px)  { .grid--kpi { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1120px) { .grid--kpi { grid-template-columns: repeat(4, 1fr); } }
