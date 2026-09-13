@@ -45,11 +45,9 @@
 
 .ko-intro { font-size: .82rem; color: var(--muted); margin-bottom: .8rem; max-width: 46rem; }
 
-.ko-filters {
-  display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: .8rem;
-}
-.ko-filters .input { max-width: 16rem; }
-.ko-filters__check { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--muted); }
+/* `.ko-filters` is gone: it was `.filter-bar` with a different `align-items` and
+   a placeholder where every other screen has a label, which is the whole reason
+   this screen felt unlike the rest. The shared class does the job. */
 
 .ko-table td { vertical-align: top; }
 .ko-cell__name { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
@@ -148,18 +146,11 @@
    cards, same chart frame — because it answers the same questions. What is NOT
    shared is the colour: these bars are the KitchenOwl accent, never the personal
    ledger's income/expense pair, so no figure here can be mistaken for a booking. */
-.ko-analysis__controls {
-  margin-bottom: 1rem; display: flex; gap: .75rem 1.25rem;
-  flex-wrap: wrap; align-items: flex-end;
-}
-.ko-analysis__totals {
-  margin-bottom: 1rem; display: grid; gap: .75rem;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 620px) {
-  .ko-analysis__totals { grid-template-columns: repeat(4, 1fr); }
-}
-.ko-analysis__totals > * { min-width: 0; }
+/* `.ko-analysis__controls` and `.ko-analysis__totals` are gone too — a third
+   filter bar and a third KPI grid, breaking at 620px where `.grid--kpi` breaks at
+   520 and 1120. Three screens used them; all three now use the shared ones.
+   Only the payer list survives, because stacking two names under one label is
+   particular to a ledger with more than one payer in it. */
 .ko-analysis__payers { display: flex; flex-direction: column; gap: .15rem; font-size: .85rem; }
 
 .chart__bar--household { fill: var(--accent); opacity: .32; }

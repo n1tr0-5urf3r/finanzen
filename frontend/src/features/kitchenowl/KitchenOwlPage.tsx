@@ -121,7 +121,10 @@ export function KitchenOwlPage() {
         }
       />
 
-      {/* Stated, not implied. */}
+      {/* Two claims that are true of every tab, so they precede the tabs: what this
+          screen is, and whether what it shows can be trusted to be current. Nothing
+          else earns a place above the switcher — the sync strip, the settlement and
+          every notice describe the LEDGER, and they moved into it. */}
       <Banner tone="info">{t('ko.separateLedger')}</Banner>
 
       {/* A failure is visible here and nowhere else in the app is affected. */}
@@ -137,20 +140,12 @@ export function KitchenOwlPage() {
           )}
         </Banner>
       )}
-      {notice && <Banner tone="info">{notice}</Banner>}
-      {sync.isError && <ErrorState error={sync.error} />}
-
-      <SyncStrip status={s} />
-
-      {/* Above the tabs, because settling up is an action about the household as a
-          whole rather than about any one of the three lists below it. */}
-      {s.enabled && <SettlementCard onNotice={setNotice} />}
 
       {!s.enabled ? (
         <EmptyState title={t('ko.notEnabled')} hint={t('ko.notEnabledHint')} />
       ) : (
         <>
-          <div className="segmented ko-tabs" role="tablist">
+          <div className="segmented tabs ko-tabs" role="tablist">
             {(
               [
                 ['ledger', 'ko.tabLedger'],
@@ -181,14 +176,26 @@ export function KitchenOwlPage() {
             ))}
           </div>
 
+          {/* Feedback from whichever tab produced it, directly above that tab's
+              content rather than at the top of a page the user has scrolled past. */}
+          {notice && <Banner tone="info">{notice}</Banner>}
+          {sync.isError && <ErrorState error={sync.error} />}
+
           {tab === 'ledger' && (
-            <Ledger
-              linked={linked}
-              search={search}
-              includeArchived={includeArchived}
-              onParam={setParam}
-              onNotice={setNotice}
-            />
+            <>
+              {/* Both describe the state of the mirrored ledger — when it was last
+                  read, and what it says the two of you owe each other — so they
+                  belong to this tab rather than hovering above all five. */}
+              <SyncStrip status={s} />
+              <SettlementCard onNotice={setNotice} />
+              <Ledger
+                linked={linked}
+                search={search}
+                includeArchived={includeArchived}
+                onParam={setParam}
+                onNotice={setNotice}
+              />
+            </>
           )}
           {tab === 'analysis' && <KoAnalysis />}
           {tab === 'tag' && <KoTagging />}
@@ -277,34 +284,50 @@ function Ledger({
   const page = query.data!;
 
   return (
-    <div className="panel panel--pad">
-      <div className="ko-filters">
-        <input
-          className="input"
-          placeholder={t('ko.searchPlaceholder')}
-          defaultValue={search}
-          onChange={(e) => onParam('suche', e.target.value || null)}
-          aria-label={t('ko.searchPlaceholder')}
-        />
-        <div className="segmented">
-          {(
-            [
-              [null, 'ko.filterAll'],
-              ['true', 'ko.filterLinked'],
-              ['false', 'ko.filterUnlinked'],
-            ] as [string | null, MessageKey][]
-          ).map(([value, label]) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={linked === value}
-              onClick={() => onParam('verknuepft', value)}
-            >
-              {t(label)}
-            </button>
-          ))}
+    <>
+      <div className="panel panel--pad filter-bar">
+        <div className="field" style={{ flex: 1, minWidth: '12rem' }}>
+          {/* A visible label, like every other filter in the app. A placeholder
+              disappears the moment anything is typed into it, which is exactly
+              when a reader coming back to the screen needs to know what the box
+              is filtering. */}
+          <label htmlFor="ko-search">{t('ko.searchLabel')}</label>
+          <input
+            id="ko-search"
+            className="input"
+            defaultValue={search}
+            aria-describedby="ko-search-hint"
+            onChange={(e) => onParam('suche', e.target.value || null)}
+          />
+          {/* What the old placeholder used to say, kept where it stays readable
+              once something has been typed. */}
+          <small id="ko-search-hint">{t('ko.searchPlaceholder')}</small>
         </div>
-        <label className="ko-filters__check">
+        <div className="field">
+          {/* A real `<label>` element so it picks up `.field > label` like every
+              other filter, but without `htmlFor`: it labels a group of buttons,
+              not one control, which is what `aria-labelledby` is for. */}
+          <label id="ko-link-filter">{t('ko.filterLabel')}</label>
+          <div className="segmented" role="group" aria-labelledby="ko-link-filter">
+            {(
+              [
+                [null, 'ko.filterAll'],
+                ['true', 'ko.filterLinked'],
+                ['false', 'ko.filterUnlinked'],
+              ] as [string | null, MessageKey][]
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={linked === value}
+                onClick={() => onParam('verknuepft', value)}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="chip" style={{ cursor: 'pointer', minHeight: 'var(--tap)' }}>
           <input
             type="checkbox"
             checked={includeArchived}
@@ -317,7 +340,8 @@ function Ledger({
       {page.items.length === 0 ? (
         <EmptyState title={t('ko.emptyLedger')} />
       ) : (
-        <div className="table-wrap">
+        <>
+        <div className="panel table-wrap screen-table">
           <table className="data-table ko-table">
             <thead>
               <tr>
@@ -389,8 +413,68 @@ function Ledger({
             </tfoot>
           </table>
         </div>
+
+        {/* Six columns do not fit a phone, and nine other screens already answer
+            that with cards rather than sideways scrolling. The two figures stay
+            labelled and stay apart. */}
+        <div className="screen-cards">
+          {page.items.map((expense) => (
+            <article
+              key={expense.id}
+              className={`mcard ${expense.archivedAt ? 'ko-row--archived' : ''}`}
+            >
+              <header>
+                <strong>
+                  <DataLabel>{expense.name}</DataLabel>
+                </strong>
+                <span className="kpi__scope">{formatDate(expense.date)}</span>
+              </header>
+              <p style={{ margin: '0 0 .4rem', display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
+                <KoCategoryChip name={expense.koCategoryName} />
+                {expense.archivedAt && <StatusPill tone="neutral">{t('ko.archived')}</StatusPill>}
+                {expense.excludeFromStatistics && (
+                  <StatusPill tone="neutral">{t('ko.excluded')}</StatusPill>
+                )}
+              </p>
+              <dl className="mcard__grid">
+                <div>
+                  <dt>{t('ko.amountHousehold')}</dt>
+                  <dd>
+                    <Money cents={expense.amountCents} basis="household" />
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('ko.amountShare')}</dt>
+                  <dd>
+                    <Money cents={expense.ownShareCents} basis="share" />
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('ko.paidBy')}</dt>
+                  <dd>
+                    <DataLabel>{expense.paidByName ?? '—'}</DataLabel>
+                    <KoSplit expense={expense} />
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('ko.linked')}</dt>
+                  <dd>
+                    <KoLinkState expense={expense} />
+                  </dd>
+                </div>
+              </dl>
+              {expense.linkedBookingId && (
+                <Button variant="ghost" onClick={() => unlink.mutate(expense.id)}>
+                  <Link2Off size={15} aria-hidden="true" />
+                  {t('ko.unlink')}
+                </Button>
+              )}
+            </article>
+          ))}
+        </div>
+        </>
       )}
-    </div>
+    </>
   );
 }
 

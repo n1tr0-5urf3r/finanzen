@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 
 import { ChartFrame } from '../../charts/ChartFrame';
 import { bands, niceTicks } from '../../charts/scales';
 import { DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
 import { YearPicker } from '../../components/YearPicker';
-import { Banner, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
+import { Banner, Button, EmptyState, ErrorState, Kpi, LoadingState } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { formatEuroCompact, formatPercent, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
@@ -42,12 +43,33 @@ type Subject = { mode: 'category' | 'name' | 'uncategorized'; value: string };
 export function KoAnalysis() {
   const t = useT();
   const maskAmount = useMaskAmount();
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [params, setParams] = useSearchParams();
   const [subject, setSubject] = useState<Subject | null>(null);
+
+  // Year and view live in the URL, the way every other screen's do. Held in
+  // `useState` they were neither linkable nor reload-safe: coming back to this tab
+  // dropped you on the current year in the single-year view, however you had left
+  // it. The param is `zeitraum` rather than `ansicht`, because `ansicht` already
+  // names which of the five KitchenOwl tabs is open and this chooses the view
+  // WITHIN one of them.
+  //
   // One year, or that year against the one before it. Two views rather than one
   // long screen: the comparison doubles every column, and a table that wide stops
   // being readable on the phone this app is mostly used on.
-  const [view, setView] = useState<'year' | 'compare'>('year');
+  const year = Number(params.get('jahr')) || new Date().getFullYear();
+  const view: 'year' | 'compare' = params.get('zeitraum') === 'vergleich' ? 'compare' : 'year';
+
+  function setParam(key: string, value: string | null) {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   const analysis = useQuery({
     queryKey: qk.kitchenowl.analysis(year),
@@ -74,29 +96,38 @@ export function KoAnalysis() {
 
   return (
     <div className="ko-analysis">
-      <div className="panel panel--pad ko-analysis__controls">
+      {/* The view switch sits directly under the tab bar, not inside the filter
+          panel: it chooses WHAT this tab shows, while the panel below chooses what
+          that view is filtered to. Having the two in one box is what made this
+          screen read differently from every other one. */}
+      <div className="segmented tabs" role="group" aria-label={t('ko.tabAnalysis')}>
+        <button
+          type="button"
+          aria-pressed={view === 'year'}
+          onClick={() => setParam('zeitraum', null)}
+        >
+          {t('ko.viewYear')}
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === 'compare'}
+          onClick={() => setParam('zeitraum', 'vergleich')}
+        >
+          {t('ko.viewCompare')}
+        </button>
+      </div>
+
+      <div className="panel panel--pad filter-bar">
         <div style={{ minWidth: '8rem' }}>
           <YearPicker
             id="ko-analysis-year"
             value={year}
             years={analysis.data?.years}
             onChange={(next) => {
-              setYear(next);
+              setParam('jahr', String(next));
               setSubject(null);
             }}
           />
-        </div>
-        <div className="segmented" role="group" aria-label={t('ko.tabAnalysis')}>
-          <button type="button" aria-pressed={view === 'year'} onClick={() => setView('year')}>
-            {t('ko.viewYear')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === 'compare'}
-            onClick={() => setView('compare')}
-          >
-            {t('ko.viewCompare')}
-          </button>
         </div>
         <p className="footnote" style={{ margin: 0 }}>
           {t('ko.analysisScope')}
@@ -122,25 +153,21 @@ export function KoAnalysis() {
             </Banner>
           )}
 
-          <div className="ko-analysis__totals panel panel--pad">
-            <div>
-              <span className="kpi__label">{t('ko.householdTotal')}</span>
-              <span className="kpi__value">
-                <Money cents={analysis.data.totalAmountCents} basis="household" />
-              </span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.myTotal')}</span>
-              <span className="kpi__value">
-                <Money cents={analysis.data.totalOwnShareCents} basis="share" />
-              </span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.expenseCount')}</span>
-              <span className="kpi__value num">{analysis.data.expenseCount}</span>
-            </div>
-            <div>
-              <span className="kpi__label">{t('ko.paidBy')}</span>
+          {/* `scope="none"` on all four: the personal ledger's tiles must declare
+              whether transfers are inside them, and this ledger has no transfers
+              at all — which is why these were hand-rolled spans before the shared
+              tile could say so. */}
+          <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+            <Kpi label={t('ko.householdTotal')} scope="none">
+              <Money cents={analysis.data.totalAmountCents} basis="household" />
+            </Kpi>
+            <Kpi label={t('ko.myTotal')} scope="none">
+              <Money cents={analysis.data.totalOwnShareCents} basis="share" />
+            </Kpi>
+            <Kpi label={t('ko.expenseCount')} scope="none">
+              <span className="num">{analysis.data.expenseCount}</span>
+            </Kpi>
+            <Kpi label={t('ko.paidBy')} scope="none">
               <span className="ko-analysis__payers">
                 {analysis.data.paidBy.map((p) => (
                   <span key={p.name}>
@@ -149,7 +176,7 @@ export function KoAnalysis() {
                   </span>
                 ))}
               </span>
-            </div>
+            </Kpi>
           </div>
 
           <KoSeries
