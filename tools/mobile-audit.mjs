@@ -7,10 +7,10 @@
  *    the whole DOCUMENT wider, and Chrome on Android answers that by scaling the
  *    entire page down — navigation bar included — and by making vertical scrolling
  *    fight a horizontal one. It looks like three unrelated bugs and it is one.
- * 2. The document does not scroll. The app scrolls inside its shell; if the
- *    document scrolls, the browser's URL bar hides and reveals, and every
- *    bottom-anchored thing on the screen moves with it.
- * 3. The bottom bar is on screen, with its full height, on every route.
+ * 2. The bottom bar is on screen with its full height, at the top of the page AND
+ *    after scrolling. It is `position: sticky`, so unlike the URL-bar behaviour it
+ *    depends on, this part IS reproducible headlessly: a sticky element that is
+ *    not pinned to the scrollport shows up here immediately.
  *
  * Run (needs nothing installed but Docker):
  *
@@ -122,12 +122,6 @@ for (const route of ROUTES) {
     for (const o of report.offenders) faults.push(`  sticks out: ${o.selector} [${o.left}…${o.right}]`);
   }
   if (route !== '/schnell') {
-    if (report.docScrollHeight > report.innerHeight + 1) {
-      faults.push(
-        `document scrolls (${report.docScrollHeight}px in a ${report.innerHeight}px viewport) — ` +
-          'the shell should be the scroller, or the URL bar will move the layout',
-      );
-    }
     if (!report.bar || report.bar.height === 0) {
       faults.push('no bottom bar rendered');
     } else if (report.bar.bottom > report.innerHeight + 1 || report.bar.top < 0) {
@@ -135,6 +129,25 @@ for (const route of ROUTES) {
         `bottom bar is off-screen (top ${report.bar.top}, bottom ${report.bar.bottom}, ` +
           `viewport ${report.innerHeight})`,
       );
+    }
+
+    // Scrolled, which is when a bar that is merely at the end of the document
+    // rather than stuck to the scrollport disappears upward.
+    if (report.docScrollHeight > report.innerHeight + 200) {
+      await page.evaluate(() => window.scrollTo(0, 400));
+      await page.waitForTimeout(250);
+      const after = await page.evaluate(() => {
+        const el = document.querySelector('.mobile-bar');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: Math.round(r.top), bottom: Math.round(r.bottom), y: Math.round(window.scrollY) };
+      });
+      if (!after || after.bottom > VIEWPORT.height + 1 || after.top < 0) {
+        faults.push(
+          `bottom bar left the screen after scrolling to ${after?.y}px ` +
+            `(top ${after?.top}, bottom ${after?.bottom})`,
+        );
+      }
     }
   }
 

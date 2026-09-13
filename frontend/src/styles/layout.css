@@ -59,49 +59,33 @@
 
 /* Mobile: the sidebar becomes a bottom tab bar, because a drawer costs a tap for
    the one thing the phone is used for. */
-.mobile-bar { display: none; }
+.mobile-bar, .mobile-dock { display: none; }
 @media (max-width: 819px) {
-  /* The bar is NOT positioned. It is laid out.
+  /* The bar STICKS. It is neither fixed nor merely laid out.
      
-     Three attempts to hold a `position: fixed` bar against the bottom of a phone
-     screen failed, and they were always going to: a fixed element is placed
-     against the LAYOUT viewport, the browser's URL bar hiding and revealing moves
-     the VISUAL viewport, and no combination of `dvh`, `svh`, compositor hints or
-     `visualViewport` measurement makes one follow the other reliably while a
-     gesture is in flight.
+     Fixed failed three times: a fixed element is placed against the LAYOUT
+     viewport while the URL bar hiding moves the VISUAL one, and nothing makes one
+     track the other mid-gesture. Making the shell non-scrolling fixed that
+     completely — and cost the strip of screen the URL bar then never gives back,
+     because a page that cannot scroll is a page whose URL bar cannot hide.
      
-     So nothing here is fixed. The shell is exactly one small-viewport tall, the
-     content scrolls INSIDE it, and the bar is an ordinary flex child at the
-     bottom of that column. The document itself never scrolls, which has the
-     second effect of leaving the URL bar alone: it cannot hide, so there is no
-     transition to be caught out by. The cost is that strip of screen, paid
-     knowingly, in exchange for a bar that cannot move. */
-  html:has(.app-shell), body:has(.app-shell) {
-    height: 100%; overflow: hidden; overscroll-behavior: none;
-  }
-  .app-shell {
-    flex-direction: column;
-    height: 100svh; min-height: 0;
-    position: relative;
-    overflow: hidden;
-  }
+     So the document scrolls again, and the bar is `position: sticky` at the
+     bottom of that scroll. Sticky is the one of the three that is defined against
+     the SCROLLPORT: the browser moves it with the scroll it belongs to, on the
+     compositor, including while its own chrome is animating out of the way. The
+     screen comes back, and the bar has nothing left to disagree with. */
+  .app-shell { flex-direction: column; min-height: 100svh; }
   .sidebar { display: none; }
-  /* The one scroller on the screen. `min-height: 0` is what lets a flex child
-     shrink enough to scroll instead of pushing the bar off the bottom. */
-  .main {
-    flex: 1 1 auto; min-height: 0;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    /* The ⊕ button lifts above the bar, so the last row of content needs a little
-       room under it — but not the bar's own height any more: the bar is no longer
-       overlapping anything. */
-    padding-bottom: 1rem;
-  }
+  /* Fills the column so the bar is at the bottom even on a short page. The page
+     itself is the scroller again. */
+  .main { flex: 1 1 auto; min-width: 0; padding-bottom: .75rem; }
+  /* The dock is the sticky thing, and the "Mehr" sheet lives inside it. A sheet
+     positioned against the viewport would part company with the bar the moment
+     the two disagreed — which is the entire subject of this file. Anchored to the
+     dock, it cannot. */
+  .mobile-dock { display: block; position: sticky; bottom: 0; z-index: 30; }
   .mobile-bar {
-    display: flex; z-index: 30;
-    /* In the flow, at the end of the column: nothing to reposition, and nothing
-       that can reposition it. */
-    flex: 0 0 auto;
+    display: flex;
     /* Only iOS reports a non-zero inset here; Android already reserves its
        gesture area outside the viewport, so adding the inset unconditionally
        left a dead strip below the bar. `max()` keeps the iOS home indicator
@@ -143,13 +127,12 @@
 /* The "Mehr" sheet: the four screens that do not fit the bottom bar. Without it
    Monate, Steuer, Kategorien and Import are unreachable on a phone, because
    there is no sidebar to fall back to below 820px. */
-.sheet-scrim { position: absolute; inset: 0; z-index: 35; background: rgba(14,17,19,.5); }
+.sheet-scrim { position: fixed; inset: 0; z-index: 35; background: rgba(14,17,19,.5); }
 .mobile-more {
-  /* Absolute inside the shell rather than fixed to the viewport: the shell is
-     exactly the screen, and a fixed element would be measured against the layout
-     viewport instead — the very mismatch that kept moving the bar. */
+  /* Anchored to the dock directly above the bar, so it rides with it by
+     construction rather than by agreement. */
   position: absolute; z-index: 36;
-  inset: auto .5rem calc(74px + env(safe-area-inset-bottom, 0px)) .5rem;
+  inset: auto .5rem calc(100% + .35rem) .5rem;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); box-shadow: var(--shadow-3);
   display: grid; padding: .35rem;

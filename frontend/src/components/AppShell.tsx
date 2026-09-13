@@ -70,41 +70,17 @@ export function AppShell() {
 
       {/* Four entries fit a bottom bar; there are eight screens. Without the
           "Mehr" sheet, Monate, Steuer, Kategorien and Import simply do not
-          exist on a phone — there is no sidebar to fall back to. */}
-      <nav className="mobile-bar" aria-label={t('app.name')}>
-        {primary.slice(0, 2).map(({ to, labelKey, icon: Icon }) => (
-          <NavLink key={to} to={to}>
-            <Icon size={19} aria-hidden="true" />
-            {t(labelKey)}
-          </NavLink>
-        ))}
-        <NavLink to="/schnell" className="mobile-bar__add" aria-label={t('nav.quickAdd')}>
-          <Plus size={24} aria-hidden="true" />
-        </NavLink>
-        {primary.slice(2, 3).map(({ to, labelKey, icon: Icon }) => (
-          <NavLink key={to} to={to}>
-            <Icon size={19} aria-hidden="true" />
-            {t(labelKey)}
-          </NavLink>
-        ))}
-        <button
-          type="button"
-          className={`mobile-bar__more ${moreOpen ? 'is-open' : ''}`}
-          aria-expanded={moreOpen}
-          onClick={() => setMoreOpen((v) => !v)}
-        >
-          <MoreHorizontal size={19} aria-hidden="true" />
-          {t('nav.more')}
-        </button>
-      </nav>
+          exist on a phone — there is no sidebar to fall back to.
 
+          The sheet is INSIDE the dock rather than beside it: the dock is what
+          sticks to the bottom of the scroll, so anchoring the sheet to it is what
+          makes the two move as one thing instead of two that agree. */}
       {moreOpen && (
-        <>
-          <div
-            className="sheet-scrim"
-            onClick={() => setMoreOpen(false)}
-            aria-hidden="true"
-          />
+        <div className="sheet-scrim" onClick={() => setMoreOpen(false)} aria-hidden="true" />
+      )}
+
+      <div className="mobile-dock">
+        {moreOpen && (
           <nav className="mobile-more" aria-label={t('nav.more')}>
             {secondary.map(({ to, labelKey, icon: Icon }) => (
               <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}>
@@ -113,8 +89,35 @@ export function AppShell() {
               </NavLink>
             ))}
           </nav>
-        </>
-      )}
+        )}
+
+        <nav className="mobile-bar" aria-label={t('app.name')}>
+          {primary.slice(0, 2).map(({ to, labelKey, icon: Icon }) => (
+            <NavLink key={to} to={to}>
+              <Icon size={19} aria-hidden="true" />
+              {t(labelKey)}
+            </NavLink>
+          ))}
+          <NavLink to="/schnell" className="mobile-bar__add" aria-label={t('nav.quickAdd')}>
+            <Plus size={24} aria-hidden="true" />
+          </NavLink>
+          {primary.slice(2, 3).map(({ to, labelKey, icon: Icon }) => (
+            <NavLink key={to} to={to}>
+              <Icon size={19} aria-hidden="true" />
+              {t(labelKey)}
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            className={`mobile-bar__more ${moreOpen ? 'is-open' : ''}`}
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            <MoreHorizontal size={19} aria-hidden="true" />
+            {t('nav.more')}
+          </button>
+        </nav>
+      </div>
     </div>
   );
 }
