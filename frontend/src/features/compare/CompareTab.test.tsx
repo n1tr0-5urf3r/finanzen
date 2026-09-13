@@ -13,7 +13,10 @@ vi.mock('../../lib/api', async () => {
   return { ...actual, api: (...args: unknown[]) => api(...args) };
 });
 
-const { ComparePage } = await import('./ComparePage');
+// Rendered through the screen that owns it: the comparison is a tab of
+// /auswertung now, and testing the tab in isolation would stop proving that the
+// tab is reachable at all.
+const { AnalysisPage } = await import('../analysis/AnalysisPage');
 
 function row(over: Partial<CompareRow>): CompareRow {
   return {
@@ -159,8 +162,8 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="de">
-        <MemoryRouter initialEntries={['/vergleich?jahr=2026']}>
-          <ComparePage />
+        <MemoryRouter initialEntries={['/auswertung?jahr=2026&ansicht=vergleich']}>
+          <AnalysisPage />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,
