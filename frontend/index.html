@@ -11,7 +11,16 @@
          the bar should be measured against. It is also the one structural
          difference between this document and coffee-tracker's, whose identical
          floating navigation does not drift. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- `interactive-widget=resizes-content` makes the soft keyboard SHRINK the
+         viewport instead of overlapping it. Without it a bottom sheet — the
+         category picker in Quick Add — keeps its full height when the keyboard
+         opens, so the matches you are typing towards end up behind it and have to
+         be scrolled for. With it, `dvh` and `bottom: 0` mean what they say while
+         the keyboard is up. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#14181b" />
     <link rel="icon" type="image/png" href="/fi.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />

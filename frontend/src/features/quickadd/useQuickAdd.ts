@@ -19,7 +19,7 @@ export interface QuickState {
   month: number;
 }
 
-type Action =
+export type Action =
   | { type: 'digit'; value: number }
   | { type: 'doubleZero' }
   | { type: 'backspace' }
@@ -151,10 +151,35 @@ export function useSuggestions(
 }
 
 /** Routes hardware-keyboard input into the same reducer the pad uses. */
+/**
+ * A hardware keyboard drives the on-screen keypad — but ONLY when nothing else is
+ * being typed into.
+ *
+ * This listens on `window`, so without the guard below it swallows every digit and
+ * every Backspace in the app, `preventDefault()` included. Open the category
+ * search, type to filter, and the digits silently edit the AMOUNT while Backspace
+ * deletes it a digit at a time instead of deleting what you typed — and once the
+ * amount reaches zero the save button greys out with no explanation, which is what
+ * "I can't save it even though I set a category" actually was.
+ */
 export function useKeyboardBridge(dispatch: (action: Action) => void) {
   return useCallback(
     (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // Anything with its own text cursor owns the keystroke. `closest` as well
+      // as `isContentEditable`, because the latter is true for a child of an
+      // editable host in a browser and absent altogether in jsdom — a guard that
+      // cannot be tested is a guard that quietly stops guarding.
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable ||
+        target?.closest?.('[contenteditable=""], [contenteditable="true"]')
+      ) {
+        return;
+      }
       if (event.key >= '0' && event.key <= '9') {
         dispatch({ type: 'digit', value: Number(event.key) });
         event.preventDefault();

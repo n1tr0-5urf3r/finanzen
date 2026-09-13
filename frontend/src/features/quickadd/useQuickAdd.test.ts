@@ -1,8 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { useQuickAdd, usePrediction } from './useQuickAdd';
+import { useKeyboardBridge, useQuickAdd, usePrediction } from './useQuickAdd';
 import type { Rule } from '../../lib/types';
+import type { Action } from './useQuickAdd';
 
 describe('cents-first amount entry', () => {
   it('appends digits to a cent buffer', () => {
@@ -82,5 +83,52 @@ describe('category prediction', () => {
   it('reports unmatched for a comment no rule covers', () => {
     const { result } = renderHook(() => usePrediction('Hofladen Brinkmann', rules));
     expect(result.current.status).toBe('unmatched');
+  });
+});
+
+describe('the hardware keyboard bridge', () => {
+  const press = (key: string, target: EventTarget | null) => {
+    const prevented = { count: 0 };
+    const dispatched: Action[] = [];
+    const handler = renderHook(() => useKeyboardBridge((a) => dispatched.push(a))).result.current;
+    handler({
+      key,
+      target,
+      metaKey: false,
+      ctrlKey: false,
+      altKey: false,
+      preventDefault: () => {
+        prevented.count += 1;
+      },
+    } as unknown as KeyboardEvent);
+    return { dispatched, prevented: prevented.count };
+  };
+
+  it('drives the keypad when nothing is being typed into', () => {
+    const { dispatched, prevented } = press('7', document.body);
+    expect(dispatched).toEqual([{ type: 'digit', value: 7 }]);
+    expect(prevented).toBe(1);
+  });
+
+  /**
+   * The bug this exists for. The listener is on `window`, so without the guard it
+   * eats every keystroke in the app: typing in the category search edited the
+   * AMOUNT instead, Backspace deleted that amount a digit at a time rather than
+   * the text, and once it reached zero the save button greyed out — which read as
+   * "I can't save this booking even though I set a category".
+   */
+  it('keeps its hands off a field with a text cursor', () => {
+    const input = document.createElement('input');
+    expect(press('7', input).dispatched).toEqual([]);
+    expect(press('Backspace', input).dispatched).toEqual([]);
+    // And it must not swallow the key either, or the field never receives it.
+    expect(press('Backspace', input).prevented).toBe(0);
+
+    const area = document.createElement('textarea');
+    expect(press('3', area).dispatched).toEqual([]);
+
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+    expect(press('1', editable).dispatched).toEqual([]);
   });
 });

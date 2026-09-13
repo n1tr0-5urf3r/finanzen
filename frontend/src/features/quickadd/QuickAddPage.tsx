@@ -79,6 +79,16 @@ export function QuickAddPage() {
   });
 
   const ready = state.cents > 0 && state.comment.trim().length > 0;
+  // A greyed-out button that will not say why is the worst thing on the screen
+  // that matters most. Both conditions are reachable by accident — an amount can
+  // be backspaced to nothing, a comment can be cleared — so the bar says which
+  // one is missing rather than leaving the user to guess at the one screen where
+  // guessing costs a booking.
+  const missing = !ready
+    ? state.cents === 0
+      ? t('quick.needAmount')
+      : t('quick.needComment')
+    : null;
   const confirmTone = override
     ? 'rule'
     : prediction.status === 'rule'
@@ -182,8 +192,13 @@ export function QuickAddPage() {
         disabled={!ready || create.isPending}
         onClick={() => create.mutate()}
       >
-        {confirmLabel}
+        {missing ?? confirmLabel}
       </button>
+      {create.isError && (
+        <p className="quick__error" role="alert">
+          {t('quick.saveFailed')}
+        </p>
+      )}
 
       {sheetOpen && (
         <CommentSheet
