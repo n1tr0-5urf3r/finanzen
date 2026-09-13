@@ -1229,6 +1229,41 @@ pub struct KoStatus {
     pub last_error: Option<String>,
 }
 
+/// Settling up with the household — the one place the two ledgers touch.
+///
+/// A settlement is money moving between the user and the household, not money
+/// consumed: the household's purchases are already in the personal ledger at full
+/// value, so booking the settlement as an expense would count them twice. It is
+/// therefore a `transfer`, whose `net_cents` is 0 by construction, and it belongs
+/// to no category.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoSettlement {
+    /// KitchenOwl's own signed balance, passed through UNFLIPPED: negative means
+    /// the user owes the household. `null` when the mirror holds no member row for
+    /// the user yet.
+    pub balance_cents: Option<i64>,
+    /// `i_owe` | `household_owes_me` | `settled` | `unknown`. The word the UI reads
+    /// out, decided here so that the figure and the sentence beside it cannot
+    /// disagree — they have done exactly that once already.
+    pub direction: String,
+    /// Always positive: the sum that would change hands. `0` when settled.
+    pub amount_cents: i64,
+    pub period: Period,
+    /// `Ausgleich <Monat>` — the spelling the spreadsheet used. Data, not chrome.
+    pub suggested_comment: String,
+    /// True once this period carries a settlement booking, so the button is offered
+    /// exactly once.
+    pub already_settled: bool,
+    /// The settlement booking, when one exists. A personal-ledger figure, never
+    /// added to any KitchenOwl figure above it.
+    pub booking: Option<Booking>,
+    /// The balance that settlement was based on, which is not necessarily today's:
+    /// expenses booked afterwards move the balance again.
+    pub settled_balance_cents: Option<i64>,
+    pub settled_at: Option<DateTime<Utc>>,
+}
+
 /// The dashboard widget. Reads the **local mirror only** and never blocks on HTTP,
 /// so KitchenOwl being down costs a staleness warning rather than a spinner.
 #[derive(Debug, Clone, Serialize, ToSchema)]

@@ -384,6 +384,18 @@ export const en: Messages = {
   'ko.balanceSettled': 'Settled',
   'ko.balanceHint':
     'Straight from KitchenOwl. Settlements appear there only as a change to this balance.',
+  'ko.settleTitle': 'Settle up',
+  'ko.settleWhy':
+    'The one place the two ledgers touch — and only when you ask them to.',
+  'ko.settleSuggestion': 'This will book:',
+  'ko.settleAsTransfer': 'as a transfer',
+  'ko.settleAction': 'Book the settlement',
+  'ko.settleDone': 'Booked “{comment}” as a transfer.',
+  'ko.settleAlready': 'Booked for this month: “{comment}” · {when}',
+  'ko.settleBasedOn': 'Balance at the time:',
+  'ko.settleNoBalance': 'No balance in the mirror yet',
+  'ko.settleNoBalanceChange':
+    'A transfer is money moving, not money consumed. It belongs to no category and does not change the year’s balance: the household purchases are already in your bookings at full value, so counting the settlement as an expense would count them twice.',
   'ko.members': 'Members',
   'ko.tabLedger': 'Expenses',
   'ko.tabReview': 'Suggestions',

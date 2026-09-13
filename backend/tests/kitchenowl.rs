@@ -1506,3 +1506,126 @@ async fn the_sync_loop_can_see_who_opted_in() {
         "ko_sync_state must stay invisible without a tenant — that is why the registry exists"
     );
 }
+
+// --------------------------------------------------------------- settling up
+
+/// Settling up is the ONE path where a KitchenOwl figure causes a personal
+/// booking, so it is the one that has to be hardest to get wrong.
+///
+/// Four things, each with a plausible wrong answer: the balance keeps KitchenOwl's
+/// sign (negative is the user owing), the booking is a TRANSFER so no category and
+/// no net moves, pressing twice books once, and nothing at all is sent to
+/// KitchenOwl — a settlement is recorded locally and appears over there only as the
+/// balance changing.
+#[tokio::test]
+async fn settling_up_books_one_transfer_and_writes_nothing_to_kitchenowl() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let posts_before = mock.inner().post_count;
+
+    let (status, view) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+    // The mock household reports -149,16999… for the user. Rounded at the adapter
+    // boundary, and passed through with its sign intact.
+    assert_eq!(view["balanceCents"], -14917);
+    assert_eq!(view["direction"], "i_owe", "negative means the user owes");
+    assert_eq!(view["amountCents"], 14917, "what changes hands is positive");
+    assert_eq!(view["alreadySettled"], false);
+    assert!(
+        view["suggestedComment"]
+            .as_str()
+            .expect("comment")
+            .starts_with("Ausgleich "),
+        "the spreadsheet's spelling: {view}"
+    );
+
+    // The period comes from the response rather than from the wall clock, so this
+    // test does not start failing on 1 January.
+    let year = view["period"]["year"].as_i64().expect("year");
+
+    let (status, first) = app.send("POST", "/kitchenowl/settlement", None).await;
+    assert_eq!(status, StatusCode::CREATED, "{first}");
+    assert_eq!(first["booking"]["kind"], "transfer");
+    assert_eq!(first["booking"]["amountCents"], 14917);
+    // Structural, not conventional: `net_cents` is a generated column.
+    assert_eq!(first["booking"]["netCents"], 0);
+    assert!(
+        first["booking"]["categoryId"].is_null(),
+        "a settlement consumes nothing, so it belongs to no category"
+    );
+    assert_eq!(first["alreadySettled"], true);
+    assert_eq!(
+        first["settledBalanceCents"], -14917,
+        "the balance it was based on is kept, because the live one moves on"
+    );
+
+    // Pressing the button twice is a double tap, not an error.
+    let (status, second) = app.send("POST", "/kitchenowl/settlement", None).await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    assert_eq!(second["booking"]["id"], first["booking"]["id"]);
+
+    let (_, page) = app
+        .send("GET", &format!("/bookings?year={year}&status=all"), None)
+        .await;
+    assert_eq!(page["total"], 1, "one settlement, not two: {page}");
+
+    // The whole point of the transfer kind: no category figure moves.
+    let (_, analysis) = app
+        .send("GET", &format!("/analysis/categories?year={year}"), None)
+        .await;
+    assert_eq!(analysis["totalNetCents"], 0);
+    assert_eq!(analysis["excludedTransferCount"], 1);
+    assert_eq!(
+        analysis["uncategorizedCount"], 0,
+        "a categoryless transfer must not raise a badge that can never be cleared"
+    );
+
+    // THE invariant: the live instance is untouched.
+    assert_eq!(
+        mock.inner().post_count,
+        posts_before,
+        "a settlement is recorded locally; KitchenOwl learns of it as a balance"
+    );
+}
+
+/// A settlement booking carries an `external_source`, and the delete guard used to
+/// read that as "linked to a KitchenOwl expense — remove the link first". There is
+/// no link to remove, so the booking would have been undeletable behind an error
+/// naming a step that does not exist.
+#[tokio::test]
+async fn a_settlement_booking_can_be_deleted_again() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (_, booked) = app.send("POST", "/kitchenowl/settlement", None).await;
+    let id = booked["booking"]["id"].as_str().expect("booking id");
+
+    let (status, body) = app.send("DELETE", &format!("/bookings/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+
+    // ...and the month is offered again afterwards, because the period is free.
+    let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(view["alreadySettled"], false);
+}

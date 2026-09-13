@@ -2521,6 +2521,67 @@
         }
       }
     },
+    "/api/v1/kitchenowl/settlement": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "What settling up would book, and whether it already has been.",
+        "operationId": "settlement",
+        "responses": {
+          "200": {
+            "description": "Saldo, Richtung und der Vorschlag — aus dem Spiegel, ohne HTTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSettlement"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Books the settlement in the PERSONAL ledger. Writes nothing to KitchenOwl.",
+        "description": "Returns 201 the first time and 200 with the same booking afterwards: asking\ntwice is what a double tap or a retried request looks like, and neither should\nproduce a second row.",
+        "operationId": "settle",
+        "responses": {
+          "200": {
+            "description": "Für diesen Monat bereits gebucht; dieselbe Buchung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSettlement"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Ausgleich als Umbuchung gebucht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoSettlement"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Nichts auszugleichen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/status": {
       "get": {
         "tags": [
@@ -6000,6 +6061,73 @@
           "ownShareCents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "KoSettlement": {
+        "type": "object",
+        "description": "Settling up with the household — the one place the two ledgers touch.\n\nA settlement is money moving between the user and the household, not money\nconsumed: the household's purchases are already in the personal ledger at full\nvalue, so booking the settlement as an expense would count them twice. It is\ntherefore a `transfer`, whose `net_cents` is 0 by construction, and it belongs\nto no category.",
+        "required": [
+          "direction",
+          "amountCents",
+          "period",
+          "suggestedComment",
+          "alreadySettled"
+        ],
+        "properties": {
+          "alreadySettled": {
+            "type": "boolean",
+            "description": "True once this period carries a settlement booking, so the button is offered\nexactly once."
+          },
+          "amountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Always positive: the sum that would change hands. `0` when settled."
+          },
+          "balanceCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "KitchenOwl's own signed balance, passed through UNFLIPPED: negative means\nthe user owes the household. `null` when the mirror holds no member row for\nthe user yet."
+          },
+          "booking": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Booking",
+                "description": "The settlement booking, when one exists. A personal-ledger figure, never\nadded to any KitchenOwl figure above it."
+              }
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "description": "`i_owe` | `household_owes_me` | `settled` | `unknown`. The word the UI reads\nout, decided here so that the figure and the sentence beside it cannot\ndisagree — they have done exactly that once already."
+          },
+          "period": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "settledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "settledBalanceCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The balance that settlement was based on, which is not necessarily today's:\nexpenses booked afterwards move the balance again."
+          },
+          "suggestedComment": {
+            "type": "string",
+            "description": "`Ausgleich <Monat>` — the spelling the spreadsheet used. Data, not chrome."
           }
         }
       },

@@ -707,6 +707,27 @@ export interface KoSummary {
   warning: string | null;
 }
 
+/**
+ * Settling up with the household.
+ *
+ * `balanceCents` is KitchenOwl's own signed figure, unflipped: negative means the
+ * user owes the household. `direction` is decided on the server beside it, so the
+ * sentence and the sign cannot drift apart.
+ */
+export interface KoSettlement {
+  balanceCents: number | null;
+  direction: 'i_owe' | 'household_owes_me' | 'settled' | 'unknown';
+  /** Always positive: what would change hands. */
+  amountCents: number;
+  period: Period;
+  suggestedComment: string;
+  alreadySettled: boolean;
+  /** A personal-ledger booking. Never added to any figure above it. */
+  booking: Booking | null;
+  settledBalanceCents: number | null;
+  settledAt: string | null;
+}
+
 export type KoPushState =
   | 'queued'
   | 'sending'

@@ -191,6 +191,10 @@ pub fn router(state: AppState) -> Router {
             "/kitchenowl/analysis/series/subjects",
             get(kitchenowl::analysis::series_subjects),
         )
+        .route(
+            "/kitchenowl/settlement",
+            get(kitchenowl::settle::settlement).post(kitchenowl::settle::settle),
+        )
         .route("/kitchenowl/expenses", get(kitchenowl::routes::expenses))
         .route(
             "/kitchenowl/expenses/{id}/link",
