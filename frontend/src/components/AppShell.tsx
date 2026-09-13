@@ -7,6 +7,7 @@ import {
 
 import { useT } from '../lib/i18n';
 import type { MessageKey } from '../lib/messages/de';
+import { AppFooter } from './AppFooter';
 
 const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] = [
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
@@ -65,6 +66,7 @@ export function AppShell() {
       <main className="main" id="main">
         <div className="page">
           <Outlet />
+          <AppFooter />
         </div>
       </main>
 

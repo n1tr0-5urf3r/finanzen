@@ -158,3 +158,20 @@
 /* Installed to the home screen there is no browser chrome at all — no toolbar to
    animate, nothing for the island to be out of step with. It needs no special
    layout there; it is simply at its calmest. */
+
+/* ── footer ──────────────────────────────────────────────────────────────────
+   Quiet, at the end of the content, on every screen inside the shell. */
+.app-footer {
+  margin-top: 2.5rem; padding: 1.25rem 0 .5rem;
+  border-top: 1px solid var(--line);
+  text-align: center; font-size: .75rem; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: .25rem;
+}
+.app-footer p { margin: 0; }
+.app-footer__link {
+  display: inline-flex; align-items: center; gap: .35rem;
+  margin-top: .35rem; padding: .3rem .7rem;
+  border-radius: var(--r-pill); color: var(--ink-2); text-decoration: none;
+  min-height: var(--tap);
+}
+.app-footer__link:hover { background: var(--surface-2); color: var(--ink); }

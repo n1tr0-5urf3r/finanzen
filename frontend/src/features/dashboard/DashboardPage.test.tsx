@@ -35,8 +35,24 @@ const DASHBOARD = {
   taxRelevantCount: 20,
   uncategorizedCount: 0,
   uncategorizedNetCents: 0,
-  byType: [],
-  topCategories: [],
+  byType: [
+    { typeCode: 'fixkosten', label: 'Fixkosten', netCents: 810_000, bookingCount: 120 },
+  ],
+  topCategories: [
+    {
+      categoryId: 'miete',
+      categoryName: 'Miete',
+      categoryType: 'Fixkosten',
+      incomeCents: 480_000,
+      expenseCents: 960_000,
+      netCents: 480_000,
+      netIsNegative: false,
+      shareOfTotal: 0.19,
+      averagePerMonthCents: 56_667,
+      bookingCount: 18,
+      monthlyNetCents: Array.from({ length: 12 }, () => 0),
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -96,5 +112,27 @@ describe('the dashboard', () => {
     expect(consumption).toBeTruthy();
     expect(consumption.textContent).toContain('25,00');
     expect(within(consumption).getByText(/25,00/).className).toContain('kpi__sub');
+  });
+
+  /**
+   * Two tables on one screen, one convention. Both are rankings of what things
+   * COST — the server filters the second to positive nets, so no income category
+   * can appear in either — and a minus pointing one way in one and the other way
+   * in the other is worse than either choice on its own.
+   */
+  it('states costs the same way in both tables', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Fixkosten');
+
+    const tables = [...container.querySelectorAll('table')];
+    const byType = tables[0];
+    const top = tables[tables.length - 1];
+
+    expect(within(byType).getByText(/8\.100,00/).textContent).not.toContain('-');
+    // The net cell, not the income leg that happens to be the same figure.
+    const net = within(top).getByRole('button', { name: /4\.800,00/ });
+    expect(net.textContent).not.toContain('-');
+    // ...and the note under them stays true: a negative there means money came in.
+    expect(container.textContent).toContain('ein negativer Wert bedeutet');
   });
 });

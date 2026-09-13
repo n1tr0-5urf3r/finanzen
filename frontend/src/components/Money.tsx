@@ -154,12 +154,23 @@ export function NetBreakdown({
   expenseCents,
   netCents,
   bookingCount,
+  orientation = 'flow',
   children,
 }: {
   incomeCents: number;
   expenseCents: number;
   netCents: number;
   bookingCount?: number;
+  /**
+   * `flow` — positive is money in. Right wherever the column can hold either
+   * direction, which is most places.
+   *
+   * `cost` — positive is what it cost, the stored sign. Right in a ranking of
+   * costs, where no income category can appear and a column of minus signs would
+   * be noise. The popover follows the headline either way: a total that disagrees
+   * with the rows above it is worse than either convention.
+   */
+  orientation?: 'flow' | 'cost';
   children?: ReactNode;
 }) {
   const t = useT();
@@ -175,7 +186,11 @@ export function NetBreakdown({
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
       >
-        <FlowMoney netCents={netCents} />
+        {orientation === 'cost' ? (
+          <Money cents={netCents} basis="net" tone="auto" />
+        ) : (
+          <FlowMoney netCents={netCents} />
+        )}
       </button>
       {open && (
         <span
@@ -191,22 +206,42 @@ export function NetBreakdown({
           }}
         >
           <span className="net-breakdown">
-            {/* Read as a flow, in the order money moves: what came in, what went
-                out, what is left. The signs add up on the page, which the old
-                "expense minus income" ordering only did if you knew the
-                convention. */}
-            <span className="net-breakdown__row">
-              <span>{t('bookings.income')}</span>
-              <Money cents={incomeCents} basis="signed" tone="income" />
-            </span>
-            <span className="net-breakdown__row">
-              <span>{t('bookings.expense')}</span>
-              <Money cents={-expenseCents} basis="signed" tone="expense" />
-            </span>
-            <span className="net-breakdown__row net-breakdown__row--total">
-              <span>{t('bookings.net')}</span>
-              <FlowMoney netCents={netCents} />
-            </span>
+            {/* Read in the order money moves: what came in, what went out, what
+                is left — so the signs add up on the page, which the old "expense
+                minus income" ordering only did if you already knew the
+                convention. Under `cost` the same three lines are stated the way
+                the column states them. */}
+            {orientation === 'cost' ? (
+              <>
+                <span className="net-breakdown__row">
+                  <span>{t('bookings.expense')}</span>
+                  <Money cents={expenseCents} tone="expense" />
+                </span>
+                <span className="net-breakdown__row">
+                  <span>{t('bookings.income')}</span>
+                  <Money cents={-incomeCents} basis="signed" tone="income" />
+                </span>
+                <span className="net-breakdown__row net-breakdown__row--total">
+                  <span>{t('bookings.net')}</span>
+                  <Money cents={netCents} basis="net" tone="auto" />
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="net-breakdown__row">
+                  <span>{t('bookings.income')}</span>
+                  <Money cents={incomeCents} basis="signed" tone="income" />
+                </span>
+                <span className="net-breakdown__row">
+                  <span>{t('bookings.expense')}</span>
+                  <Money cents={-expenseCents} basis="signed" tone="expense" />
+                </span>
+                <span className="net-breakdown__row net-breakdown__row--total">
+                  <span>{t('bookings.net')}</span>
+                  <FlowMoney netCents={netCents} />
+                </span>
+              </>
+            )}
             {bookingCount !== undefined && (
               <span className="net-breakdown__note">
                 {t('import.reviewAffects', { count: bookingCount })}

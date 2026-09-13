@@ -171,7 +171,7 @@ export function DashboardPage() {
       <div className="panel panel--pad">
         <h2 style={{ marginBottom: '.6rem' }}>{t('dashboard.topCategories')}</h2>
         <p style={{ fontSize: '.8rem', color: 'var(--muted)', marginBottom: '.5rem' }}>
-          {t('analysis.intro')}
+          {t('dashboard.costNote')}
         </p>
         <div className="table-wrap">
           <table className="data-table">
@@ -210,6 +210,7 @@ export function DashboardPage() {
                       expenseCents={row.expenseCents}
                       netCents={row.netCents}
                       bookingCount={row.bookingCount}
+                      orientation="cost"
                     />
                   </td>
                 </tr>
