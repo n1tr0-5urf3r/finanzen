@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, WalletMinimal } from 'lucide-react';
 
 import { DataLabel } from '../../components/DataLabel';
-import { FlowMoney, Money } from '../../components/Money';
+import { Money } from '../../components/Money';
 import { StatusPill } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
@@ -66,7 +66,16 @@ export function KitchenOwlWidget() {
             <div>
               <span className="kpi__label">{t('ko.balance')}</span>
               <span className="kpi__value">
-                <FlowMoney netCents={summary.myBalanceCents} />
+                {/* KitchenOwl's `expense_balance` is already a flow and its sign
+                    is the one the label reads out: NEGATIVE means the user owes
+                    the household. So the sign stands as it is — flipping it, or
+                    dressing it as a net category figure, contradicts the sentence
+                    printed directly underneath it. */}
+                <Money
+                  cents={summary.myBalanceCents}
+                  basis="signed"
+                  tone={(summary.myBalanceCents ?? 0) < 0 ? 'expense' : 'income'}
+                />
               </span>
               <span className="kpi__scope">
                 {summary.myBalanceCents === null || summary.myBalanceCents === 0

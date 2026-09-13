@@ -113,3 +113,33 @@ describe('the dashboard KitchenOwl tile', () => {
     expect(container.querySelector('.ko-widget')).toBeNull();
   });
 });
+
+describe('the household purse', () => {
+  /**
+   * KitchenOwl's balance is signed from the user's side: negative means the user
+   * owes the household. The figure and the sentence under it have to agree —
+   * "+142,27 € · you owe the household" is the one reading that must be
+   * impossible.
+   */
+  it('shows owing the household as money out', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    api.mockResolvedValue(SUMMARY);
+    render(
+      <QueryClientProvider client={client}>
+        <I18nProvider initialLocale="de">
+          <MemoryRouter>
+            <KitchenOwlWidget />
+          </MemoryRouter>
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const figure = await screen.findByText(/149,17/);
+    expect(figure.textContent).toContain('-');
+    expect(figure.className).toContain('money--expense');
+    expect(screen.getByText('Du schuldest dem Haushalt')).toBeInTheDocument();
+    // Not a netted category figure: the netto marker would be a claim about
+    // arithmetic that never happened here.
+    expect(figure.textContent).not.toContain('netto');
+  });
+});
