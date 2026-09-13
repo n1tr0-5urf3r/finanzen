@@ -35,14 +35,21 @@
 
 .form-stack { display: flex; flex-direction: column; gap: .85rem; }
 
+/* Wraps rather than overflows. A segmented control is as wide as its labels, and
+   the moment one gains an entry — the KitchenOwl bar went from four to five — an
+   `inline-flex` row pushes the DOCUMENT past the viewport, which is what makes
+   Chrome shrink the whole page. `max-width` plus wrapping keeps every tab
+   reachable and the page the width of the screen. */
 .segmented {
-  display: inline-flex; background: var(--surface-2);
+  display: inline-flex; flex-wrap: wrap; max-width: 100%;
+  background: var(--surface-2);
   border: 1px solid var(--line); border-radius: var(--r-md); padding: 2px;
 }
 .segmented button {
   border: 0; background: transparent; color: var(--muted);
   padding: .35rem .7rem; border-radius: calc(var(--r-md) - 1px);
   font-size: .82rem; font-weight: 600;
+  min-width: 0; white-space: nowrap;
 }
 .segmented button[aria-pressed='true'] {
   background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1);
