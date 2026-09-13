@@ -1301,6 +1301,212 @@
         }
       }
     },
+    "/api/v1/funds": {
+      "get": {
+        "tags": [
+          "funds"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Alle Rücklagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SinkingFund"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "funds"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SinkingFundInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Rücklage angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkingFund"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Für diese Kategorie gibt es bereits eine Rücklage"
+          }
+        }
+      }
+    },
+    "/api/v1/funds/status": {
+      "get": {
+        "tags": [
+          "funds"
+        ],
+        "summary": "Every active fund, measured against what the ledger actually did.",
+        "operationId": "status",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Stichmonat 1..12, Standard 12",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rücklagen mit Soll, Ist und Differenz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundOverview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/funds/suggestions": {
+      "get": {
+        "tags": [
+          "funds"
+        ],
+        "summary": "Funds the history argues for.",
+        "description": "Suggested, never created. The app does not get to decide that a holiday is a\nrecurring obligation — and the evidence (how many months, how many bookings) is\nreturned with the suggestion so the user can disagree with it on sight.",
+        "operationId": "suggestions",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Jahr, aus dem die Vorschläge abgeleitet werden",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kategorien, deren Ausgaben sich auf ein bis zwei Monate ballen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FundSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/funds/{id}": {
+      "put": {
+        "tags": [
+          "funds"
+        ],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rücklage",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SinkingFundInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rücklage geändert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkingFund"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unbekannte Rücklage"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "funds"
+        ],
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rücklage",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Rücklage gelöscht"
+          },
+          "404": {
+            "description": "Unbekannte Rücklage"
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -3947,6 +4153,147 @@
           }
         }
       },
+      "FundOverview": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "funds",
+          "monthlyAccrualCents",
+          "accruedByMonthCents",
+          "spentCents",
+          "owedToTheFutureCents"
+        ],
+        "properties": {
+          "accruedByMonthCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "funds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FundStatus"
+            }
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthlyAccrualCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "owedToTheFutureCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The headline: what these known lumps will still take out of the account this\nyear. The number the monthly saldo does not tell you."
+          },
+          "spentCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "FundStatus": {
+        "type": "object",
+        "description": "One fund, measured against what has actually been spent this year.",
+        "required": [
+          "fund",
+          "monthlyAccrualCents",
+          "accruedByMonthCents",
+          "spentCents",
+          "remainingCents",
+          "overUnderCents",
+          "duePassed"
+        ],
+        "properties": {
+          "accruedByMonthCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What should be aside by the end of the asked-about month. Proportional to the\nANNUAL amount, so twelve months come back to it exactly."
+          },
+          "duePassed": {
+            "type": "boolean",
+            "description": "Whether the due month is in the past relative to the asked-about month."
+          },
+          "fund": {
+            "$ref": "#/components/schemas/SinkingFund"
+          },
+          "monthlyAccrualCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What to set aside each month. An approximation by construction — a year does\nnot always divide into twelve equal cents — which is why it is never the\nfigure the cumulative one is built from."
+          },
+          "overUnderCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Accrued minus spent. Positive is a cushion; negative means the bill landed\nbefore the fund had caught up with it."
+          },
+          "remainingCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What is still expected to leave the account this year. Never negative: a bill\nthat came in cheaper does not become money owed to you."
+          },
+          "spentCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Net spending in the fund's category this year, stored sign: positive is cost."
+          }
+        }
+      },
+      "FundSuggestion": {
+        "type": "object",
+        "description": "A fund the history argues for. Suggested, never created: the app does not get to\ndecide that a holiday is a recurring obligation.",
+        "required": [
+          "categoryId",
+          "categoryName",
+          "annualCents",
+          "dueMonth",
+          "dueMonthName",
+          "monthsWithSpending",
+          "bookingCount",
+          "year"
+        ],
+        "properties": {
+          "annualCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "dueMonth": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "dueMonthName": {
+            "type": "string"
+          },
+          "monthsWithSpending": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many months of the year the category was spent in at all. The point of\nthe suggestion is the clustering, so the evidence is returned with it."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ImportCounts": {
         "type": "object",
         "required": [
@@ -6215,6 +6562,110 @@
           }
         }
       },
+      "SinkingFund": {
+        "type": "object",
+        "description": "A known annual or quarterly lump, stated once so it can be accrued monthly.\n\nA fund books nothing. It is an EXPECTATION, compared against the ordinary\nbookings in its category — a fund that created bookings would double-count the\nvery spending it exists to anticipate.",
+        "required": [
+          "id",
+          "name",
+          "annualCents",
+          "dueMonth",
+          "dueMonthName",
+          "active",
+          "sortOrder"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "annualCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional: a fund can be a plain reminder before the user decides which\ncategory it belongs to. Without one there is nothing to compare against, and\n`spentCents` stays 0 rather than guessing."
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dueMonth": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1..12 — the month the bill actually arrives.",
+            "minimum": 0
+          },
+          "dueMonthName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SinkingFundInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "annualCents",
+          "dueMonth"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "annualCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "dueMonth": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "StatusResponse": {
         "type": "object",
         "required": [
@@ -6552,6 +7003,10 @@
     {
       "name": "years",
       "description": "Geschäftsjahre und Vorträge"
+    },
+    {
+      "name": "funds",
+      "description": "Rücklagen für die jährlichen Brocken"
     },
     {
       "name": "kitchenowl",

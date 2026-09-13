@@ -609,6 +609,101 @@ pub struct ConfirmBookingInput {
     pub amount_cents: Option<i64>,
 }
 
+// ---------------------------------------------------------- sinking funds
+
+/// A known annual or quarterly lump, stated once so it can be accrued monthly.
+///
+/// A fund books nothing. It is an EXPECTATION, compared against the ordinary
+/// bookings in its category — a fund that created bookings would double-count the
+/// very spending it exists to anticipate.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SinkingFund {
+    pub id: Uuid,
+    pub name: String,
+    /// Optional: a fund can be a plain reminder before the user decides which
+    /// category it belongs to. Without one there is nothing to compare against, and
+    /// `spentCents` stays 0 rather than guessing.
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    pub annual_cents: i64,
+    /// 1..12 — the month the bill actually arrives.
+    pub due_month: u8,
+    pub due_month_name: String,
+    pub note: Option<String>,
+    pub active: bool,
+    pub sort_order: i16,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SinkingFundInput {
+    pub name: String,
+    pub category_id: Option<Uuid>,
+    pub annual_cents: i64,
+    pub due_month: u8,
+    pub note: Option<String>,
+    #[serde(default = "yes")]
+    pub active: bool,
+    #[serde(default)]
+    pub sort_order: i16,
+}
+
+/// One fund, measured against what has actually been spent this year.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FundStatus {
+    pub fund: SinkingFund,
+    /// What to set aside each month. An approximation by construction — a year does
+    /// not always divide into twelve equal cents — which is why it is never the
+    /// figure the cumulative one is built from.
+    pub monthly_accrual_cents: i64,
+    /// What should be aside by the end of the asked-about month. Proportional to the
+    /// ANNUAL amount, so twelve months come back to it exactly.
+    pub accrued_by_month_cents: i64,
+    /// Net spending in the fund's category this year, stored sign: positive is cost.
+    pub spent_cents: i64,
+    /// What is still expected to leave the account this year. Never negative: a bill
+    /// that came in cheaper does not become money owed to you.
+    pub remaining_cents: i64,
+    /// Accrued minus spent. Positive is a cushion; negative means the bill landed
+    /// before the fund had caught up with it.
+    pub over_under_cents: i64,
+    /// Whether the due month is in the past relative to the asked-about month.
+    pub due_passed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FundOverview {
+    pub year: i32,
+    pub month: u8,
+    pub funds: Vec<FundStatus>,
+    pub monthly_accrual_cents: i64,
+    pub accrued_by_month_cents: i64,
+    pub spent_cents: i64,
+    /// The headline: what these known lumps will still take out of the account this
+    /// year. The number the monthly saldo does not tell you.
+    pub owed_to_the_future_cents: i64,
+}
+
+/// A fund the history argues for. Suggested, never created: the app does not get to
+/// decide that a holiday is a recurring obligation.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FundSuggestion {
+    pub category_id: Uuid,
+    pub category_name: String,
+    pub annual_cents: i64,
+    pub due_month: u8,
+    pub due_month_name: String,
+    /// How many months of the year the category was spent in at all. The point of
+    /// the suggestion is the clustering, so the evidence is returned with it.
+    pub months_with_spending: i64,
+    pub booking_count: i64,
+    pub year: i32,
+}
+
 // --------------------------------------------------------------- receipts
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

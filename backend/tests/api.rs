@@ -895,6 +895,163 @@ async fn an_unknown_api_path_is_a_json_404() {
     assert_eq!(body["code"], "not_found");
 }
 
+// -------------------------------------------------------------------- funds
+
+/// A fund measured against what the ledger actually did.
+///
+/// The point of the feature is that an annual bill is not a surprise, so the
+/// interesting assertion is not the accrual — that is unit-tested in `funds.rs` —
+/// but that Soll and Ist come from two independent places and are put side by side:
+/// the accrual from the stated annual amount, the spending from the bookings in the
+/// fund's category.
+#[tokio::test]
+async fn a_fund_compares_its_accrual_with_what_the_category_actually_cost() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let versicherungen = app.category_id("Versicherungen").await;
+
+    // Kfz-Versicherung: the real shape — one booking, in Juli, for the whole year.
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year":2026,"month":7,"kind":"expense","amountCents":30_700,
+                    "comment":"Kfz Versicherung","categoryId":versicherungen}),
+        ),
+    )
+    .await;
+
+    let (status, fund) = app
+        .send(
+            "POST",
+            "/funds",
+            Some(
+                json!({"name":"Kfz-Versicherung","categoryId":versicherungen,
+                        "annualCents":30_700,"dueMonth":7}),
+            ),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{fund}");
+    assert_eq!(fund["dueMonthName"], "Juli");
+
+    // Halfway through the year: half accrued, the bill counted for the whole year.
+    let (status, june) = app
+        .send("GET", "/funds/status?year=2026&month=6", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{june}");
+    let row = &june["funds"][0];
+    assert_eq!(row["monthlyAccrualCents"], 2_558);
+    assert_eq!(row["accruedByMonthCents"], 15_350);
+    assert_eq!(row["spentCents"], 30_700);
+    // The bill is bigger than what has been put aside by June — which is the
+    // warning the feature exists to give.
+    assert_eq!(row["overUnderCents"], 15_350 - 30_700);
+    assert_eq!(row["duePassed"], false);
+
+    // By December the accrual has caught up exactly, to the cent.
+    let (_, december) = app
+        .send("GET", "/funds/status?year=2026&month=12", None)
+        .await;
+    let row = &december["funds"][0];
+    assert_eq!(row["accruedByMonthCents"], 30_700);
+    assert_eq!(row["overUnderCents"], 0);
+    assert_eq!(row["duePassed"], true);
+    // Nothing is left to come: the bill has been paid.
+    assert_eq!(december["owedToTheFutureCents"], 0);
+}
+
+/// A fund books nothing. It is an expectation; creating one must not move a single
+/// figure in the ledger, or it would double-count the spending it anticipates.
+#[tokio::test]
+async fn creating_a_fund_changes_no_figure_in_the_ledger() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let nebenkosten = app.category_id("Nebenkosten").await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year":2026,"month":8,"kind":"expense","amountCents":144_000,
+                    "comment":"Nebenkosten 2025","categoryId":nebenkosten}),
+        ),
+    )
+    .await;
+
+    let (_, before) = app.send("GET", "/dashboard?year=2026", None).await;
+    app.send(
+        "POST",
+        "/funds",
+        Some(json!({"name":"Nebenkosten","categoryId":nebenkosten,
+                    "annualCents":144_000,"dueMonth":8})),
+    )
+    .await;
+    let (_, after) = app.send("GET", "/dashboard?year=2026", None).await;
+
+    assert_eq!(before["expenseCents"], after["expenseCents"]);
+    assert_eq!(before["balanceCents"], after["balanceCents"]);
+    assert_eq!(before["bookingCount"], after["bookingCount"]);
+}
+
+/// Suggested, never created — and only where the history actually argues for it.
+#[tokio::test]
+async fn suggestions_are_the_lumps_and_not_the_habits() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let versicherungen = app.category_id("Versicherungen").await;
+    let lebensmittel = app.category_id("Lebensmittel").await;
+
+    // A lump: one month, one big amount.
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year":2026,"month":7,"kind":"expense","amountCents":30_700,
+                    "comment":"Kfz Versicherung","categoryId":versicherungen}),
+        ),
+    )
+    .await;
+    // A habit: comparable money, spread across the year. Accruing for that would be
+    // bookkeeping for its own sake.
+    for month in 1..=6 {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(
+                json!({"year":2026,"month":month,"kind":"expense","amountCents":5_000,
+                        "comment":format!("Supermarkt {month}"),"categoryId":lebensmittel}),
+            ),
+        )
+        .await;
+    }
+
+    let (status, suggestions) = app.send("GET", "/funds/suggestions?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK, "{suggestions}");
+    let names: Vec<&str> = suggestions
+        .as_array()
+        .expect("suggestions")
+        .iter()
+        .map(|s| s["categoryName"].as_str().unwrap_or_default())
+        .collect();
+    assert!(names.contains(&"Versicherungen"), "{names:?}");
+    assert!(!names.contains(&"Lebensmittel"), "{names:?}");
+
+    let kfz = &suggestions[0];
+    assert_eq!(kfz["annualCents"], 30_700);
+    assert_eq!(kfz["dueMonth"], 7);
+    assert_eq!(kfz["monthsWithSpending"], 1);
+
+    // ...and once a fund exists for that category, suggesting it again is noise.
+    app.send(
+        "POST",
+        "/funds",
+        Some(json!({"name":"Kfz","categoryId":versicherungen,
+                    "annualCents":30_700,"dueMonth":7})),
+    )
+    .await;
+    let (_, again) = app.send("GET", "/funds/suggestions?year=2026", None).await;
+    assert_eq!(again.as_array().expect("suggestions").len(), 0);
+}
+
 // ----------------------------------------------------------------- recurring
 
 /// Creates a template and returns its id.

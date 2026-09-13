@@ -7,6 +7,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod export;
+pub mod funds;
 pub mod importer;
 pub mod kitchenowl;
 pub mod locale;
@@ -144,6 +145,12 @@ pub fn router(state: AppState) -> Router {
         .route("/exports/bookings.json", get(export::bookings_json))
         .route("/exports/bookings.csv", get(export::bookings_csv))
         .route("/exports/restore", post(export::restore))
+        // Rücklagen: an expectation, not a booking. Nothing under here writes to
+        // the ledger; the comparison is against bookings that already exist.
+        .route("/funds", get(funds::list).post(funds::create))
+        .route("/funds/status", get(funds::status))
+        .route("/funds/suggestions", get(funds::suggestions))
+        .route("/funds/{id}", put(funds::update).delete(funds::delete))
         .route("/recurring", get(recurring::list).post(recurring::create))
         .route(
             "/recurring/{id}",

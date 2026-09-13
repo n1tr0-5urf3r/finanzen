@@ -187,6 +187,59 @@ export interface Period {
   month: number;
 }
 
+/**
+ * A known annual or quarterly lump, accrued monthly. A fund books nothing — it is
+ * an expectation, measured against the ordinary bookings in its category.
+ */
+export interface SinkingFund {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  annualCents: number;
+  /** 1..12, the month the bill actually arrives. */
+  dueMonth: number;
+  dueMonthName: string;
+  note: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface FundStatus {
+  fund: SinkingFund;
+  /** What to set aside each month — an approximation, by construction. */
+  monthlyAccrualCents: number;
+  /** What should be aside by the asked-about month. Exact at twelve. */
+  accruedByMonthCents: number;
+  /** Stored sign: positive is cost. */
+  spentCents: number;
+  remainingCents: number;
+  /** Accrued minus spent. Positive is a cushion, negative is catching up. */
+  overUnderCents: number;
+  duePassed: boolean;
+}
+
+export interface FundOverview {
+  year: number;
+  month: number;
+  funds: FundStatus[];
+  monthlyAccrualCents: number;
+  accruedByMonthCents: number;
+  spentCents: number;
+  owedToTheFutureCents: number;
+}
+
+export interface FundSuggestion {
+  categoryId: string;
+  categoryName: string;
+  annualCents: number;
+  dueMonth: number;
+  dueMonthName: string;
+  monthsWithSpending: number;
+  bookingCount: number;
+  year: number;
+}
+
 export interface RecurringTemplate {
   id: string;
   name: string;
