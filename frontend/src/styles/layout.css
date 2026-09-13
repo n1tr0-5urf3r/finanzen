@@ -83,7 +83,20 @@
      positioned against the viewport would part company with the bar the moment
      the two disagreed — which is the entire subject of this file. Anchored to the
      dock, it cannot. */
-  .mobile-dock { display: block; position: sticky; bottom: 0; z-index: 30; }
+  .mobile-dock {
+    display: block; position: sticky; bottom: 0; z-index: 30;
+    /* See useScrolling in AppShell: out of the way for the length of a scroll
+       gesture — which is exactly when the browser's own chrome is animating and
+       nothing anchored to the bottom of the screen holds still — and back the
+       moment the viewport stops moving. The transform is applied after layout, so
+       stickiness still computes normally underneath it. */
+    transition: transform .18s var(--ease, ease);
+    will-change: transform;
+  }
+  .mobile-dock[data-scrolling='true'] { transform: translateY(110%); }
+  @media (prefers-reduced-motion: reduce) {
+    .mobile-dock { transition: none; }
+  }
   .mobile-bar {
     display: flex;
     /* Only iOS reports a non-zero inset here; Android already reserves its

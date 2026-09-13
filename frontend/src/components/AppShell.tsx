@@ -24,10 +24,49 @@ const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] 
 /** The four that fit a bottom bar. The other four live behind "Mehr". */
 const MOBILE = ['/dashboard', '/buchungen', '/auswertung', '/einstellungen'];
 
+/**
+ * True while the page is being scrolled, false once it has settled.
+ *
+ * The bar is hidden for exactly that interval. The browser's URL bar hides and
+ * reveals during a scroll gesture, and no bottom-anchored element — fixed, sticky
+ * or otherwise — holds still while that animation is in flight. Rather than keep
+ * trying to track a moving viewport, the bar steps out of the way for the length
+ * of the gesture and comes back when the viewport has stopped moving, where its
+ * position is unambiguous.
+ *
+ * The threshold keeps a stray pixel of movement from flickering it.
+ */
+function useScrolling(threshold = 24, settleMs = 180) {
+  const [scrolling, setScrolling] = useState(false);
+
+  useEffect(() => {
+    let start = window.scrollY;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const onScroll = () => {
+      if (Math.abs(window.scrollY - start) > threshold) setScrolling(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setScrolling(false);
+        start = window.scrollY;
+      }, settleMs);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [threshold, settleMs]);
+
+  return scrolling;
+}
+
 export function AppShell() {
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
+  const scrolling = useScrolling();
 
   // Any route change closes the sheet, including a back gesture.
   useEffect(() => setMoreOpen(false), [location.pathname]);
@@ -79,7 +118,9 @@ export function AppShell() {
         <div className="sheet-scrim" onClick={() => setMoreOpen(false)} aria-hidden="true" />
       )}
 
-      <div className="mobile-dock">
+      {/* Hidden while the page moves, back as soon as it stops — and never hidden
+          while the sheet is open, which would take the sheet with it. */}
+      <div className="mobile-dock" data-scrolling={scrolling && !moreOpen ? 'true' : undefined}>
         {moreOpen && (
           <nav className="mobile-more" aria-label={t('nav.more')}>
             {secondary.map(({ to, labelKey, icon: Icon }) => (

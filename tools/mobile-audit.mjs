@@ -131,20 +131,35 @@ for (const route of ROUTES) {
       );
     }
 
-    // Scrolled, which is when a bar that is merely at the end of the document
-    // rather than stuck to the scrollport disappears upward.
+    // Scrolling, then settled. The bar deliberately leaves for the length of the
+    // gesture — that is when the browser's URL bar is animating and nothing
+    // anchored to the bottom holds still — so both halves are checked: gone while
+    // the page moves, and back on screen once it has stopped.
     if (report.docScrollHeight > report.innerHeight + 200) {
+      const barRect = () =>
+        page.evaluate(() => {
+          const el = document.querySelector('.mobile-bar');
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), y: Math.round(window.scrollY) };
+        });
+
       await page.evaluate(() => window.scrollTo(0, 400));
-      await page.waitForTimeout(250);
-      const after = await page.evaluate(() => {
-        const el = document.querySelector('.mobile-bar');
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { top: Math.round(r.top), bottom: Math.round(r.bottom), y: Math.round(window.scrollY) };
-      });
+      await page.waitForTimeout(60);
+      const during = await barRect();
+      if (during && during.bottom <= VIEWPORT.height - 4) {
+        faults.push(
+          `bottom bar is still fully on screen mid-scroll (bottom ${during.bottom}) — ` +
+            'it should step out of the way while the viewport is moving',
+        );
+      }
+
+      // Settle (180ms) plus the transition back (180ms), with room to spare.
+      await page.waitForTimeout(700);
+      const after = await barRect();
       if (!after || after.bottom > VIEWPORT.height + 1 || after.top < 0) {
         faults.push(
-          `bottom bar left the screen after scrolling to ${after?.y}px ` +
+          `bottom bar did not come back after scrolling to ${after?.y}px ` +
             `(top ${after?.top}, bottom ${after?.bottom})`,
         );
       }
