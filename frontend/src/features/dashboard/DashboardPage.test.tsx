@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../lib/i18n';
+import type { AnomalyReport } from '../../lib/types';
 
 const api = vi.fn();
 vi.mock('../../lib/api', async () => {
@@ -57,11 +58,69 @@ const DASHBOARD = {
 
 beforeEach(() => {
   api.mockReset();
-  api.mockImplementation((path: string) =>
-    Promise.resolve(path.startsWith('/dashboard') ? DASHBOARD : ({ items: [] } as never)),
-  );
+  api.mockImplementation((path: string) => Promise.resolve(route(String(path)) as never));
 });
 afterEach(cleanup);
+
+/** Nine actual months and three projected, the shape the live year has. */
+const FORECAST = {
+  year: 2026,
+  openingBalanceCents: 4_000_000,
+  actualThroughMonth: 9,
+  projectedFromMonth: 10,
+  months: Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    monthName: `M${i + 1}`,
+    netCents: i < 9 ? 100_000 : 80_000,
+    fixedCents: i < 9 ? 0 : 60_000,
+    variableCents: i < 9 ? 0 : 20_000,
+    spreadCents: i < 9 ? 0 : 5_000,
+    isProjected: i >= 9,
+    bookingCount: i < 9 ? 40 : 0,
+    closingBalanceCents: 4_000_000 - (i + 1) * 100_000,
+  })),
+  actualBalanceCents: -900_000,
+  projectedBalanceCents: -240_000,
+  projectedClosingBalanceCents: 3_377_191,
+  projectedClosingLowCents: 3_362_191,
+  projectedClosingHighCents: 3_392_191,
+  dueTemplateCount: 39,
+  historyMonths: 6,
+  method: 'median',
+  rows: [
+    {
+      categoryName: 'Miete',
+      categoryType: 'Fixkosten',
+      monthsOfHistory: 6,
+      medianCents: 120_000,
+      projectedTotalCents: 360_000,
+      source: 'template',
+    },
+  ],
+};
+
+const NO_ANOMALIES: AnomalyReport = {
+  year: 2026,
+  month: 9,
+  monthName: 'September',
+  items: [],
+  comparedMonths: 6,
+  minRatio: 1.4,
+  minDeltaCents: 2_000,
+};
+
+let anomalies: AnomalyReport = NO_ANOMALIES;
+
+function route(path: string) {
+  if (path.startsWith('/dashboard')) return DASHBOARD;
+  if (path.startsWith('/analysis/forecast')) return FORECAST;
+  if (path.startsWith('/analysis/anomalies')) return anomalies;
+  return { items: [] };
+}
+
+beforeEach(() => {
+  anomalies = NO_ANOMALIES;
+});
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -134,5 +193,60 @@ describe('the dashboard', () => {
     expect(net.textContent).not.toContain('-');
     // ...and the note under them stays true: a negative there means money came in.
     expect(container.textContent).toContain('ein negativer Wert bedeutet');
+  });
+
+  /**
+   * The whole design of the anomaly note is what it does NOT do. Most months
+   * nothing is unusual, and on those months this must be absent — not an empty
+   * panel, not a heading with nothing under it. A notice that appears every day is
+   * one nobody reads on the day it matters.
+   */
+  it('says nothing at all when no category is unusual', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Sparrate / Monat');
+
+    expect(container.querySelector('.anomalies')).toBeNull();
+    expect(screen.queryByText('Einen Blick wert')).not.toBeInTheDocument();
+  });
+
+  it('names a category that is far from its own median, and by how much', async () => {
+    anomalies = {
+      ...NO_ANOMALIES,
+      items: [
+        {
+          categoryName: 'Essen auswärts',
+          categoryType: 'Variable Kosten',
+          currentCents: 32_000,
+          medianCents: 12_000,
+          deltaCents: 20_000,
+          ratio: 2.6667,
+          direction: 'above' as const,
+          monthsOfHistory: 6,
+        },
+      ],
+    };
+    renderPage();
+
+    expect(await screen.findByText('Einen Blick wert')).toBeInTheDocument();
+    expect(screen.getByText('Essen auswärts')).toBeInTheDocument();
+    // Cost convention, as everywhere on this screen: 320,00 is what it cost.
+    expect(screen.getByText(/320,00/)).toBeInTheDocument();
+    expect(screen.getByText(/über dem Üblichen/)).toBeInTheDocument();
+  });
+
+  /**
+   * A projection that reads like a fact is worse than no projection, so the
+   * distinction has to be in the markup, not only in the numbers.
+   */
+  it('marks the projected months as projected', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Ausblick aufs Jahresende');
+
+    // The dashed line and the spread band only exist for the projected part.
+    expect(container.querySelector('.forecast__line')).not.toBeNull();
+    expect(container.querySelector('.forecast__band')).not.toBeNull();
+    // Every projected month says so in the chart's data table, too.
+    expect(screen.getAllByText(/projiziert/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/33\.921,91/)).toBeInTheDocument();
   });
 });

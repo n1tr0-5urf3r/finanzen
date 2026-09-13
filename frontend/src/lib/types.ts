@@ -900,3 +900,70 @@ export interface SeriesSubject {
   netCents: number;
   categoryName: string | null;
 }
+
+/**
+ * The rest of the year, projected from the recurring templates and the median of
+ * the last six months. A projection is never an actual: every month says which it
+ * is, and the two are summed separately.
+ */
+export interface ForecastMonth {
+  month: number;
+  monthName: string;
+  /** Expense-positive, like every stored net. */
+  netCents: number;
+  fixedCents: number;
+  variableCents: number;
+  spreadCents: number;
+  isProjected: boolean;
+  bookingCount: number;
+  closingBalanceCents: number;
+}
+
+export interface ForecastBasisRow {
+  categoryName: string;
+  categoryType: string | null;
+  monthsOfHistory: number;
+  medianCents: number;
+  projectedTotalCents: number;
+  /** `template`, `median` or `mixed`. */
+  source: string;
+}
+
+export interface Forecast {
+  year: number;
+  openingBalanceCents: number;
+  actualThroughMonth: number | null;
+  projectedFromMonth: number | null;
+  months: ForecastMonth[];
+  actualBalanceCents: number;
+  projectedBalanceCents: number;
+  projectedClosingBalanceCents: number;
+  projectedClosingLowCents: number;
+  projectedClosingHighCents: number;
+  dueTemplateCount: number;
+  historyMonths: number;
+  method: string;
+  rows: ForecastBasisRow[];
+}
+
+/** A category a long way from its own median. An empty list is the normal case. */
+export interface Anomaly {
+  categoryName: string;
+  categoryType: string | null;
+  currentCents: number;
+  medianCents: number;
+  deltaCents: number;
+  ratio: number;
+  direction: 'above' | 'below';
+  monthsOfHistory: number;
+}
+
+export interface AnomalyReport {
+  year: number;
+  month: number;
+  monthName: string;
+  items: Anomaly[];
+  comparedMonths: number;
+  minRatio: number;
+  minDeltaCents: number;
+}

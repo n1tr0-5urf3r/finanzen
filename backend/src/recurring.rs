@@ -61,7 +61,7 @@ const SELECT_TEMPLATES: &str = "\
 /// lies inside its window, and `p` sits on the interval grid measured from the
 /// anchor. Written as SQL so the listing, the materialiser and the tests cannot
 /// diverge; `is_due` below is the same predicate for Rust callers.
-const DUE_SQL: &str = "\
+pub(crate) const DUE_SQL: &str = "\
     r.active AND $1::int >= r.active_from_ord \
     AND (r.active_to_ord IS NULL OR $1::int <= r.active_to_ord) \
     AND (($1::int - r.anchor_ord) % r.interval_months) = 0";

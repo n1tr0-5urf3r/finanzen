@@ -40,6 +40,9 @@ export const qk = {
     compare: (year: number) => ['derived', year, 'compare'] as const,
     trailing: (year: number, month: number) =>
       ['derived', year, 'trailing', month] as const,
+    forecast: (year: number) => ['derived', year, 'forecast'] as const,
+    anomalies: (year: number, month: number) =>
+      ['derived', year, 'anomalies', month] as const,
   },
   years: () => ['years'] as const,
   /**

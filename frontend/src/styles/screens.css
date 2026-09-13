@@ -234,3 +234,24 @@
 }
 .funds__suggestions > * { min-width: 0; }
 @media (min-width: 720px) { .funds__suggestions { grid-template-columns: repeat(3, 1fr); } }
+/* ── forecast and anomaly notes ───────────────────────────────────────────────
+   A projection must not look like a fact, so the projected part of the line is
+   dashed and sits inside a band showing the spread it was estimated with. */
+.forecast__header h2 { margin: 0 0 .1rem; font-size: 1rem; }
+.forecast__figures {
+  display: grid; gap: .75rem; grid-template-columns: 1fr;
+  margin: .75rem 0;
+}
+@media (min-width: 620px) { .forecast__figures { grid-template-columns: repeat(3, 1fr); } }
+.forecast__figures > * { min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.forecast__line { stroke-dasharray: 6 4; opacity: .9; }
+.forecast__dot { opacity: .55; }
+.forecast__band { fill: var(--accent); opacity: .12; stroke: none; }
+
+.anomalies h2 { margin: 0 0 .1rem; font-size: 1rem; }
+.anomalies__list { list-style: none; margin: .6rem 0 .4rem; padding: 0; display: grid; gap: .4rem; }
+.anomalies__list li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; flex-wrap: wrap; min-width: 0;
+}
+.anomalies__figures { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
