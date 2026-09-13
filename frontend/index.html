@@ -2,7 +2,16 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Deliberately WITHOUT `viewport-fit=cover`. Cover lays the page out edge to
+         edge, behind the browser's own chrome, so `bottom: 0` for a fixed element
+         means the bottom of the DISPLAY rather than the bottom of what the page
+         has been given — and every time Firefox's toolbar slides away, the
+         compensation for that difference is the offset you see on the navigation
+         bar. Without it the viewport is the visible content area, which is what
+         the bar should be measured against. It is also the one structural
+         difference between this document and coffee-tracker's, whose identical
+         floating navigation does not drift. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#14181b" />
     <link rel="icon" type="image/png" href="/fi.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
