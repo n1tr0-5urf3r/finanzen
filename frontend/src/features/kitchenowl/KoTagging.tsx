@@ -67,17 +67,69 @@ export function KoTagging() {
     [rows],
   );
 
+  // How far the current name has got, so the button says "5 / 16" instead of
+  // spinning. KitchenOwl takes about two seconds per write and the server hands
+  // back a handful at a time, so this is the loop that asks for the rest.
+  const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(
+    null,
+  );
+
   const apply = useMutation({
-    mutationFn: (vars: { name: string; koCategoryId: number }) =>
-      api<KoTagResult>('/kitchenowl/untagged/apply', {
-        method: 'POST',
-        ...jsonBody(vars),
-      }),
+    mutationFn: async (vars: { name: string; koCategoryId: number }) => {
+      let total = 0;
+      let done = 0;
+      const merged: KoTagResult = {
+        koCategoryId: vars.koCategoryId,
+        koCategoryName: '',
+        requested: 0,
+        tagged: 0,
+        skipped: 0,
+        failed: 0,
+        failures: [],
+        remaining: 0,
+      };
+
+      // Each round writes a few and says what is left. A reload loses at most the
+      // round in flight, and re-clicking picks up exactly where it stopped,
+      // because an expense that already carries the category is skipped.
+      //
+      // Two independent stops, because a loop that only ends when the server says
+      // so ends never if the server cannot say so: a round that achieves NOTHING
+      // breaks it, and so does a hard cap on rounds. The first version of this had
+      // neither and span until it ran out of memory.
+      for (let round = 0; round < 40; round += 1) {
+        const batch = await api<KoTagResult>('/kitchenowl/untagged/apply', {
+          method: 'POST',
+          ...jsonBody(vars),
+        });
+        if (total === 0) total = batch.requested;
+        done += batch.tagged + batch.skipped + batch.failed;
+        merged.koCategoryName = batch.koCategoryName;
+        merged.requested = total;
+        merged.tagged += batch.tagged;
+        merged.skipped += batch.skipped;
+        merged.failed += batch.failed;
+        merged.failures = [...merged.failures, ...batch.failures];
+        merged.remaining = Number(batch.remaining ?? 0);
+        setProgress({ name: vars.name, done, total });
+
+        const moved = batch.tagged + batch.skipped + batch.failed;
+        // Stop on a refusal too: the server breaks the batch on the first one, and
+        // asking again would only collect the same error.
+        if (!(merged.remaining > 0) || batch.failed > 0 || moved === 0) break;
+      }
+      return merged;
+    },
     onSuccess: (r) => {
       setResult(r);
+      setProgress(null);
       invalidateAfterKitchenOwlChange(client);
     },
+    onError: () => setProgress(null),
   });
+
+  const progressLabel = (name: string) =>
+    progress && progress.name === name ? `${progress.done} / ${progress.total}` : undefined;
 
   /** The suggestion unless the user has said otherwise. */
   const chosen = (row: KoUntaggedGroup) =>
@@ -186,7 +238,7 @@ export function KoTagging() {
                         }
                       >
                         <Check size={15} aria-hidden="true" />
-                        {t('ko.tagApply', { count: row.expenseCount })}
+                        {progressLabel(row.name) ?? t('ko.tagApply', { count: row.expenseCount })}
                       </Button>
                     </td>
                   </tr>
@@ -235,7 +287,7 @@ export function KoTagging() {
                     onClick={() => apply.mutate({ name: row.name, koCategoryId: chosen(row) })}
                   >
                     <Check size={15} aria-hidden="true" />
-                    {t('ko.tagApply', { count: row.expenseCount })}
+                    {progressLabel(row.name) ?? t('ko.tagApply', { count: row.expenseCount })}
                   </Button>
                 </div>
               </article>

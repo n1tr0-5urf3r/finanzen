@@ -353,13 +353,27 @@ pub async fn apply(
         skipped: 0,
         failed: 0,
         failures: Vec::new(),
+        remaining: 0,
     };
+
+    // A write takes KitchenOwl about two seconds. Sixteen of them is a request that
+    // shows nothing for half a minute and loses everything it has not yet mirrored
+    // the moment the browser gives up — which is how this first went wrong. Stop
+    // after a few and report what is left; the work is idempotent, so the caller
+    // simply asks again.
+    let limit = body.limit.unwrap_or(8).clamp(1, 25) as i64;
+    let mut written = 0i64;
 
     for target in &targets {
         if target.current == Some(body.ko_category_id) {
             result.skipped += 1;
             continue;
         }
+        if written >= limit {
+            result.remaining += 1;
+            continue;
+        }
+        written += 1;
         match tag_one(
             &state,
             &client,
@@ -378,9 +392,19 @@ pub async fn apply(
                     name: target.name.clone(),
                     error: e.to_string(),
                 });
+                // A refusal usually means the next one is refused too — a bad
+                // category, a token that expired, KitchenOwl down. Stop and report
+                // rather than spend the rest of the batch collecting the same
+                // error, and let what is left show up as remaining.
+                break;
             }
         }
     }
+
+    // Anything after the break is still untagged and still owed.
+    let done = result.tagged + result.skipped + result.failed;
+    let untouched = targets.len() as i64 - done - result.remaining;
+    result.remaining += untouched.max(0);
 
     Ok(Json(result))
 }

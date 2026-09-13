@@ -1281,6 +1281,13 @@ pub struct KoTagRequest {
     pub name: Option<String>,
     /// Or an explicit set, when the user picked rows rather than a whole name.
     pub expense_ids: Option<Vec<Uuid>>,
+    /// How many expenses this call may WRITE before returning. KitchenOwl takes
+    /// about two seconds per update, so a name with sixteen of them is half a
+    /// minute of a request that shows nothing and dies if the browser gives up or
+    /// the page is reloaded — which is exactly what happened the first time this
+    /// ran. The caller asks for a few at a time and comes back for the rest;
+    /// `remaining` says how many that is. Defaults to 8, capped at 25.
+    pub limit: Option<u32>,
 }
 
 /// What actually happened, per expense where it did not.
@@ -1299,6 +1306,10 @@ pub struct KoTagResult {
     /// each of these — a mirror claiming a category KitchenOwl never accepted is
     /// worse than an untagged one.
     pub failures: Vec<KoTagFailure>,
+    /// Still untagged under this selection after the batch. Zero means done; more
+    /// than zero means call again with the same body. Failures are not counted
+    /// here — they stay untagged but calling again would only fail again.
+    pub remaining: i64,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

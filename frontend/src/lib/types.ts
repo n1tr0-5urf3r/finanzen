@@ -849,6 +849,8 @@ export interface KoTagFailure {
 }
 
 export interface KoTagResult {
+  /** Still untagged under this selection: >0 means call again with the same body. */
+  remaining: number;
   koCategoryId: number;
   koCategoryName: string;
   requested: number;

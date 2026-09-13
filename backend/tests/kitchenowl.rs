@@ -2342,13 +2342,17 @@ async fn a_refused_change_leaves_the_expense_untagged_and_says_why() {
             Some(json!({"name": "Kaufland", "koCategoryId": 1})),
         )
         .await;
-    // The batch reports; the failures are per expense.
+    // The batch reports; the failures are per expense. It stops at the FIRST one:
+    // a refusal here means a bad category, an expired token, or an instance that is
+    // down, and none of those get better by asking two more times. What is left is
+    // reported as owed, and the caller tries again once the cause is fixed.
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(result["requested"], 3);
     assert_eq!(result["tagged"], 0);
-    assert_eq!(result["failed"], 3);
+    assert_eq!(result["failed"], 1);
+    assert_eq!(result["remaining"], 2);
     let failures = result["failures"].as_array().expect("failures");
-    assert_eq!(failures.len(), 3);
+    assert_eq!(failures.len(), 1);
     // Carrying what the instance actually said, not a generic message.
     assert!(
         failures[0]["error"]

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -219,5 +219,62 @@ describe('the tagging queue', () => {
   it('says that this writes to KitchenOwl before anything is pressed', async () => {
     renderQueue();
     expect(await screen.findByText(/in KitchenOwl selbst gesetzt/)).toBeInTheDocument();
+  });
+
+  /**
+   * The server hands back a few writes at a time, because KitchenOwl needs about
+   * two seconds for each and a browser will not wait half a minute for sixteen.
+   * The queue asks again until nothing is left — and stops on its own if a round
+   * achieves nothing, which is what an earlier version did not do: it span until
+   * the test runner ran out of memory.
+   */
+  it('keeps asking until nothing is left, and gives up on a round that achieves nothing', async () => {
+    const user = userEvent.setup();
+    const batches = [
+      { requested: 16, tagged: 8, skipped: 0, failed: 0, failures: [], remaining: 8,
+        koCategoryId: 1, koCategoryName: 'Wocheneinkauf' },
+      { requested: 16, tagged: 8, skipped: 0, failed: 0, failures: [], remaining: 0,
+        koCategoryId: 1, koCategoryName: 'Wocheneinkauf' },
+    ];
+    let posts = 0;
+    api.mockImplementation((path: string, init?: { method?: string }) => {
+      if (String(path).includes('/untagged/apply') || init?.method === 'POST') {
+        return Promise.resolve(batches[Math.min(posts++, batches.length - 1)] as never);
+      }
+      return Promise.resolve(GROUPS as never);
+    });
+
+    renderQueue();
+    // Rendered twice — the wide table and the phone cards are both in the DOM.
+    await screen.findAllByText('Kaufland');
+    await user.click(screen.getAllByRole('button', { name: /16/ })[0]);
+
+    // Two rounds: the first reports eight still owed, the second reports none.
+    await waitFor(() => expect(posts).toBe(2));
+  });
+
+  it('stops after a refusal instead of collecting the same error sixteen times', async () => {
+    const user = userEvent.setup();
+    let posts = 0;
+    api.mockImplementation((path: string, init?: { method?: string }) => {
+      if (String(path).includes('/untagged/apply') || init?.method === 'POST') {
+        posts += 1;
+        return Promise.resolve({
+          requested: 16, tagged: 0, skipped: 0, failed: 1, remaining: 15,
+          koCategoryId: 1, koCategoryName: 'Wocheneinkauf',
+          failures: [{ externalId: 289, name: 'Kaufland', error: 'Request invalid' }],
+        } as never);
+      }
+      return Promise.resolve(GROUPS as never);
+    });
+
+    renderQueue();
+    await screen.findAllByText('Kaufland');
+    await user.click(screen.getAllByRole('button', { name: /16/ })[0]);
+
+    // One round only: a refusal is not worth repeating fifteen times.
+    await waitFor(() => expect(posts).toBe(1));
+    await new Promise((r) => setTimeout(r, 60));
+    expect(posts).toBe(1);
   });
 });

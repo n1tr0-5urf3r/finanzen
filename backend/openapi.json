@@ -6958,6 +6958,15 @@
             "type": "integer",
             "format": "int64"
           },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How many expenses this call may WRITE before returning. KitchenOwl takes\nabout two seconds per update, so a name with sixteen of them is half a\nminute of a request that shows nothing and dies if the browser gives up or\nthe page is reloaded — which is exactly what happened the first time this\nran. The caller asks for a few at a time and comes back for the rest;\n`remaining` says how many that is. Defaults to 8, capped at 25.",
+            "minimum": 0
+          },
           "name": {
             "type": [
               "string",
@@ -6977,7 +6986,8 @@
           "tagged",
           "skipped",
           "failed",
-          "failures"
+          "failures",
+          "remaining"
         ],
         "properties": {
           "failed": {
@@ -6997,6 +7007,11 @@
           },
           "koCategoryName": {
             "type": "string"
+          },
+          "remaining": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Still untagged under this selection after the batch. Zero means done; more\nthan zero means call again with the same body. Failures are not counted\nhere — they stay untagged but calling again would only fail again."
           },
           "requested": {
             "type": "integer",
