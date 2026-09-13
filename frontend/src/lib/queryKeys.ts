@@ -23,6 +23,9 @@ export const qk = {
     list: (filters: Record<string, unknown>) => ['bookings', 'list', filters] as const,
     one: (id: string) => ['bookings', 'one', id] as const,
     comments: () => ['bookings', 'comments'] as const,
+    /** Cross-year search: not under `list`, whose key is a year-scoped filter. */
+    search: (q: string, categoryId: string, page: number) =>
+      ['bookings', 'search', q, categoryId, page] as const,
   },
   derived: {
     root: ['derived'] as const,

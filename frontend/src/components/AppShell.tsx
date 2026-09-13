@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   ArrowDownUp, BarChart3, CalendarRange, FileSpreadsheet, LayoutDashboard,
-  MoreHorizontal, Plus, Receipt, Repeat, Settings, Tags, WalletMinimal,
+  MoreHorizontal, Plus, Receipt, Repeat, Search, Settings, Tags, WalletMinimal,
 } from 'lucide-react';
 
 import { useT } from '../lib/i18n';
@@ -12,6 +12,7 @@ import { AppFooter } from './AppFooter';
 const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] = [
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { to: '/buchungen', labelKey: 'nav.bookings', icon: ArrowDownUp },
+  { to: '/suche', labelKey: 'nav.search', icon: Search },
   { to: '/monate', labelKey: 'nav.months', icon: CalendarRange },
   { to: '/auswertung', labelKey: 'nav.analysis', icon: BarChart3 },
   { to: '/steuer', labelKey: 'nav.tax', icon: Receipt },

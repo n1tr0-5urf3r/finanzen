@@ -15,6 +15,7 @@ use crate::{
     locale::month_name_de,
     models::{
         Booking, BookingInput, BookingKind, BookingPage, CategorySource, ConfirmBookingInput,
+        SearchComment, SearchResult, SearchYearSummary,
     },
 };
 
@@ -58,6 +59,9 @@ fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
 #[derive(Debug, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookingQuery {
+    /// Optional, and omitting it is how a query spans every year the ledger holds.
+    /// The screens all send one because a ledger is read a year at a time; search
+    /// is the case that does not.
     pub year: Option<i32>,
     pub month: Option<u8>,
     pub category_id: Option<Uuid>,
@@ -660,6 +664,163 @@ pub async fn comments(mut ctx: Ctx) -> Result<Json<Vec<CommentSummary>>> {
             is_uncategorized: r.get("uncategorized"),
         })
         .collect();
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+// ------------------------------------------------------------------- search
+
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchQuery {
+    pub q: Option<String>,
+    pub category_id: Option<Uuid>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+/// Everything matching a phrase, across every year at once.
+///
+/// The listing is deliberately year-scoped — a ledger is read a year at a time —
+/// which makes "what have I ever paid this merchant" four page loads and a mental
+/// addition. This answers it in one request, and the per-year summary IS the
+/// answer: the matching rows are only the evidence for it.
+///
+/// Matching is case-insensitive on the trimmed comment, the same rule the category
+/// rules use, so `Kaufland` and `kaufland` are one merchant and not two. It is a
+/// CONTAINS match rather than the rule table's exact one, because a person
+/// searching types a fragment where a rule states a whole key.
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookings/search",
+    tag = "bookings",
+    params(
+        ("q" = Option<String>, Query, description = "Suchbegriff; Kommentar enthält, Groß-/Kleinschreibung egal"),
+        ("categoryId" = Option<Uuid>, Query, description = "Auf eine Kategorie einschränken"),
+        ("page" = Option<u32>, Query, description = "Seite, ab 0"),
+        ("pageSize" = Option<u32>, Query, description = "1..500, Standard 100"),
+    ),
+    responses((status = 200, description = "Treffer über alle Jahre, je Jahr summiert", body = SearchResult)),
+)]
+pub async fn search(mut ctx: Ctx, Query(q): Query<SearchQuery>) -> Result<Json<SearchResult>> {
+    let needle = q.q.as_deref().unwrap_or("").trim().to_string();
+    let page = q.page.unwrap_or(0);
+    let page_size = q.page_size.unwrap_or(100).clamp(1, 500);
+
+    // Nothing asked, nothing claimed. An empty needle must not quietly become
+    // "every booking you have ever made" with a grand total underneath it.
+    if needle.is_empty() {
+        let out = SearchResult {
+            query: needle,
+            items: Vec::new(),
+            total: 0,
+            page,
+            page_size,
+            sum_income_cents: 0,
+            sum_expense_cents: 0,
+            sum_net_cents: 0,
+            by_year: Vec::new(),
+            comments: Vec::new(),
+        };
+        ctx.tenant.commit().await?;
+        return Ok(Json(out));
+    }
+
+    // `match_key` is the stored `lower(btrim(comment))`, so the case folding is the
+    // schema's and not this query's opinion. `LIKE` on a folded key rather than
+    // `ILIKE` on the raw comment for the same reason.
+    let mut where_sql =
+        "b.status = 'confirmed' AND b.match_key LIKE '%' || lower(btrim($1)) || '%'".to_string();
+    if q.category_id.is_some() {
+        where_sql.push_str(" AND b.category_id = $2::uuid");
+    }
+
+    let order = order_clause(None);
+    let list_sql = format!(
+        "{SELECT_BOOKING} WHERE {where_sql} \
+         ORDER BY {order} \
+         LIMIT {page_size} OFFSET {}",
+        page as i64 * page_size as i64
+    );
+    let mut list_q = sqlx::query(&list_sql).bind(&needle);
+    if let Some(id) = q.category_id {
+        list_q = list_q.bind(id);
+    }
+    let rows = list_q.fetch_all(ctx.tenant.conn()).await?;
+
+    let totals_sql = format!(
+        "SELECT count(*)::bigint AS total, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'income'), 0)::bigint AS inc, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'expense'), 0)::bigint AS exp, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net \
+           FROM bookings b WHERE {where_sql}"
+    );
+    let mut totals_q = sqlx::query(&totals_sql).bind(&needle);
+    if let Some(id) = q.category_id {
+        totals_q = totals_q.bind(id);
+    }
+    let totals = totals_q.fetch_one(ctx.tenant.conn()).await?;
+
+    let years_sql = format!(
+        "SELECT b.period_year AS y, count(*)::bigint AS n, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'income'), 0)::bigint AS inc, \
+                COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'expense'), 0)::bigint AS exp, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net \
+           FROM bookings b WHERE {where_sql} \
+          GROUP BY b.period_year ORDER BY b.period_year DESC"
+    );
+    let mut years_q = sqlx::query(&years_sql).bind(&needle);
+    if let Some(id) = q.category_id {
+        years_q = years_q.bind(id);
+    }
+    let year_rows = years_q.fetch_all(ctx.tenant.conn()).await?;
+
+    // Grouped by the folded key and reported under the spelling used most recently:
+    // two spellings of one merchant are one row, and the row says which it is now.
+    let comments_sql = format!(
+        "SELECT (array_agg(b.comment ORDER BY b.period_ord DESC, b.created_at DESC))[1] AS comment, \
+                count(*)::bigint AS n, \
+                COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
+                (array_agg(c.name ORDER BY b.period_ord DESC, b.created_at DESC))[1] AS category_name \
+           FROM bookings b LEFT JOIN categories c ON c.id = b.category_id \
+          WHERE {where_sql} \
+          GROUP BY b.match_key ORDER BY n DESC, comment LIMIT 50"
+    );
+    let mut comments_q = sqlx::query(&comments_sql).bind(&needle);
+    if let Some(id) = q.category_id {
+        comments_q = comments_q.bind(id);
+    }
+    let comment_rows = comments_q.fetch_all(ctx.tenant.conn()).await?;
+
+    let out = SearchResult {
+        query: needle,
+        items: rows.iter().map(row_to_booking).collect(),
+        total: totals.get("total"),
+        page,
+        page_size,
+        sum_income_cents: totals.get("inc"),
+        sum_expense_cents: totals.get("exp"),
+        sum_net_cents: totals.get("net"),
+        by_year: year_rows
+            .iter()
+            .map(|r| SearchYearSummary {
+                year: r.get::<i16, _>("y") as i32,
+                booking_count: r.get("n"),
+                income_cents: r.get("inc"),
+                expense_cents: r.get("exp"),
+                net_cents: r.get("net"),
+            })
+            .collect(),
+        comments: comment_rows
+            .iter()
+            .map(|r| SearchComment {
+                comment: r.get("comment"),
+                booking_count: r.get("n"),
+                net_cents: r.get("net"),
+                category_name: r.get("category_name"),
+            })
+            .collect(),
+    };
     ctx.tenant.commit().await?;
     Ok(Json(out))
 }

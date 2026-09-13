@@ -175,6 +175,52 @@ pub struct BookingPage {
     pub uncategorized_count: i64,
 }
 
+/// One year's worth of whatever a search matched.
+///
+/// The point of a cross-year search is not the list — it is this: what a merchant
+/// has cost per year since 2023, on one screen, without four page loads.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchYearSummary {
+    pub year: i32,
+    pub booking_count: i64,
+    pub income_cents: i64,
+    pub expense_cents: i64,
+    /// Stored convention: expenses minus income, so a year that earned is negative.
+    pub net_cents: i64,
+}
+
+/// A distinct comment the search matched, with how often it occurs.
+///
+/// Hand-typed comments drift — `Kaufland`, `kaufland`, `Kaufland Berlin` — and a
+/// search for one of them should say which spellings it actually caught.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchComment {
+    /// The spelling used most recently, which is the one worth showing.
+    pub comment: String,
+    pub booking_count: i64,
+    pub net_cents: i64,
+    pub category_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    /// Echoed back, trimmed, so the UI never has to guess what was asked.
+    pub query: String,
+    pub items: Vec<Booking>,
+    pub total: i64,
+    pub page: u32,
+    pub page_size: u32,
+    pub sum_income_cents: i64,
+    pub sum_expense_cents: i64,
+    pub sum_net_cents: i64,
+    /// Newest year first, and only years that actually matched.
+    pub by_year: Vec<SearchYearSummary>,
+    pub comments: Vec<SearchComment>,
+}
+
 // -------------------------------------------------------- categories & rules
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

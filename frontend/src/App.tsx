@@ -12,6 +12,7 @@ import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
 import { MonthsPage } from './features/months/MonthsPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
 import { RecurringPage } from './features/recurring/RecurringPage';
+import { SearchPage } from './features/search/SearchPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TaxPage } from './features/tax/TaxPage';
 
@@ -32,6 +33,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/buchungen" element={<BookingsPage />} />
+          <Route path="/suche" element={<SearchPage />} />
           <Route path="/monate" element={<MonthsPage />} />
           <Route path="/auswertung" element={<AnalysisPage />} />
           <Route path="/kategorien" element={<CategoriesPage />} />

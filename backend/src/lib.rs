@@ -107,6 +107,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/bookings", get(bookings::list).post(bookings::create))
         .route("/bookings/comments", get(bookings::comments))
+        .route("/bookings/search", get(bookings::search))
         .route(
             "/bookings/{id}",
             get(bookings::get_one)

@@ -198,3 +198,25 @@
 /* A second line under a KPI: the figure that puts the headline in context without
    competing with it for a tile of its own. */
 .kpi__sub { display: block; font-size: .72rem; color: var(--muted); margin-top: .15rem; }
+
+
+/* ── cross-year search ──────────────────────────────────────────────────────── */
+.search-bar {
+  display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end;
+  margin-bottom: 1rem;
+}
+.search-bar > .field { min-width: 0; }
+/* The bar column is proportion, not a scale — it collapses first on a phone,
+   where the figures beside it are what is being read anyway. */
+.search-years__bar { width: 28%; min-width: 0; }
+.search-years__fill {
+  display: block; height: .5rem; border-radius: var(--r-pill);
+  background: var(--expense); min-width: 2px;
+}
+.search-years__fill--in { background: var(--income); }
+@media (max-width: 559px) {
+  .search-years__bar { display: none; }
+}
+.search-spellings { display: flex; flex-wrap: wrap; gap: .4rem; }
+.search-spellings .chip { display: inline-flex; align-items: center; gap: .35rem; }
+.search-results { display: grid; gap: .6rem; }

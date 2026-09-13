@@ -47,6 +47,37 @@ export interface Booking {
   origin: string;
 }
 
+/** One year of whatever a search matched — the point of searching across years. */
+export interface SearchYearSummary {
+  year: number;
+  bookingCount: number;
+  incomeCents: number;
+  expenseCents: number;
+  /** Stored convention: expenses minus income, so a year that earned is negative. */
+  netCents: number;
+}
+
+/** A distinct spelling the search matched, folded case-insensitively. */
+export interface SearchComment {
+  comment: string;
+  bookingCount: number;
+  netCents: number;
+  categoryName: string | null;
+}
+
+export interface SearchResult {
+  query: string;
+  items: Booking[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sumIncomeCents: number;
+  sumExpenseCents: number;
+  sumNetCents: number;
+  byYear: SearchYearSummary[];
+  comments: SearchComment[];
+}
+
 export interface BookingPage {
   items: Booking[];
   total: number;

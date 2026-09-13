@@ -2095,6 +2095,190 @@ async fn paging_partitions_the_rows_in_both_directions() {
     }
 }
 
+// ------------------------------------------------------------------- search
+
+/// "What have I ever paid this merchant" — one request, every year.
+///
+/// The listing is year-scoped on purpose, which turns this question into four page
+/// loads and a mental addition. The per-year summary is the actual answer here, so
+/// it is what the assertions are about; the rows are only the evidence.
+#[tokio::test]
+async fn a_search_spans_every_year_and_sums_each_one() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    for (year, month, cents, comment) in [
+        (2024, 3, 4_210, "Hofladen Brinkmann"),
+        (2025, 7, 1_999, "hofladen brinkmann"),
+        (2025, 11, 3_000, "Hofladen Brinkmann Berlin"),
+        (2026, 2, 2_500, "Hofladen Brinkmann"),
+        // A refund from the same merchant: income, so the year nets lower.
+        (2026, 4, 500, "Hofladen Brinkmann"),
+        // Must not match.
+        (2026, 5, 9_999, "Kaufland"),
+    ] {
+        let kind = if cents == 500 { "income" } else { "expense" };
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":year,"month":month,"kind":kind,
+                        "amountCents":cents,"comment":comment})),
+        )
+        .await;
+    }
+
+    let (status, out) = app
+        .send("GET", "/bookings/search?q=thomas%20philipps", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+
+    // Five rows across three years — and the unrelated merchant is not one of them.
+    assert_eq!(out["total"], 5);
+    assert_eq!(out["query"], "hofladen brinkmann");
+
+    let years = out["byYear"].as_array().expect("byYear");
+    assert_eq!(years.len(), 3, "three years matched: {years:?}");
+    // Newest first, so the most recent year is the one you read without scrolling.
+    assert_eq!(years[0]["year"], 2026);
+    assert_eq!(years[0]["bookingCount"], 2);
+    assert_eq!(years[0]["expenseCents"], 2_500);
+    assert_eq!(years[0]["incomeCents"], 500);
+    // Stored convention: expenses minus income of the same rows.
+    assert_eq!(years[0]["netCents"], 2_000);
+
+    assert_eq!(years[1]["year"], 2025);
+    assert_eq!(years[1]["bookingCount"], 2);
+    assert_eq!(years[1]["netCents"], 1_999 + 3_000);
+
+    assert_eq!(years[2]["year"], 2024);
+    assert_eq!(years[2]["netCents"], 4_210);
+
+    // The grand total is the sum of the years, which is the only reason to print
+    // both on one screen.
+    let year_net: i64 = years.iter().map(|y| y["netCents"].as_i64().unwrap()).sum();
+    assert_eq!(out["sumNetCents"].as_i64().unwrap(), year_net);
+    assert_eq!(out["sumExpenseCents"], 4_210 + 1_999 + 3_000 + 2_500);
+    assert_eq!(out["sumIncomeCents"], 500);
+
+    // Spellings: `Hofladen Brinkmann` and `hofladen brinkmann` are ONE merchant, folded by
+    // the stored match_key, reported under the spelling used most recently. The
+    // suffixed one is a different key and stays its own row.
+    let comments = out["comments"].as_array().expect("comments");
+    assert_eq!(comments.len(), 2, "{comments:?}");
+    assert_eq!(comments[0]["comment"], "Hofladen Brinkmann");
+    assert_eq!(comments[0]["bookingCount"], 4);
+    assert_eq!(comments[1]["comment"], "Hofladen Brinkmann Berlin");
+}
+
+/// Case folding is the schema's, not the query's: `match_key` is a generated
+/// `lower(btrim(comment))`, and searching by any casing or with stray spaces finds
+/// the same rows.
+#[tokio::test]
+async fn a_search_folds_case_and_whitespace_like_the_rule_table() {
+    let mut app = app!();
+    app.setup_admin().await;
+    for comment in ["Kaufland", "KAUFLAND", "  kaufland  "] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":2026,"month":1,"kind":"expense",
+                        "amountCents":1_000,"comment":comment})),
+        )
+        .await;
+    }
+
+    // Percent-encoded, because the point is that the SERVER trims, not the client.
+    for needle in ["kaufland", "KaUfLaNd", "%20%20Kaufland%20"] {
+        let (status, out) = app
+            .send("GET", &format!("/bookings/search?q={needle}"), None)
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(out["total"], 3, "needle {needle:?}");
+    }
+
+    // A fragment matches, because a person searching types part of a name where a
+    // rule states a whole key.
+    let (_, out) = app.send("GET", "/bookings/search?q=aufl", None).await;
+    assert_eq!(out["total"], 3);
+
+    // Nothing asked, nothing claimed: an empty query must not become "everything".
+    let (status, empty) = app.send("GET", "/bookings/search?q=%20%20", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(empty["total"], 0);
+    assert_eq!(empty["sumNetCents"], 0);
+    assert!(empty["byYear"].as_array().expect("byYear").is_empty());
+}
+
+/// The search can be narrowed to one category, and the summary narrows with it.
+#[tokio::test]
+async fn a_search_can_be_confined_to_one_category() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let food = app.category_id("Lebensmittel").await;
+    let out_eating = app.category_id("Essen auswärts").await;
+
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year":2026,"month":1,"kind":"expense","amountCents":2_000,
+                    "comment":"Markt","categoryId":food}),
+        ),
+    )
+    .await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year":2025,"month":1,"kind":"expense","amountCents":3_000,
+                    "comment":"Markt Imbiss","categoryId":out_eating}),
+        ),
+    )
+    .await;
+
+    let (_, all) = app.send("GET", "/bookings/search?q=markt", None).await;
+    assert_eq!(all["total"], 2);
+
+    let (_, only) = app
+        .send(
+            "GET",
+            &format!("/bookings/search?q=markt&categoryId={food}"),
+            None,
+        )
+        .await;
+    assert_eq!(only["total"], 1);
+    assert_eq!(only["byYear"].as_array().expect("byYear").len(), 1);
+    assert_eq!(only["byYear"][0]["year"], 2026);
+    assert_eq!(only["sumNetCents"], 2_000);
+}
+
+/// The year-scoped listing is untouched by any of the above: omitting `year` has
+/// always spanned every year, and passing one still confines the answer to it.
+#[tokio::test]
+async fn the_listing_still_scopes_to_a_year_and_still_spans_all_of_them_without_one() {
+    let mut app = app!();
+    app.setup_admin().await;
+    for year in [2024, 2025, 2026] {
+        app.send(
+            "POST",
+            "/bookings",
+            Some(json!({"year":year,"month":6,"kind":"expense",
+                        "amountCents":1_000,"comment":"Strom"})),
+        )
+        .await;
+    }
+
+    let (status, scoped) = app.send("GET", "/bookings?year=2025", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(scoped["total"], 1);
+    assert_eq!(scoped["sumExpenseCents"], 1_000);
+
+    let (status, all) = app.send("GET", "/bookings", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all["total"], 3);
+    assert_eq!(all["sumExpenseCents"], 3_000);
+}
+
 /// Twelve months for one comment — "how much do I spend on tanken, and is it
 /// getting worse". The spreadsheet's Filter tab answered this and it is the
 /// question a household asks more often than "what did the category cost".

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Download, FileJson, Link2, Send, Users2 } from 'lucide-react';
+import { ArrowLeftRight, Download, FileJson, Link2, Send } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { FlowMoney, Money } from '../../components/Money';
@@ -19,6 +19,7 @@ import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { YearPicker } from '../../components/YearPicker';
 import { qk } from '../../lib/queryKeys';
+import { BookingCard } from './BookingCard';
 import { BookingEditor } from './BookingEditor';
 import type { Booking, BookingPage, Category, KoStatus } from '../../lib/types';
 
@@ -138,6 +139,14 @@ export function BookingsPage() {
             id="f-search" className="input" value={search}
             onChange={(e) => update('suche', e.target.value)}
           />
+          {/* This box searches the year on screen. The same phrase across every
+              year is one link away, which is where someone goes the moment the
+              answer is not in this one. */}
+          {search.trim().length > 0 && (
+            <Link className="footnote" to={`/suche?q=${encodeURIComponent(search.trim())}`}>
+              {t('search.fromBookings')}
+            </Link>
+          )}
         </div>
         <div className="field" style={{ minWidth: '11rem' }}>
           <label htmlFor="f-category">{t('bookings.category')}</label>
@@ -325,82 +334,12 @@ export function BookingsPage() {
           {query.data.items.length > 0 && (
             <div className="screen-cards">
               {query.data.items.map((b) => (
-                <article
+                <BookingCard
                   key={b.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setEditing(b)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setEditing(b);
-                    }
-                  }}
-                  className={`mcard bcard bcard--clickable ${
-                    b.categorySource === 'unresolved' && b.kind !== 'transfer'
-                      ? 'bcard--uncategorized'
-                      : b.kind === 'transfer'
-                        ? 'bcard--transfer'
-                        : ''
-                  }`}
-                >
-                  <header>
-                    <strong>
-                      <DataLabel>{b.comment}</DataLabel>
-                    </strong>
-                    {/* The amount is the reason you opened the row, so it leads. */}
-                    <Money
-                      cents={b.kind === 'income' ? b.amountCents : -b.amountCents}
-                      basis="signed"
-                      tone={b.kind}
-                    />
-                  </header>
-                  <div className="bcard__meta">
-                    <DataLabel>{b.monthName}</DataLabel>
-                    {!b.bookedOn && <span title={t('bookings.noDay')}> ·</span>}
-                    <CategoryChip
-                      name={b.categoryName}
-                      typeLabel={b.categoryType}
-                      fallback={t('bookings.sourceNone')}
-                    />
-                    {b.categorySource === 'manual' && (
-                      <StatusPill tone="info">{t('bookings.sourceManual')}</StatusPill>
-                    )}
-                    {b.kind === 'transfer' && (
-                      <StatusPill tone="neutral">{t('bookings.kind.transfer')}</StatusPill>
-                    )}
-                    {b.taxRelevant && (
-                      <StatusPill tone="danger">{t('bookings.tax')}</StatusPill>
-                    )}
-                  </div>
-
-                  {/* The push action lived only in the desktop table, which is
-                      hidden below 820px — so on the device the feature is for,
-                      there was no way to share a booking at all. */}
-                  {koReady && (
-                    <div className="bcard__actions">
-                      {b.externalSource === 'kitchenowl' ? (
-                        <span className="ko-link">
-                          <Link2 size={14} aria-hidden="true" /> {t('ko.linked')}
-                        </span>
-                      ) : b.kind === 'transfer' || b.status !== 'confirmed' ? null : (
-                        <button
-                          type="button"
-                          className="button button--secondary"
-                          aria-label={`${t('ko.pushTitle')}: ${b.comment}`}
-                          onClick={(e) => {
-                            // The card itself opens the editor, so this must not
-                            // bubble or sharing would also start an edit.
-                            e.stopPropagation();
-                            setPushing(b);
-                          }}
-                        >
-                          <Users2 size={15} aria-hidden="true" /> {t('ko.push')}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </article>
+                  booking={b}
+                  onOpen={setEditing}
+                  onPush={koReady ? setPushing : undefined}
+                />
               ))}
             </div>
           )}

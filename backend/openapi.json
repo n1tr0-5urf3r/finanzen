@@ -638,6 +638,71 @@
         }
       }
     },
+    "/api/v1/bookings/search": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "Everything matching a phrase, across every year at once.",
+        "description": "The listing is deliberately year-scoped — a ledger is read a year at a time —\nwhich makes \"what have I ever paid this merchant\" four page loads and a mental\naddition. This answers it in one request, and the per-year summary IS the\nanswer: the matching rows are only the evidence for it.\n\nMatching is case-insensitive on the trimmed comment, the same rule the category\nrules use, so `Kaufland` and `kaufland` are one merchant and not two. It is a\nCONTAINS match rather than the rule table's exact one, because a person\nsearching types a fragment where a rule states a whole key.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Suchbegriff; Kommentar enthält, Groß-/Kleinschreibung egal",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "description": "Auf eine Kategorie einschränken",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Seite, ab 0",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "1..500, Standard 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Treffer über alle Jahre, je Jahr summiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/bookings/{id}": {
       "get": {
         "tags": [
@@ -6108,6 +6173,135 @@
                 "$ref": "#/components/schemas/BookingKind"
               }
             ]
+          }
+        }
+      },
+      "SearchComment": {
+        "type": "object",
+        "description": "A distinct comment the search matched, with how often it occurs.\n\nHand-typed comments drift — `Kaufland`, `kaufland`, `Kaufland Berlin` — and a\nsearch for one of them should say which spellings it actually caught.",
+        "required": [
+          "comment",
+          "bookingCount",
+          "netCents"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "The spelling used most recently, which is the one worth showing."
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "query",
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "sumIncomeCents",
+          "sumExpenseCents",
+          "sumNetCents",
+          "byYear",
+          "comments"
+        ],
+        "properties": {
+          "byYear": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchYearSummary"
+            },
+            "description": "Newest year first, and only years that actually matched."
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchComment"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Booking"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "query": {
+            "type": "string",
+            "description": "Echoed back, trimmed, so the UI never has to guess what was asked."
+          },
+          "sumExpenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sumIncomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sumNetCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SearchYearSummary": {
+        "type": "object",
+        "description": "One year's worth of whatever a search matched.\n\nThe point of a cross-year search is not the list — it is this: what a merchant\nhas cost per year since 2023, on one screen, without four page loads.",
+        "required": [
+          "year",
+          "bookingCount",
+          "incomeCents",
+          "expenseCents",
+          "netCents"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expenseCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "incomeCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stored convention: expenses minus income, so a year that earned is negative."
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
