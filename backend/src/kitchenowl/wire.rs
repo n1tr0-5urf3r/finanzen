@@ -496,6 +496,40 @@ pub fn push_body(payload: &PushPayload) -> serde_json::Value {
     })
 }
 
+/// Rebuilds an existing expense's body with a different category, and nothing else
+/// different.
+///
+/// `POST /api/expense/{id}` REPLACES the expense; it is not a patch. Whatever this
+/// body leaves out is what the household loses, and this is a shared ledger with
+/// another person in it — so every field is echoed from the object KitchenOwl just
+/// handed back rather than reconstructed from the mirror. The amount goes back as
+/// the float KitchenOwl itself stores, never through cents and back, because a
+/// value like `31.889999999999997` must survive the round trip unchanged. The
+/// timestamp goes back as the exact instant, not as a date re-anchored to noon. And
+/// the name goes back byte for byte: `"Kaufland "`, with its trailing space, is a
+/// real name in this household, and trimming it here would rewrite the other
+/// member's data as a side effect of filing it.
+///
+/// The request spelling is the one documented on [`push_body`] — `category` a bare
+/// int, `paid_by` an object, `paid_for` entries keyed `id` — while everything read
+/// here arrived in the response spelling. Translating between them is the whole job
+/// of this function.
+pub fn recategorize_body(raw: &RawExpense, ko_category_id: Option<i64>) -> serde_json::Value {
+    serde_json::json!({
+        "name": raw.name,
+        "amount": raw.amount,
+        "date": raw.date,
+        "description": raw.description.clone().unwrap_or_default(),
+        "category": ko_category_id,
+        "paid_by": raw.paid_by_id.map(|id| serde_json::json!({ "id": id })),
+        "paid_for": raw.paid_for.iter().map(|p| serde_json::json!({
+            "id": p.user_id,
+            "factor": p.factor,
+        })).collect::<Vec<_>>(),
+        "exclude_from_statistics": raw.exclude_from_statistics,
+    })
+}
+
 /// The marker goes in the description by default. `KITCHENOWL_PUSH_MARKER_IN_NAME`
 /// moves it into the name for instances that drop descriptions — at the cost of the
 /// other household member seeing it, which is why it is not the default.

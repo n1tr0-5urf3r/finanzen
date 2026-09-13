@@ -185,3 +185,19 @@
   display: inline-flex; align-items: center; gap: .4rem;
   font-size: .85rem; color: var(--income); font-weight: 600;
 }
+
+/* ── the tagging queue ────────────────────────────────────────────────────────
+   The picker and its justification are one unit: the reason is what separates a
+   suggestion worth accepting blind from one worth a glance, and it has to sit
+   where the choice is made rather than behind a tooltip. */
+.ko-tagging__pick { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.ko-tagging__pick .select { min-width: 10rem; }
+.ko-tagging__why { display: inline-flex; align-items: center; gap: .25rem; }
+.ko-tagging__card-actions {
+  display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end;
+  margin-top: .6rem;
+}
+.ko-tagging__card-actions > * { min-width: 0; }
+/* Failures are listed per expense, never rolled into a count: the point of the
+   list is that the ones that did not land are still findable. */
+.ko-tagging__failures { margin: .35rem 0 0; padding-left: 1.1rem; font-size: .82rem; }

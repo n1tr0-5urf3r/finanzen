@@ -203,6 +203,11 @@ pub fn router(state: AppState) -> Router {
             "/kitchenowl/settlement",
             get(kitchenowl::settle::settlement).post(kitchenowl::settle::settle),
         )
+        .route("/kitchenowl/untagged", get(kitchenowl::tagging::untagged))
+        .route(
+            "/kitchenowl/untagged/apply",
+            post(kitchenowl::tagging::apply),
+        )
         .route("/kitchenowl/expenses", get(kitchenowl::routes::expenses))
         .route(
             "/kitchenowl/expenses/{id}/link",

@@ -137,6 +137,43 @@ impl KoClient {
         wire::parse_expenses(&self.get(&path).await?)
     }
 
+    /// One expense by its KitchenOwl id.
+    ///
+    /// `/api/expense/{id}` — NOT `/api/household/{hid}/expense/{id}`, which answers
+    /// 404: that path serves the collection only. Verified against the live
+    /// instance, where `OPTIONS /api/expense/{id}` reports
+    /// `Allow: POST, OPTIONS, GET, HEAD, DELETE`.
+    pub async fn expense(&self, expense_id: i64) -> Result<wire::RawExpense> {
+        wire::parse_expense(&self.get(&format!("/api/expense/{expense_id}")).await?)
+    }
+
+    /// Files an existing expense under a category, and answers with the expense as
+    /// KitchenOwl holds it afterwards.
+    ///
+    /// Read, rebuild, write, read again. The first read is what makes the write
+    /// safe: `POST` replaces the expense, so the body has to carry every field, and
+    /// the only trustworthy source for those fields is KitchenOwl itself a moment
+    /// earlier — not the mirror, which is a rounded, re-dated projection of it.
+    ///
+    /// The second read is what makes the result honest. `create_expense` already
+    /// learned that this API's write responses are thinner than its reads, so the
+    /// caller is handed a re-fetched object and the mirror is updated from that
+    /// rather than from an assumption about what the write did.
+    ///
+    /// This is the only call in the project that modifies existing household data,
+    /// and it may modify exactly one field.
+    pub async fn update_expense_category(
+        &self,
+        expense_id: i64,
+        ko_category_id: Option<i64>,
+    ) -> Result<wire::RawExpense> {
+        let before = self.expense(expense_id).await?;
+        let body = wire::recategorize_body(&before, ko_category_id);
+        self.post(&format!("/api/expense/{expense_id}"), &body)
+            .await?;
+        self.expense(expense_id).await
+    }
+
     pub async fn create_expense(&self, body: &Value) -> Result<wire::RawExpense> {
         let id = self.household_id().await?;
         let raw = self

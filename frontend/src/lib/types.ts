@@ -813,6 +813,51 @@ export interface KoSummary {
  * user owes the household. `direction` is decided on the server beside it, so the
  * sentence and the sign cannot drift apart.
  */
+/**
+ * One untagged name in the filing queue.
+ *
+ * Grouped by name because that is the shape of the decision: sixteen Kaufland
+ * receipts are one judgement about Kaufland, not sixteen.
+ */
+export interface KoUntaggedGroup {
+  name: string;
+  /** The folded key the group was built on; what `apply` matches against. */
+  matchKey: string;
+  expenseCount: number;
+  /** Household total and the user's share. Two figures, never added. */
+  amountCents: number;
+  ownShareCents: number;
+  firstDate: string;
+  lastDate: string;
+  suggestion: KoTagSuggestion | null;
+}
+
+/** A suggested category and, always, the evidence behind it. */
+export interface KoTagSuggestion {
+  koCategoryId: number;
+  koCategoryName: string;
+  /** `override` (a standing correction) · `precedent` (the mirror's own history) · `rule`. */
+  source: 'override' | 'precedent' | 'rule';
+  /** How many times this name already carries that category. `precedent` only. */
+  timesSeen: number;
+}
+
+export interface KoTagFailure {
+  externalId: number;
+  name: string;
+  error: string;
+}
+
+export interface KoTagResult {
+  koCategoryId: number;
+  koCategoryName: string;
+  requested: number;
+  tagged: number;
+  skipped: number;
+  failed: number;
+  failures: KoTagFailure[];
+}
+
 export interface KoSettlement {
   balanceCents: number | null;
   direction: 'i_owe' | 'household_owes_me' | 'settled' | 'unknown';

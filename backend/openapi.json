@@ -2761,6 +2761,79 @@
         }
       }
     },
+    "/api/v1/kitchenowl/untagged": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "The queue: one row per name, most frequent first.",
+        "operationId": "untagged",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr; ohne Angabe alle",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ausgaben ohne Kategorie, nach Name gruppiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KoUntaggedGroup"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kitchenowl/untagged/apply": {
+      "post": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Files every expense of one name — or an explicit set — under one category.",
+        "operationId": "apply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KoTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Je Ausgabe: gesetzt, übersprungen oder mit Grund gescheitert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoTagResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Weder Name noch Auswahl, oder unbekannte Kategorie"
+          },
+          "502": {
+            "description": "KitchenOwl nicht erreichbar"
+          }
+        }
+      }
+    },
     "/api/v1/overview/months": {
       "get": {
         "tags": [
@@ -6416,7 +6489,7 @@
       },
       "KoSettlement": {
         "type": "object",
-        "description": "Settling up with the household — the one place the two ledgers touch.\n\nA settlement is money moving between the user and the household, not money\nconsumed: the household's purchases are already in the personal ledger at full\nvalue, so booking the settlement as an expense would count them twice. It is\ntherefore a `transfer`, whose `net_cents` is 0 by construction, and it belongs\nto no category.",
+        "description": "Settling up with the household — the one place the two ledgers touch.\n\nA settlement is money paid to, or received from, ANOTHER PERSON: it leaves the\naccount for good, so it is an `expense` or an `income` and it moves the balance.\nIt is not a `transfer` — that models money moving between the user's own\naccounts, where `net_cents` is 0 by construction. See the module documentation on\n`kitchenowl::settle` for why the original transfer modelling had the\ndouble-counting argument backwards.",
         "required": [
           "direction",
           "categoryIsFallback",
@@ -6843,6 +6916,131 @@
           }
         }
       },
+      "KoTagFailure": {
+        "type": "object",
+        "required": [
+          "externalId",
+          "name",
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "KoTagRequest": {
+        "type": "object",
+        "description": "Assigns one KitchenOwl category. Exactly one of `name` or `expenseIds`.",
+        "required": [
+          "koCategoryId"
+        ],
+        "properties": {
+          "expenseIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Or an explicit set, when the user picked rows rather than a whole name."
+          },
+          "koCategoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Every untagged expense whose folded name matches, across all years."
+          }
+        }
+      },
+      "KoTagResult": {
+        "type": "object",
+        "description": "What actually happened, per expense where it did not.",
+        "required": [
+          "koCategoryId",
+          "koCategoryName",
+          "requested",
+          "tagged",
+          "skipped",
+          "failed",
+          "failures"
+        ],
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoTagFailure"
+            },
+            "description": "One entry per expense KitchenOwl refused. The mirror still says untagged for\neach of these — a mirror claiming a category KitchenOwl never accepted is\nworse than an untagged one."
+          },
+          "koCategoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": "string"
+          },
+          "requested": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Already carried this category: skipped without a request, so applying twice\ncosts one round trip's worth of nothing."
+          },
+          "tagged": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "KoTagSuggestion": {
+        "type": "object",
+        "description": "A suggested category and, always, where it came from.\n\nThe reason travels with the suggestion because the three sources do not deserve\nequal trust, and a preselected dropdown with no explanation is how a wrong guess\nbecomes 39 wrong expenses.",
+        "required": [
+          "koCategoryId",
+          "koCategoryName",
+          "source",
+          "timesSeen"
+        ],
+        "properties": {
+          "koCategoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "koCategoryName": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "`override` — a standing correction the user gave by hand.\n`precedent` — this same name already carries that category in the mirror,\n`timesSeen` times. The user's own past decision, and the strongest signal.\n`rule` — the personal rule table maps the name to a finance category that is\nitself mapped to a KitchenOwl category."
+          },
+          "timesSeen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Only meaningful for `precedent`."
+          }
+        }
+      },
       "KoTrailingCategory": {
         "type": "object",
         "description": "One category over a trailing window, its twelve values in window order.",
@@ -7004,6 +7202,60 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "KoUntaggedGroup": {
+        "type": "object",
+        "description": "One untagged name, with everything needed to decide it in one look.\n\nThe queue is grouped by NAME rather than listed per expense because the decision\nis per name: sixteen Kaufland receipts are one judgement, not sixteen. 173\nexpenses collapse to about 100 names, and the frequent names carry most of the\nmoney.",
+        "required": [
+          "name",
+          "matchKey",
+          "expenseCount",
+          "amountCents",
+          "ownShareCents",
+          "firstDate",
+          "lastDate"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Both figures, as everywhere in this module, and never added together."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "firstDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "lastDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "matchKey": {
+            "type": "string",
+            "description": "The folded key the group was built on, and what `apply` matches against."
+          },
+          "name": {
+            "type": "string",
+            "description": "The most recent spelling. Grouping folds case and trims, because two people\ntype these by hand."
+          },
+          "ownShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "suggestion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoTagSuggestion"
+              }
+            ]
           }
         }
       },

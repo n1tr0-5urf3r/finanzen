@@ -30,9 +30,10 @@ import type {
 
 import { KoAmounts, KoCategoryChip, KoLinkState, KoSplit } from './parts';
 import { KoAnalysis } from './KoAnalysis';
+import { KoTagging } from './KoTagging';
 import { SettlementCard } from './SettlementCard';
 
-type Tab = 'ledger' | 'analysis' | 'review' | 'push';
+type Tab = 'ledger' | 'analysis' | 'tag' | 'review' | 'push';
 
 /**
  * The KitchenOwl screen: the mirror as a browsable ledger, the link suggestions,
@@ -154,6 +155,7 @@ export function KitchenOwlPage() {
               [
                 ['ledger', 'ko.tabLedger'],
                 ['analysis', 'ko.tabAnalysis'],
+                ['tag', 'ko.tabTag'],
                 ['review', 'ko.tabReview'],
                 ['push', 'ko.tabPush'],
               ] as [Tab, MessageKey][]
@@ -189,6 +191,7 @@ export function KitchenOwlPage() {
             />
           )}
           {tab === 'analysis' && <KoAnalysis />}
+          {tab === 'tag' && <KoTagging />}
           {tab === 'review' && <Review onNotice={setNotice} />}
           {tab === 'push' && <PushQueue onNotice={setNotice} />}
         </>

@@ -321,7 +321,7 @@ pub async fn sync_expenses(
     Ok((counts, complete))
 }
 
-enum Upsert {
+pub(crate) enum Upsert {
     Created(Uuid),
     Updated(Uuid),
     Unchanged,
@@ -333,7 +333,7 @@ enum Upsert {
 /// conflict path is what makes that structural instead of a comparison somebody has
 /// to remember: an unchanged row updates zero rows, so the RETURNING is empty and
 /// the caller learns "unchanged" without a second query.
-async fn upsert_expense(
+pub(crate) async fn upsert_expense(
     conn: &mut PgConnection,
     user_id: Uuid,
     e: &MirrorExpense,

@@ -1229,13 +1229,94 @@ pub struct KoStatus {
     pub last_error: Option<String>,
 }
 
+/// One untagged name, with everything needed to decide it in one look.
+///
+/// The queue is grouped by NAME rather than listed per expense because the decision
+/// is per name: sixteen Kaufland receipts are one judgement, not sixteen. 173
+/// expenses collapse to about 100 names, and the frequent names carry most of the
+/// money.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoUntaggedGroup {
+    /// The most recent spelling. Grouping folds case and trims, because two people
+    /// type these by hand.
+    pub name: String,
+    /// The folded key the group was built on, and what `apply` matches against.
+    pub match_key: String,
+    pub expense_count: i64,
+    /// Both figures, as everywhere in this module, and never added together.
+    pub amount_cents: i64,
+    pub own_share_cents: i64,
+    pub first_date: chrono::NaiveDate,
+    pub last_date: chrono::NaiveDate,
+    pub suggestion: Option<KoTagSuggestion>,
+}
+
+/// A suggested category and, always, where it came from.
+///
+/// The reason travels with the suggestion because the three sources do not deserve
+/// equal trust, and a preselected dropdown with no explanation is how a wrong guess
+/// becomes 39 wrong expenses.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTagSuggestion {
+    pub ko_category_id: i64,
+    pub ko_category_name: String,
+    /// `override` — a standing correction the user gave by hand.
+    /// `precedent` — this same name already carries that category in the mirror,
+    /// `timesSeen` times. The user's own past decision, and the strongest signal.
+    /// `rule` — the personal rule table maps the name to a finance category that is
+    /// itself mapped to a KitchenOwl category.
+    pub source: String,
+    /// Only meaningful for `precedent`.
+    pub times_seen: i64,
+}
+
+/// Assigns one KitchenOwl category. Exactly one of `name` or `expenseIds`.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTagRequest {
+    pub ko_category_id: i64,
+    /// Every untagged expense whose folded name matches, across all years.
+    pub name: Option<String>,
+    /// Or an explicit set, when the user picked rows rather than a whole name.
+    pub expense_ids: Option<Vec<Uuid>>,
+}
+
+/// What actually happened, per expense where it did not.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTagResult {
+    pub ko_category_id: i64,
+    pub ko_category_name: String,
+    pub requested: i64,
+    pub tagged: i64,
+    /// Already carried this category: skipped without a request, so applying twice
+    /// costs one round trip's worth of nothing.
+    pub skipped: i64,
+    pub failed: i64,
+    /// One entry per expense KitchenOwl refused. The mirror still says untagged for
+    /// each of these — a mirror claiming a category KitchenOwl never accepted is
+    /// worse than an untagged one.
+    pub failures: Vec<KoTagFailure>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoTagFailure {
+    pub external_id: i64,
+    pub name: String,
+    pub error: String,
+}
+
 /// Settling up with the household — the one place the two ledgers touch.
 ///
-/// A settlement is money moving between the user and the household, not money
-/// consumed: the household's purchases are already in the personal ledger at full
-/// value, so booking the settlement as an expense would count them twice. It is
-/// therefore a `transfer`, whose `net_cents` is 0 by construction, and it belongs
-/// to no category.
+/// A settlement is money paid to, or received from, ANOTHER PERSON: it leaves the
+/// account for good, so it is an `expense` or an `income` and it moves the balance.
+/// It is not a `transfer` — that models money moving between the user's own
+/// accounts, where `net_cents` is 0 by construction. See the module documentation on
+/// `kitchenowl::settle` for why the original transfer modelling had the
+/// double-counting argument backwards.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KoSettlement {

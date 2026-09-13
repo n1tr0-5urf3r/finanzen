@@ -57,6 +57,12 @@ struct MockState {
     /// rather than only what the mock chose to echo back.
     last_post_body: Option<Value>,
     page_requests: Vec<Option<i64>>,
+    /// How many single-expense replaces arrived, and the last body verbatim — the
+    /// tagging queue's whole contract is "one field changes and nothing else does".
+    update_count: usize,
+    last_update_body: Option<Value>,
+    /// Every replace is refused with the live instance's own `400 Request invalid`.
+    refuse_updates: bool,
     /// Flips the sign of every member's `expense_balance`, so a test can put the
     /// household in debt to the user instead of the other way round. The settlement
     /// books a different KIND in that direction, which is the whole point.
@@ -155,11 +161,28 @@ async fn mock_categories(State(mock): State<Mock>) -> axum::response::Response {
     if mock.0.lock().expect("mock lock").offline {
         return offline();
     }
-    Json(json!([
-        {"id": 1, "name": "Wocheneinkauf", "color": null, "budget": null},
-        {"id": 2, "name": "Essen gehen", "color": 4289003611i64, "budget": null},
-    ]))
-    .into_response()
+    Json(json!(MOCK_CATEGORIES)).into_response()
+}
+
+/// The household's category list. Four of the live instance's seven, which is
+/// enough for the tagging queue to resolve a precedent, an override and a refusal.
+const MOCK_CATEGORIES: [(i64, &str); 4] = [
+    (1, "Wocheneinkauf"),
+    (2, "Essen gehen"),
+    (3, "Haushalt"),
+    (7, "Hobbies"),
+];
+
+/// A `GET` returns the category as a NESTED OBJECT beside `category_id`; a write
+/// body carries it as a bare int. The mock resolves it the same way the instance
+/// does, so a re-fetch after a write looks like a real re-fetch.
+fn nested_category(id: Option<i64>) -> Value {
+    match id.and_then(|id| MOCK_CATEGORIES.iter().find(|(cid, _)| *cid == id)) {
+        Some((id, name)) => json!({
+            "id": id, "name": name, "color": null, "budget": null, "household_id": 1,
+        }),
+        None => Value::Null,
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -259,6 +282,81 @@ async fn mock_create(
     Json(created).into_response()
 }
 
+/// `GET /api/expense/{id}` — the single-expense read. Note the path: there is no
+/// `/api/household/{hid}/expense/{id}` on the real instance, and asking for one
+/// answers 404.
+async fn mock_expense(
+    State(mock): State<Mock>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+) -> axum::response::Response {
+    let state = mock.0.lock().expect("mock lock");
+    if state.offline {
+        return offline();
+    }
+    match state.expenses.iter().find(|e| e["id"].as_i64() == Some(id)) {
+        Some(e) => Json(e.clone()).into_response(),
+        None => (StatusCode::NOT_FOUND, "Requested resource not found").into_response(),
+    }
+}
+
+/// `POST /api/expense/{id}` — the single-expense REPLACE.
+///
+/// It replaces rather than patches, exactly as the real one does, so a body that
+/// forgets a field loses it here too and the test notices. The request spelling is
+/// translated to the response spelling on the way in, for the same reason
+/// `mock_create` does it: a mock that echoed the request would let a wrong shape
+/// pass every test and still fail against KitchenOwl.
+async fn mock_update(
+    State(mock): State<Mock>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    let mut state = mock.0.lock().expect("mock lock");
+    if state.offline {
+        return offline();
+    }
+    if state.refuse_updates {
+        // What the live instance answers for a body it dislikes: 400, plain text,
+        // not JSON.
+        return (StatusCode::BAD_REQUEST, "Request invalid").into_response();
+    }
+    let Some(index) = state
+        .expenses
+        .iter()
+        .position(|e| e["id"].as_i64() == Some(id))
+    else {
+        return (StatusCode::NOT_FOUND, "Requested resource not found").into_response();
+    };
+    state.update_count += 1;
+    state.last_update_body = Some(body.clone());
+
+    let mut replaced = json!({
+        "id": id,
+        "name": body["name"],
+        "description": body["description"],
+        "amount": body["amount"],
+        "date": body["date"],
+        "category_id": body["category"],
+        "paid_by_id": body["paid_by"]["id"],
+        "paid_for": body["paid_for"].as_array().map(|shares| {
+            shares.iter().map(|s| json!({
+                "user_id": s["id"], "factor": s["factor"], "expense_id": id,
+            })).collect::<Vec<_>>()
+        }).unwrap_or_default(),
+        "exclude_from_statistics": body["exclude_from_statistics"],
+        "household_id": 1,
+    });
+    // A real read carries the nested object too, and the mirror takes the category
+    // NAME from it. A mock that returned only the id would leave the mirror holding
+    // a nameless category and make the caller look broken.
+    let nested = nested_category(body["category"].as_i64());
+    if !nested.is_null() {
+        replaced["category"] = nested;
+    }
+    state.expenses[index] = replaced.clone();
+    Json(replaced).into_response()
+}
+
 impl MockServer {
     async fn start() -> Self {
         let state = Mock(Arc::new(Mutex::new(MockState {
@@ -276,6 +374,7 @@ impl MockServer {
                 "/api/household/{id}/expense/categories",
                 get(mock_categories),
             )
+            .route("/api/expense/{id}", get(mock_expense).post(mock_update))
             .with_state(state.clone());
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -293,6 +392,22 @@ impl MockServer {
 
     fn seed(&self, expenses: Vec<Value>) {
         self.inner().expenses = expenses;
+    }
+
+    /// How many single-expense replaces reached the instance.
+    fn update_count(&self) -> usize {
+        self.inner().update_count
+    }
+
+    /// The last replace body verbatim, so a test can assert the REQUEST spelling
+    /// and that nothing but the category moved.
+    fn last_update_body(&self) -> Option<Value> {
+        self.inner().last_update_body.clone()
+    }
+
+    /// KitchenOwl refuses every category change from here on.
+    fn refuse_updates(&self) {
+        self.inner().refuse_updates = true;
     }
 
     /// The household owes the user, rather than the other way round.
@@ -1066,7 +1181,10 @@ async fn metadata_is_served_stale_rather_than_withheld() {
     assert_eq!(fresh["stale"], false);
     assert_eq!(fresh["warning"], Value::Null);
     assert_eq!(fresh["members"].as_array().unwrap().len(), 2);
-    assert_eq!(fresh["categories"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        fresh["categories"].as_array().unwrap().len(),
+        MOCK_CATEGORIES.len()
+    );
     let me: Vec<&Value> = fresh["members"]
         .as_array()
         .unwrap()
@@ -1962,4 +2080,326 @@ async fn the_household_trailing_window_crosses_the_year_boundary() {
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// ------------------------------------------------ filing the untagged expenses
+
+/// Five Kaufland receipts, two of them already filed, plus a Hornbach pair and a
+/// name nothing knows anything about.
+fn tagging_corpus() -> Vec<Value> {
+    vec![
+        // Already filed: this is the precedent the queue reasons from.
+        expense(
+            1,
+            "Kaufland",
+            20.00,
+            on(2026, 1, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            2,
+            "kaufland ",
+            30.00,
+            on(2026, 2, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        // Untagged, and deliberately spelled three ways.
+        expense(
+            3,
+            "Kaufland",
+            10.00,
+            on(2026, 3, 10),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            4,
+            "kaufland",
+            12.00,
+            on(2026, 4, 10),
+            None,
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            5,
+            "Kaufland ",
+            8.00,
+            on(2026, 5, 10),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        // The user's standing correction says Haushalt; the history says Hobbies.
+        expense(
+            6,
+            "Hornbach",
+            25.00,
+            on(2026, 6, 10),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            7,
+            "Hornbach",
+            15.00,
+            on(2026, 6, 20),
+            Some((7, "Hobbies")),
+            1,
+            &[(1, 1)],
+        ),
+        // Nothing knows this one.
+        expense(
+            8,
+            "Padefke",
+            9.00,
+            on(2026, 7, 10),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+    ]
+}
+
+/// The queue is a list of DECISIONS, not of rows.
+///
+/// Sixteen Kaufland receipts are one judgement about Kaufland, so the grouping is
+/// by folded name and the count is what sorts it. Every suggestion carries its own
+/// evidence, because a preselected dropdown with no explanation is how one wrong
+/// guess becomes thirty-nine wrong expenses.
+#[tokio::test]
+async fn the_untagged_queue_groups_by_name_and_says_where_each_suggestion_came_from() {
+    let mock = MockServer::start().await;
+    mock.seed(tagging_corpus());
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, groups) = app.send("GET", "/kitchenowl/untagged", None).await;
+    assert_eq!(status, StatusCode::OK, "{groups}");
+    let groups = groups.as_array().expect("groups").clone();
+    // Three untagged names, not six untagged expenses.
+    assert_eq!(groups.len(), 3);
+
+    // Most frequent first.
+    let kaufland = &groups[0];
+    assert_eq!(kaufland["matchKey"], "kaufland");
+    assert_eq!(kaufland["expenseCount"], 3);
+    // Reported under the most recent spelling. The mirror trims on ingest, so the
+    // queue shows the tidy form; the body sent back to KitchenOwl is built from
+    // KitchenOwl's own copy and keeps the original spacing. Two different jobs.
+    assert_eq!(kaufland["name"], "Kaufland");
+    // Both figures, never added: 30,00 household, half of it the user's.
+    assert_eq!(kaufland["amountCents"], 3000);
+    assert_eq!(kaufland["ownShareCents"], 1500);
+    assert_eq!(kaufland["firstDate"], "2026-03-10");
+    assert_eq!(kaufland["lastDate"], "2026-05-10");
+    // The household filed this name twice already. That is the user's own past
+    // decision, and it outranks everything except an explicit correction.
+    assert_eq!(kaufland["suggestion"]["source"], "precedent");
+    assert_eq!(kaufland["suggestion"]["koCategoryName"], "Wocheneinkauf");
+    assert_eq!(kaufland["suggestion"]["timesSeen"], 2);
+
+    let hornbach = groups
+        .iter()
+        .find(|g| g["matchKey"] == "hornbach")
+        .expect("Hornbach");
+    // History says Hobbies. The user says Haushalt. The user wins, and the label
+    // says which of the two this is.
+    assert_eq!(hornbach["suggestion"]["source"], "override");
+    assert_eq!(hornbach["suggestion"]["koCategoryName"], "Haushalt");
+
+    let padefke = groups
+        .iter()
+        .find(|g| g["matchKey"] == "padefke")
+        .expect("Padefke");
+    // No evidence, so no suggestion. Never a guess.
+    assert!(padefke["suggestion"].is_null());
+}
+
+/// The write itself: one field changes, everything else goes back untouched.
+///
+/// `POST /api/expense/{id}` REPLACES the expense on a ledger shared with another
+/// person, so this asserts the body field by field against what was there before.
+#[tokio::test]
+async fn tagging_sends_the_whole_expense_back_with_only_the_category_different() {
+    let mock = MockServer::start().await;
+    mock.seed(tagging_corpus());
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (status, result) = app
+        .send(
+            "POST",
+            "/kitchenowl/untagged/apply",
+            Some(json!({"name": "Kaufland", "koCategoryId": 1})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["requested"], 3);
+    assert_eq!(result["tagged"], 3);
+    assert_eq!(result["failed"], 0);
+    assert_eq!(result["koCategoryName"], "Wocheneinkauf");
+
+    // The REQUEST spelling, which is not the response spelling. Getting this wrong
+    // is a 400 from the real instance, and a mock that echoed its own output would
+    // have let it pass.
+    let body = mock.last_update_body().expect("an update body");
+    assert_eq!(body["category"], 1, "category is a bare int, not an object");
+    assert!(
+        body["paid_by"]["id"].is_i64(),
+        "paid_by is an object keyed id"
+    );
+    assert_eq!(
+        body["paid_for"][0]["id"], 1,
+        "paid_for entries are keyed id"
+    );
+    assert!(
+        body["paid_for"][0]["user_id"].is_null(),
+        "user_id is the RESPONSE spelling and must not appear in a request"
+    );
+
+    // Everything that was not the category came back verbatim. The amount in
+    // particular did not travel through cents and back, and the name kept its
+    // trailing space — it belongs to the other member as much as to this one.
+    assert_eq!(body["name"], "Kaufland ");
+    assert_eq!(body["amount"], 8.0);
+    assert_eq!(body["date"], on(2026, 5, 10));
+    assert_eq!(body["exclude_from_statistics"], false);
+
+    // And the mirror now agrees with KitchenOwl rather than with the request.
+    let (_, groups) = app.send("GET", "/kitchenowl/untagged", None).await;
+    let keys: Vec<String> = groups
+        .as_array()
+        .expect("groups")
+        .iter()
+        .map(|g| g["matchKey"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert!(
+        !keys.iter().any(|k| k == "kaufland"),
+        "still untagged: {keys:?}"
+    );
+
+    let (_, page) = app
+        .send("GET", "/kitchenowl/expenses?search=Kaufland", None)
+        .await;
+    for item in page["items"].as_array().expect("items") {
+        assert_eq!(item["koCategoryName"], "Wocheneinkauf");
+    }
+}
+
+/// Applying the same category twice costs one round trip's worth of nothing.
+#[tokio::test]
+async fn tagging_the_same_name_twice_writes_once() {
+    let mock = MockServer::start().await;
+    mock.seed(tagging_corpus());
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let body = json!({"name": "Kaufland", "koCategoryId": 1});
+    let (_, first) = app
+        .send("POST", "/kitchenowl/untagged/apply", Some(body.clone()))
+        .await;
+    assert_eq!(first["tagged"], 3);
+    let after_first = mock.update_count();
+
+    let (_, second) = app
+        .send("POST", "/kitchenowl/untagged/apply", Some(body))
+        .await;
+    // Nothing is left untagged under that name, so there is nothing to request.
+    assert_eq!(second["requested"], 0);
+    assert_eq!(second["tagged"], 0);
+    assert_eq!(
+        mock.update_count(),
+        after_first,
+        "a second apply must not re-post anything"
+    );
+}
+
+/// A refusal leaves the mirror telling the truth.
+///
+/// The alternative — marking the row tagged because the request was sent — would
+/// be a lie that survives every later sync, and it would hide the expense from the
+/// very queue that exists to fix it.
+#[tokio::test]
+async fn a_refused_change_leaves_the_expense_untagged_and_says_why() {
+    let mock = MockServer::start().await;
+    mock.seed(tagging_corpus());
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    mock.refuse_updates();
+
+    let (status, result) = app
+        .send(
+            "POST",
+            "/kitchenowl/untagged/apply",
+            Some(json!({"name": "Kaufland", "koCategoryId": 1})),
+        )
+        .await;
+    // The batch reports; the failures are per expense.
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["requested"], 3);
+    assert_eq!(result["tagged"], 0);
+    assert_eq!(result["failed"], 3);
+    let failures = result["failures"].as_array().expect("failures");
+    assert_eq!(failures.len(), 3);
+    // Carrying what the instance actually said, not a generic message.
+    assert!(
+        failures[0]["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Request invalid"),
+        "{:?}",
+        failures[0]["error"]
+    );
+
+    // Still in the queue, still untagged.
+    let (_, groups) = app.send("GET", "/kitchenowl/untagged", None).await;
+    let kaufland = groups
+        .as_array()
+        .expect("groups")
+        .iter()
+        .find(|g| g["matchKey"] == "kaufland")
+        .expect("still untagged")
+        .clone();
+    assert_eq!(kaufland["expenseCount"], 3);
+}
+
+/// An unknown category is refused before anything is sent.
+///
+/// KitchenOwl would accept an id it does not have and file the expense under
+/// nothing visible, which looks like success and reads as a disappearance.
+#[tokio::test]
+async fn an_unknown_category_is_refused_before_the_first_request() {
+    let mock = MockServer::start().await;
+    mock.seed(tagging_corpus());
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (status, _) = app
+        .send(
+            "POST",
+            "/kitchenowl/untagged/apply",
+            Some(json!({"name": "Kaufland", "koCategoryId": 987})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(mock.update_count(), 0);
+
+    // Nor can it be talked into "tag everything" by omitting the target.
+    let (status, _) = app
+        .send(
+            "POST",
+            "/kitchenowl/untagged/apply",
+            Some(json!({"koCategoryId": 1})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(mock.update_count(), 0);
 }
