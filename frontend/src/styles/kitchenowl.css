@@ -164,3 +164,24 @@
 
 .chart__bar--household { fill: var(--accent); opacity: .32; }
 .chart__bar--share { fill: var(--accent); }
+
+/* ── settling up ──────────────────────────────────────────────────────────────
+   The only control in this feature that writes to the personal ledger, so it is
+   given its own card above the tabs rather than a button inside a list — and the
+   reasoning stays on the card, because "it booked something and my balance did not
+   move" is otherwise read as a bug rather than as the point. */
+.ko-settle { margin-bottom: 1rem; }
+.ko-settle__head h2 { margin: 0 0 .15rem; font-size: 1rem; }
+.ko-settle__body {
+  display: flex; flex-wrap: wrap; gap: 1rem 2rem;
+  align-items: flex-end; justify-content: space-between;
+  margin: .75rem 0;
+}
+.ko-settle__figure { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.ko-settle__action { display: flex; flex-direction: column; gap: .4rem; align-items: flex-start; }
+.ko-settle__suggestion { margin: 0; font-size: .85rem; color: var(--ink-2); }
+.ko-settle__done { display: flex; flex-direction: column; gap: .2rem; }
+.ko-settle__status {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .85rem; color: var(--income); font-weight: 600;
+}

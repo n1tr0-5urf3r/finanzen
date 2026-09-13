@@ -30,6 +30,7 @@ import type {
 
 import { KoAmounts, KoCategoryChip, KoLinkState, KoSplit } from './parts';
 import { KoAnalysis } from './KoAnalysis';
+import { SettlementCard } from './SettlementCard';
 
 type Tab = 'ledger' | 'analysis' | 'review' | 'push';
 
@@ -139,6 +140,10 @@ export function KitchenOwlPage() {
       {sync.isError && <ErrorState error={sync.error} />}
 
       <SyncStrip status={s} />
+
+      {/* Above the tabs, because settling up is an action about the household as a
+          whole rather than about any one of the three lists below it. */}
+      {s.enabled && <SettlementCard onNotice={setNotice} />}
 
       {!s.enabled ? (
         <EmptyState title={t('ko.notEnabled')} hint={t('ko.notEnabledHint')} />

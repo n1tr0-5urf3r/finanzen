@@ -357,6 +357,18 @@ export const de = {
   'ko.balanceSettled': 'Ausgeglichen',
   'ko.balanceHint':
     'Kommt direkt aus KitchenOwl. Ausgleichszahlungen erscheinen dort nur als Änderung dieses Saldos.',
+  'ko.settleTitle': 'Ausgleich',
+  'ko.settleWhy':
+    'Die einzige Stelle, an der sich beide Bücher berühren — und nur, wenn du es auslöst.',
+  'ko.settleSuggestion': 'Gebucht wird:',
+  'ko.settleAsTransfer': 'als Umbuchung',
+  'ko.settleAction': 'Ausgleich buchen',
+  'ko.settleDone': '„{comment}“ als Umbuchung gebucht.',
+  'ko.settleAlready': 'Für diesen Monat gebucht: „{comment}“ · {when}',
+  'ko.settleBasedOn': 'Saldo damals:',
+  'ko.settleNoBalance': 'Noch kein Saldo im Spiegel',
+  'ko.settleNoBalanceChange':
+    'Eine Umbuchung ist Geld, das sich bewegt — kein Verbrauch. Sie gehört zu keiner Kategorie und verändert die Jahresbilanz nicht: Die Haushaltseinkäufe stehen bereits in voller Höhe in deinen Buchungen, den Ausgleich als Ausgabe zu zählen würde sie doppelt zählen.',
   'ko.members': 'Mitglieder',
   'ko.tabLedger': 'Ausgaben',
   'ko.tabReview': 'Vorschläge',

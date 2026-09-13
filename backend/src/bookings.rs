@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-const SELECT_BOOKING: &str = "\
+pub(crate) const SELECT_BOOKING: &str = "\
     SELECT b.id, b.period_year, b.period_month, b.booked_on, b.kind, b.amount_cents, \
            b.net_cents, b.comment, b.tax_relevant, b.category_id, c.name AS category_name, \
            t.label AS category_type, b.category_source, b.shared, b.external_source, \
@@ -28,7 +28,7 @@ const SELECT_BOOKING: &str = "\
       LEFT JOIN categories c ON c.id = b.category_id \
       LEFT JOIN category_types t ON t.id = c.type_id";
 
-fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
+pub(crate) fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
     let month: i16 = r.get("period_month");
     Booking {
         id: r.get("id"),
@@ -514,7 +514,13 @@ pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
             .fetch_optional(ctx.tenant.conn())
             .await?
             .flatten();
-    if linked.is_some() {
+    // Only an EXPENSE link blocks deletion, and it blocks it because the mirror
+    // holds a `linked_booking_id` that would be left pointing at nothing. A
+    // settlement carries an external source too, but it references a balance rather
+    // than a row — there is nothing to dangle and nothing the unlink endpoint could
+    // detach, so guarding on "any external source" would make it undeletable with
+    // an error message naming a step that does not exist.
+    if linked.as_deref() == Some(crate::kitchenowl::link::SOURCE) {
         return Err(AppError::Conflict(
             "Die Buchung ist mit KitchenOwl verknüpft. Bitte zuerst die Verknüpfung lösen.".into(),
         ));

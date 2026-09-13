@@ -56,6 +56,7 @@ export const qk = {
       ['kitchenowl', 'expenses', filters] as const,
     drafts: (status: string) => ['kitchenowl', 'drafts', status] as const,
     push: () => ['kitchenowl', 'push'] as const,
+    settlement: () => ['kitchenowl', 'settlement'] as const,
     analysis: (year: number) => ['kitchenowl', 'analysis', year] as const,
     series: (year: number, mode: string, subject: string) =>
       ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,
@@ -115,6 +116,18 @@ export function invalidateAfterMaterialize(client: QueryClient, year: number) {
 export function invalidateAfterKitchenOwlChange(client: QueryClient) {
   client.invalidateQueries({ queryKey: qk.kitchenowl.root });
   client.invalidateQueries({ queryKey: qk.bookings.root });
+}
+
+/**
+ * A settlement was booked. Unlike a link, this one DOES create a booking, so the
+ * year's aggregates are genuinely stale — the transfer count and the "excluded from
+ * this analysis" line both move, even though no category and no balance does. This
+ * is the one KitchenOwl action that earns a derived invalidation, which is why it
+ * is separate from the helper above rather than folded into it.
+ */
+export function invalidateAfterSettlement(client: QueryClient, year: number) {
+  client.invalidateQueries({ queryKey: qk.kitchenowl.root });
+  invalidateAfterBookingChange(client, [year]);
 }
 
 /** Only the year overview and that year's aggregates; bookings are untouched. */

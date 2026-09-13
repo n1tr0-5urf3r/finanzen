@@ -23,6 +23,7 @@ pub mod matching;
 pub mod mirror;
 pub mod push;
 pub mod routes;
+pub mod settle;
 pub mod wire;
 
 use std::{
