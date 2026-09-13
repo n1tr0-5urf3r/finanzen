@@ -161,7 +161,7 @@ export const de = {
   'analysis.transfersExcluded': '{count} Umbuchungen sind in dieser Auswertung nicht enthalten.',
   'analysis.share': 'Anteil',
   'analysis.shareNote': 'Gutschriften haben keinen Anteil an den Kosten.',
-  'analysis.perMonth': 'Ø / Monat',
+  'analysis.perMonth': 'Ø pro Monat',
   'forecast.title': 'Ausblick aufs Jahresende',
   'forecast.basis': 'Aus {templates} fälligen Vorlagen und dem Median der letzten {months} Monate, ab {from}.',
   'forecast.closing': 'Bilanz gesamt, projiziert',
@@ -259,7 +259,7 @@ export const de = {
   'funds.intro': 'Die jährlichen Brocken, auf zwölf Monate verteilt. Hier wird nichts gebucht — eine Rücklage ist eine Erwartung und wird gegen die Buchungen ihrer Kategorie gehalten.',
   'funds.owedToFuture': 'Kommt dieses Jahr noch',
   'funds.owedHint': 'Was diese bekannten Posten bis Jahresende noch vom Konto nehmen. Genau die Zahl, die der Monatssaldo nicht verrät.',
-  'funds.monthlyTotal': 'Zurücklegen / Monat',
+  'funds.monthlyTotal': 'Zurücklegen pro Monat',
   'funds.accruedTotal': 'Soll bis {month}',
   'funds.spentTotal': 'Schon ausgegeben',
   'funds.asOf': 'Stand: {month} {year}',
@@ -268,7 +268,7 @@ export const de = {
   'funds.noCategory': 'ohne Kategorie',
   'funds.noCategoryHint': 'Ohne Kategorie gibt es nichts zu vergleichen — nur die Rate steht dann fest.',
   'funds.annual': 'Pro Jahr',
-  'funds.monthly': 'Pro Monat',
+  'funds.monthly': 'Ø pro Monat',
   'funds.accrued': 'Soll',
   'funds.spent': 'Ist',
   'funds.overUnder': 'Differenz',
@@ -580,7 +580,7 @@ export const de = {
   'months.cumulativeHint':
     'Läuft nur über Monate mit Buchungen. Wo nichts gebucht ist, steht hier nichts: eine Null wäre ein Absturz im Kontostand, den es nie gab.',
   'months.perTypeNote':
-    'Die vier Typspalten sind Nettowerte. Ein negativer Wert bedeutet, dass in diesem Typ unter dem Strich Geld hereinkam — etwa durch eine Erstattung.',
+    'Zwei Konventionen in einer Tabelle, mit Absicht. Der Saldo ist eine Richtung: + ist Geld, das geblieben ist. Die vier Typspalten sind Kosten: + ist, was der Typ gekostet hat; ein negativer Wert bedeutet, dass unter dem Strich Geld hereinkam — etwa durch eine Erstattung.',
   'months.bookings': 'Buchungen',
   'months.savingsRateHint': 'Saldo geteilt durch die Einnahmen des Monats.',
 
@@ -765,7 +765,6 @@ export const de = {
   'search.byYear': 'Je Jahr',
   'search.summary': '{count} Buchungen in {years} Jahren · Einnahmen {income} · Ausgaben {expense} · Saldo {net}',
   'search.spellings': 'Gefundene Schreibweisen',
-  'search.openInBookings': 'In Buchungen öffnen',
   'search.allBookings': 'Alle Treffer',
   'search.fromBookings': 'Über alle Jahre suchen',
   'compare.title': 'Jahresvergleich',

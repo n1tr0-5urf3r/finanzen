@@ -138,8 +138,7 @@ export function RecurringPage() {
       {materialize.isError && <ErrorState error={materialize.error} />}
 
       <div
-        className="panel panel--pad"
-        style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+        className="panel panel--pad filter-bar"
       >
         <div className="field" style={{ minWidth: '7rem' }}>
           <label htmlFor="r-year">{t('common.year')}</label>
@@ -205,7 +204,7 @@ export function RecurringPage() {
       )}
 
       {templates.data && templates.data.length > 0 && (
-        <div className="panel table-wrap">
+        <div className="panel table-wrap screen-table">
           <table className="data-table">
             <thead>
               <tr>
@@ -312,6 +311,93 @@ export function RecurringPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {templates.data && templates.data.length > 0 && (
+        <div className="screen-cards">
+          {templates.data.map((x) => {
+            const due = x.dueInPeriod === true;
+            const booked = x.bookedInPeriod === true;
+            const checked = due && !booked && !deselected.has(x.id);
+            return (
+              <article key={x.id} className={`mcard ${due ? '' : 'mcard--empty'}`}>
+                <header>
+                  <strong>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '.5rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!due || booked}
+                        aria-label={x.name}
+                        onChange={(e) =>
+                          setDeselected((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.delete(x.id);
+                            else next.add(x.id);
+                            return next;
+                          })
+                        }
+                      />
+                      <DataLabel>{x.name}</DataLabel>
+                    </label>
+                  </strong>
+                  <Money
+                    cents={x.amountCents}
+                    tone={x.kind === 'income' ? 'income' : 'expense'}
+                  />
+                </header>
+
+                <p style={{ margin: '0 0 .4rem', display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
+                  <CategoryChip
+                    name={x.categoryName}
+                    typeLabel={x.categoryType}
+                    fallback={t('bookings.sourceNone')}
+                  />
+                  {booked ? (
+                    <StatusPill tone="good">{t('recurring.alreadyBooked')}</StatusPill>
+                  ) : due ? (
+                    <StatusPill tone="info">{t('recurring.due')}</StatusPill>
+                  ) : (
+                    <StatusPill tone="neutral">{t('recurring.notDue')}</StatusPill>
+                  )}
+                  {!x.active && <StatusPill tone="neutral">{t('recurring.inactive')}</StatusPill>}
+                  {x.amountIsEstimate && (
+                    <StatusPill tone="warn">{t('recurring.estimate')}</StatusPill>
+                  )}
+                </p>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="kpi__scope">{intervalLabel(x.intervalMonths)}</span>
+                  <span>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t('recurring.editTemplate')}
+                      onClick={() => {
+                        setEditing(x);
+                        setFormOpen(true);
+                      }}
+                    >
+                      <Pencil size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t('common.delete')}
+                      onClick={() => {
+                        if (window.confirm(t('recurring.deleteConfirm', { name: x.name }))) {
+                          remove.mutate(x.id);
+                        }
+                      }}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                    </button>
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 

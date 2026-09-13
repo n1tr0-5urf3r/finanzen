@@ -49,8 +49,7 @@ export function MonthsPage() {
       <PageHeader title={t('months.title', { year })} subtitle={t('months.intro')} />
 
       <div
-        className="panel panel--pad"
-        style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+        className="panel panel--pad filter-bar"
       >
         <div style={{ minWidth: '8rem' }}>
           <YearPicker id="months-year" value={year} onChange={(next) =>

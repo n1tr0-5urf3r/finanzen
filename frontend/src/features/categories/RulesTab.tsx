@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Play, Trash2 } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Banner, Button, EmptyState, ErrorState, LoadingState, StatusPill } from '../../components/ui';
@@ -23,9 +23,14 @@ import { CategoryPicker } from './CategoryPicker';
 export function RulesTab({
   categories,
   onNotice,
+  creating,
+  onCreatingDone,
 }: {
   categories: Category[];
   onNotice: (message: string) => void;
+  /** The trigger lives in `PageHeader` now; this tab still owns the form. */
+  creating: boolean;
+  onCreatingDone: () => void;
 }) {
   const t = useT();
   const client = useQueryClient();
@@ -58,6 +63,7 @@ export function RulesTab({
     onSuccess: (rule) => {
       invalidateAfterTaxonomyChange(client);
       setEditing(null);
+      onCreatingDone();
       setFailure(null);
       // `matchCount` is how many confirmed bookings carry this comment — the
       // bookings the rule now claims. Manual overrides keep their own category,
@@ -128,10 +134,7 @@ export function RulesTab({
     <>
       <Banner tone="warn">{t('categories.retroWarning')}</Banner>
 
-      <div
-        className="panel panel--pad"
-        style={{ marginBottom: '1rem', display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
-      >
+      <div className="panel panel--pad filter-bar">
         <div className="field" style={{ flex: 1, minWidth: '14rem' }}>
           <label htmlFor="rule-search">{t('categories.ruleSearch')}</label>
           <input
@@ -149,9 +152,6 @@ export function RulesTab({
           />
           {t('categories.ruleOnlyUnused')}
         </label>
-        <Button onClick={() => setEditing('new')}>
-          <Plus size={15} aria-hidden="true" /> {t('categories.newRule')}
-        </Button>
         <Button
           variant="secondary"
           busy={apply.isPending}
@@ -174,15 +174,18 @@ export function RulesTab({
 
       {failure != null && <ErrorState error={failure} />}
 
-      {editing && (
+      {(editing || creating) && (
         <RuleForm
-          rule={editing === 'new' ? null : editing}
+          rule={editing && editing !== 'new' ? editing : null}
           categories={categories}
           busy={save.isPending}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            setEditing(null);
+            onCreatingDone();
+          }}
           onSubmit={(comment, categoryId, kindOverride) =>
             save.mutate({
-              id: editing === 'new' ? undefined : editing.id,
+              id: editing && editing !== 'new' ? editing.id : undefined,
               comment,
               categoryId,
               kindOverride,

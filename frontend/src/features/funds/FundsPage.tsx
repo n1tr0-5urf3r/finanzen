@@ -11,6 +11,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  Kpi,
   LoadingState,
   PageHeader,
   StatusPill,
@@ -106,16 +107,7 @@ export function FundsPage() {
       {notice && <Banner tone="info">{notice}</Banner>}
       {remove.isError && <ErrorState error={remove.error} />}
 
-      <div
-        className="panel panel--pad"
-        style={{
-          marginBottom: '1rem',
-          display: 'flex',
-          gap: '.75rem 1.25rem',
-          flexWrap: 'wrap',
-          alignItems: 'flex-end',
-        }}
-      >
+      <div className="panel panel--pad filter-bar">
         <div style={{ minWidth: '8rem' }}>
           <YearPicker
             id="funds-year"
@@ -141,34 +133,21 @@ export function FundsPage() {
       {status.isError && <ErrorState error={status.error} retry={() => status.refetch()} />}
 
       {status.data && (
-        <div className="panel panel--pad funds__totals">
-          <div>
-            <span className="kpi__label">{t('funds.owedToFuture')}</span>
-            <span className="kpi__value">
-              <Money cents={status.data.owedToTheFutureCents} />
-            </span>
-            <span className="kpi__scope">{t('funds.owedHint')}</span>
-          </div>
-          <div>
-            <span className="kpi__label">{t('funds.monthlyTotal')}</span>
-            <span className="kpi__value">
-              <Money cents={status.data.monthlyAccrualCents} />
-            </span>
-          </div>
-          <div>
-            <span className="kpi__label">
-              {t('funds.accruedTotal', { month: monthName(month) })}
-            </span>
-            <span className="kpi__value">
-              <Money cents={status.data.accruedByMonthCents} />
-            </span>
-          </div>
-          <div>
-            <span className="kpi__label">{t('funds.spentTotal')}</span>
-            <span className="kpi__value">
-              <Money cents={status.data.spentCents} basis="net" tone="auto" />
-            </span>
-          </div>
+        <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+          {/* A sinking fund accrues against COSTS, and a transfer is not one, so
+              every figure here excludes them. */}
+          <Kpi label={t('funds.owedToFuture')} hint={t('funds.owedHint')} scope="without" tone="accent">
+            <Money cents={status.data.owedToTheFutureCents} />
+          </Kpi>
+          <Kpi label={t('funds.monthlyTotal')} scope="without">
+            <Money cents={status.data.monthlyAccrualCents} />
+          </Kpi>
+          <Kpi label={t('funds.accruedTotal', { month: monthName(month) })} scope="without">
+            <Money cents={status.data.accruedByMonthCents} />
+          </Kpi>
+          <Kpi label={t('funds.spentTotal')} scope="without">
+            <Money cents={status.data.spentCents} basis="net" tone="auto" />
+          </Kpi>
         </div>
       )}
 
@@ -334,7 +313,7 @@ export function FundsPage() {
       )}
 
       <section className="panel panel--pad" style={{ marginTop: '1rem' }}>
-        <h2 style={{ marginBottom: '.2rem' }}>{t('funds.suggestions', { year })}</h2>
+        <h2>{t('funds.suggestions', { year })}</h2>
         <p className="footnote">{t('funds.suggestionsHint')}</p>
 
         {suggestions.isError && <ErrorState error={suggestions.error} />}
