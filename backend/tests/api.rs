@@ -2217,3 +2217,192 @@ async fn a_comment_series_folds_case_the_way_the_rules_do() {
     );
     assert_eq!(s["months"][1]["netCents"], 15_000);
 }
+
+// ------------------------------------------------------- forecast and anomalies
+
+/// Books one expense into one month, with a rule so it lands in a real category.
+async fn book(app: &TestApp, year: i32, month: u8, comment: &str, cents: i64) {
+    let (status, body) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({"year": year, "month": month, "kind": "expense",
+                        "amountCents": cents, "comment": comment})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+}
+
+/// THE test for the projection: one settlement month must not move it.
+///
+/// Five ordinary Lebensmittel months of ~80 € and one of 1.479 €. A mean would
+/// project ~313 € a month for the rest of the year and put the closing balance
+/// thousands of euros wrong; the median projects the 80 € the month actually tends
+/// to cost. This is the entire reason the engine says "median" on the wire.
+#[tokio::test]
+async fn one_outlier_month_barely_moves_the_forecast() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let food = app.category_id("Lebensmittel").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Supermarkt", "categoryId": food})),
+    )
+    .await;
+
+    for (month, cents) in [
+        (1u8, 8_000i64),
+        (2, 8_500),
+        (3, 7_900),
+        (4, 8_200),
+        (5, 8_100),
+        (6, 144_000),
+    ] {
+        book(&app, 2026, month, "Supermarkt", cents).await;
+    }
+
+    let (status, f) = app.send("GET", "/analysis/forecast?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK, "{f}");
+    assert_eq!(f["method"], "median");
+    assert_eq!(f["actualThroughMonth"], 6);
+    assert_eq!(f["projectedFromMonth"], 7);
+
+    // Juli..Dezember are projected at the median of the six months in the window,
+    // not at the mean those same months would give (31.433 cents).
+    let months = f["months"].as_array().expect("months");
+    let july = &months[6];
+    assert_eq!(july["isProjected"], true);
+    assert!(
+        july["netCents"].as_i64().expect("net") < 12_000,
+        "the outlier leaked into the projection: {july}"
+    );
+
+    // ...and the months that happened are not projections.
+    assert_eq!(months[5]["isProjected"], false);
+    assert_eq!(months[5]["netCents"], 144_000);
+    assert_eq!(months[5]["bookingCount"], 1);
+
+    // The actual saldo is the six months that happened, as a balance delta.
+    assert_eq!(
+        f["actualBalanceCents"],
+        -(8_000 + 8_500 + 7_900 + 8_200 + 8_100 + 144_000)
+    );
+}
+
+/// A template due in a remaining month is counted once, and never twice.
+///
+/// The trap this guards is adding the template to the category's median, which
+/// would project a rent nobody pays.
+#[tokio::test]
+async fn a_due_template_is_counted_once_in_each_remaining_month() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let rent = app.category_id("Miete").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Miete", "categoryId": rent})),
+    )
+    .await;
+
+    // Three months of rent actually booked, then a template for the rest.
+    for month in 1..=3u8 {
+        book(&app, 2026, month, "Miete", 120_000).await;
+    }
+    make_template(
+        &app,
+        json!({"name":"Miete","comment":"Miete","kind":"expense","amountCents":120_000,
+               "activeFrom":{"year":2026,"month":1}}),
+    )
+    .await;
+
+    let (status, f) = app.send("GET", "/analysis/forecast?year=2026", None).await;
+    assert_eq!(status, StatusCode::OK, "{f}");
+
+    let months = f["months"].as_array().expect("months");
+    let april = &months[3];
+    assert_eq!(april["isProjected"], true);
+    // 1.200,00 — not 2.400,00, which is what adding the template to the median
+    // would produce.
+    assert_eq!(april["netCents"], 120_000);
+    assert_eq!(april["fixedCents"], 120_000);
+    assert_eq!(april["variableCents"], 0);
+    // Nine remaining months, one template due in each.
+    assert_eq!(f["dueTemplateCount"], 9);
+}
+
+/// A category with two months of history has no median worth reporting.
+#[tokio::test]
+async fn a_category_with_too_little_history_produces_no_anomaly() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let food = app.category_id("Lebensmittel").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Supermarkt", "categoryId": food})),
+    )
+    .await;
+
+    // Two quiet months, then one that is wildly different.
+    book(&app, 2026, 4, "Supermarkt", 8_000).await;
+    book(&app, 2026, 5, "Supermarkt", 8_000).await;
+    book(&app, 2026, 6, "Supermarkt", 90_000).await;
+
+    let (status, a) = app
+        .send("GET", "/analysis/anomalies?year=2026&month=6", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{a}");
+    assert_eq!(
+        a["items"].as_array().expect("items").len(),
+        0,
+        "two data points have no middle: {a}"
+    );
+
+    // A third month of history makes the same spike reportable.
+    book(&app, 2026, 3, "Supermarkt", 8_200).await;
+    let (_, a) = app
+        .send("GET", "/analysis/anomalies?year=2026&month=6", None)
+        .await;
+    let items = a["items"].as_array().expect("items");
+    assert_eq!(items.len(), 1, "{a}");
+    assert_eq!(items[0]["categoryName"], "Lebensmittel");
+    assert_eq!(items[0]["direction"], "above");
+    assert_eq!(items[0]["currentCents"], 90_000);
+    assert_eq!(items[0]["medianCents"], 8_000);
+    assert_eq!(items[0]["monthsOfHistory"], 3);
+}
+
+/// Saving is a decision, not overspending, and an empty list is the normal case.
+#[tokio::test]
+async fn savings_are_never_an_anomaly_and_a_quiet_month_reports_nothing() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let savings = app.category_id("Sparen & Anlage").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "ETF", "categoryId": savings})),
+    )
+    .await;
+
+    for month in 1..=5u8 {
+        book(&app, 2026, month, "ETF", 30_000).await;
+    }
+    // A deliberate extra payment into savings: large, and nobody's business.
+    book(&app, 2026, 6, "ETF", 300_000).await;
+
+    let (status, a) = app
+        .send("GET", "/analysis/anomalies?year=2026&month=6", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{a}");
+    assert_eq!(a["items"].as_array().expect("items").len(), 0, "{a}");
+    // The thresholds are on the wire, so the UI can say why something is listed.
+    assert_eq!(a["minDeltaCents"], 2_000);
+
+    let (status, _) = app
+        .send("GET", "/analysis/anomalies?year=2026&month=13", None)
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

@@ -34,6 +34,9 @@ export const qk = {
     series: (year: number, mode: string, subject: string) =>
       ['derived', year, 'series', mode, subject] as const,
     seriesSubjects: (year: number) => ['derived', year, 'series-subjects'] as const,
+    forecast: (year: number) => ['derived', year, 'forecast'] as const,
+    anomalies: (year: number, month: number) =>
+      ['derived', year, 'anomalies', month] as const,
   },
   years: () => ['years'] as const,
   recurring: {

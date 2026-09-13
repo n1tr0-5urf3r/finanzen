@@ -86,6 +86,54 @@
         }
       }
     },
+    "/api/v1/analysis/anomalies": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Categories running unusually far from their own median, in either direction.",
+        "description": "Deliberately quiet: no budgets to maintain, no thresholds to configure, and an\nempty list whenever nothing is unusual — which is most months.",
+        "operationId": "anomalies",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Monat 1..12",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Auffällige Kategorien; leer ist der Normalfall",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnomalyReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Monat außerhalb 1..12"
+          }
+        }
+      }
+    },
     "/api/v1/analysis/categories": {
       "get": {
         "tags": [
@@ -111,6 +159,39 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CategoryAnalysis"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis/forecast": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "The rest of the year, from what is known and what is typical.",
+        "operationId": "forecast",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "description": "Kalenderjahr",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ist-Monate und projizierte Monate, getrennt ausgewiesen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Forecast"
                 }
               }
             }
@@ -2790,6 +2871,100 @@
   },
   "components": {
     "schemas": {
+      "Anomaly": {
+        "type": "object",
+        "required": [
+          "categoryName",
+          "currentCents",
+          "medianCents",
+          "deltaCents",
+          "ratio",
+          "direction",
+          "monthsOfHistory"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": "string"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currentCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expense-positive, like every stored net."
+          },
+          "deltaCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current minus median: positive means it cost more than usual."
+          },
+          "direction": {
+            "type": "string",
+            "description": "`above` or `below`, so the UI does not have to infer it from a sign it may\nbe displaying flipped."
+          },
+          "medianCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthsOfHistory": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ratio": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "AnomalyReport": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "monthName",
+          "items",
+          "comparedMonths",
+          "minRatio",
+          "minDeltaCents"
+        ],
+        "properties": {
+          "comparedMonths": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Anomaly"
+            },
+            "description": "Empty is the normal case and must render as nothing at all."
+          },
+          "minDeltaCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "minRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ApplyRulesResult": {
         "type": "object",
         "required": [
@@ -3944,6 +4119,197 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "Forecast": {
+        "type": "object",
+        "required": [
+          "year",
+          "openingBalanceCents",
+          "months",
+          "actualBalanceCents",
+          "projectedBalanceCents",
+          "projectedClosingBalanceCents",
+          "projectedClosingLowCents",
+          "projectedClosingHighCents",
+          "dueTemplateCount",
+          "historyMonths",
+          "method",
+          "rows"
+        ],
+        "properties": {
+          "actualBalanceCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Actual saldo so far — income minus expenses, so a gain is positive."
+          },
+          "actualThroughMonth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The last month that holds bookings; `null` for a year with none.",
+            "minimum": 0
+          },
+          "dueTemplateCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many templates fall due across the remaining months, counted once each\ntime they are due."
+          },
+          "historyMonths": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Months of history the medians were taken over."
+          },
+          "method": {
+            "type": "string",
+            "description": "Stated on the wire so the UI never has to guess what it is drawing."
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForecastMonth"
+            }
+          },
+          "openingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "projectedBalanceCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The same for the projected months alone."
+          },
+          "projectedClosingBalanceCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "projectedClosingHighCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "projectedClosingLowCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "projectedFromMonth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The first projected month; `null` when the year is complete.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForecastBasisRow"
+            }
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ForecastBasisRow": {
+        "type": "object",
+        "description": "One category's contribution to the projection, so the figure can be inspected\nrather than believed.",
+        "required": [
+          "categoryName",
+          "monthsOfHistory",
+          "medianCents",
+          "projectedTotalCents",
+          "source"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": "string"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "medianCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Per month, expense-positive."
+          },
+          "monthsOfHistory": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "projectedTotalCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Over all remaining months."
+          },
+          "source": {
+            "type": "string",
+            "description": "`template`, `median` or `mixed` — where the figure came from."
+          }
+        }
+      },
+      "ForecastMonth": {
+        "type": "object",
+        "required": [
+          "month",
+          "monthName",
+          "netCents",
+          "fixedCents",
+          "variableCents",
+          "spreadCents",
+          "isProjected",
+          "bookingCount",
+          "closingBalanceCents"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "closingBalanceCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Running balance at the end of this month, projections included."
+          },
+          "fixedCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The part the recurring templates account for. Zero in an actual month —\nthere the figure is what happened, not what was planned."
+          },
+          "isProjected": {
+            "type": "boolean",
+            "description": "The distinction that must survive into the UI."
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthName": {
+            "type": "string",
+            "description": "German month name; data, not chrome."
+          },
+          "netCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expense-positive, like every stored net: a cost is positive."
+          },
+          "spreadCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Half-width of the range, from the median absolute deviation. Zero for an\nactual month, which has no uncertainty left."
+          },
+          "variableCents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the medians add on top of the templates."
           }
         }
       },

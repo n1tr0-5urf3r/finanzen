@@ -12,6 +12,8 @@ import type { Dashboard } from '../../lib/types';
 import type { MessageKey } from '../../lib/messages/de';
 import { KitchenOwlWidget } from '../kitchenowl/KitchenOwlWidget';
 import { useMaskAmount } from '../../lib/privacy';
+import { AnomalyNotes } from './AnomalyNotes';
+import { ForecastPanel } from './ForecastPanel';
 
 function Kpi({
   labelKey,
@@ -42,6 +44,10 @@ export function DashboardPage() {
   const maskAmount = useMaskAmount();
   const [params] = useSearchParams();
   const year = Number(params.get('jahr')) || new Date().getFullYear();
+  // The current month in the current year, the last month otherwise: asking a past
+  // year about "this month" would compare December with nothing.
+  const now = new Date();
+  const anomalyMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
 
   const query = useQuery({
     queryKey: qk.derived.dashboard(year),
@@ -138,6 +144,9 @@ export function DashboardPage() {
           {d.uncategorizedCount}
         </Kpi>
       </div>
+
+      <AnomalyNotes year={year} month={anomalyMonth} />
+      <ForecastPanel year={year} />
 
       <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
         <h2 style={{ marginBottom: '.6rem' }}>{t('dashboard.byType')}</h2>

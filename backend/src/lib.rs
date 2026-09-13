@@ -7,6 +7,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod export;
+pub mod forecast;
 pub mod importer;
 pub mod kitchenowl;
 pub mod locale;
@@ -138,6 +139,8 @@ pub fn router(state: AppState) -> Router {
         .route("/analysis/categories", get(analysis::categories))
         .route("/analysis/series", get(analysis::series))
         .route("/analysis/series/subjects", get(analysis::series_subjects))
+        .route("/analysis/forecast", get(forecast::forecast))
+        .route("/analysis/anomalies", get(forecast::anomalies))
         .route("/tax", get(analysis::tax))
         .route("/tax/export.csv", get(export::tax_csv))
         .route("/tax/export.pdf", get(export::tax_pdf))

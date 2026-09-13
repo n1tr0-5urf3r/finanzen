@@ -58,7 +58,10 @@ async fn load_ledger(conn: &mut PgConnection, year: i32) -> Result<Vec<LedgerRow
 
 /// Opening balance, and whether it was configured by hand or derived from the
 /// previous year's close.
-async fn opening_balance(conn: &mut PgConnection, year: i32) -> Result<(i64, bool, Option<i64>)> {
+pub(crate) async fn opening_balance(
+    conn: &mut PgConnection,
+    year: i32,
+) -> Result<(i64, bool, Option<i64>)> {
     let row = sqlx::query(
         "SELECT opening_cents, opening_source = 'configured' AS configured \
            FROM fiscal_years WHERE year = $1::smallint",
