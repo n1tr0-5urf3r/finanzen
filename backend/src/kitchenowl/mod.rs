@@ -16,6 +16,7 @@
 //! - If KitchenOwl is unreachable the rest of the app keeps working and the failure
 //!   is visible, as `AppError::Integration` -> 502 and as a recorded `sync_runs` row.
 
+pub mod analysis;
 pub mod client;
 pub mod link;
 pub mod matching;

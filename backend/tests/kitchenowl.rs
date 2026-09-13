@@ -99,6 +99,17 @@ fn expense(
 }
 
 /// `2026-05-03T12:00` Berlin and friends, as epoch milliseconds.
+/// Epoch milliseconds for a date, which the monthly analysis needs in order to
+/// spread expenses over a year rather than over one week in May.
+fn on(year: i32, month: u32, day: u32) -> i64 {
+    chrono::NaiveDate::from_ymd_opt(year, month, day)
+        .expect("valid date")
+        .and_hms_opt(12, 0, 0)
+        .expect("valid time")
+        .and_utc()
+        .timestamp_millis()
+}
+
 fn ms(day: i64) -> i64 {
     // 2026-05-01T12:00:00+02:00
     1777629600000 + day * 86_400_000
@@ -285,6 +296,9 @@ impl MockServer {
 struct TestApp {
     router: Router,
     cookie: Option<String>,
+    /// The per-test database, so a test can open a connection carrying NO tenant
+    /// context — which is exactly the situation the background loops run in.
+    db_url: String,
 }
 
 impl TestApp {
@@ -342,6 +356,7 @@ impl TestApp {
         let mut app = Self {
             router: finanzen::router(state),
             cookie: None,
+            db_url: target.to_string(),
         };
         app.setup_admin().await;
         Some(app)
@@ -414,6 +429,15 @@ impl TestApp {
 
     async fn sync(&self) -> (StatusCode, Value) {
         self.send("POST", "/kitchenowl/sync", None).await
+    }
+
+    /// A pool with no `app.user_id` set, like the background loops hold.
+    async fn tenantless_pool(&self) -> sqlx::PgPool {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&self.db_url)
+            .await
+            .expect("tenantless pool")
     }
 }
 
@@ -1141,6 +1165,7 @@ async fn kitchenowl_is_tenant_scoped_like_everything_else() {
     let other = TestApp {
         router: app.router.clone(),
         cookie: Some(cookie),
+        db_url: app.db_url.clone(),
     };
     let (status, page) = other.send("GET", "/kitchenowl/expenses", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -1276,5 +1301,208 @@ async fn the_live_instance_still_has_the_shapes_the_fixtures_claim() {
     assert!(
         serde_json::from_str::<serde_json::Value>(&body).is_err(),
         "the error body is not JSON: {body:?}"
+    );
+}
+
+// ------------------------------------------------------- the household's analysis
+
+/// The same questions the personal analysis answers, asked of the mirror.
+///
+/// Every figure is a pair — what the household spent and the user's share — and
+/// the two are never added. That is the single most likely mistake in this
+/// integration, so it is asserted on every level of the response.
+#[tokio::test]
+async fn the_household_ledger_analyses_its_own_year() {
+    let mock = MockServer::start().await;
+    let mut excluded = expense(
+        9,
+        "Korrektur",
+        99.00,
+        on(2026, 2, 2),
+        Some((1, "Wocheneinkauf")),
+        1,
+        &[(1, 1), (2, 1)],
+    );
+    // KitchenOwl's own statistics skip these, so ours must too.
+    excluded["exclude_from_statistics"] = json!(true);
+
+    mock.seed(vec![
+        expense(
+            1,
+            "Kaufland",
+            20.00,
+            on(2026, 1, 10),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            2,
+            "Kaufland",
+            30.00,
+            on(2026, 3, 5),
+            Some((1, "Wocheneinkauf")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            3,
+            "Kino",
+            22.50,
+            on(2026, 3, 20),
+            Some((2, "Ausflug")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        // No category at all — a third of the live corpus looks like this.
+        expense(4, "Kiosk", 10.00, on(2026, 4, 1), None, 1, &[(1, 1)]),
+        excluded,
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, a) = app
+        .send("GET", "/kitchenowl/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{a}");
+
+    // 20 + 30 + 22,50 + 10 — and NOT the 99,00 KitchenOwl excludes.
+    assert_eq!(a["totalAmountCents"], 8250);
+    assert_eq!(a["excludedCount"], 1);
+    // The user's slice: half of the three shared ones, all of the solo one.
+    assert_eq!(a["totalOwnShareCents"], 1000 + 1500 + 1125 + 1000);
+    assert_eq!(a["expenseCount"], 4);
+    // Januar, März, April — never twelve, and never the months of the excluded row.
+    assert_eq!(a["monthsWithData"], 3);
+    assert_eq!(a["uncategorizedCount"], 1);
+    assert_eq!(a["years"][0], 2026);
+
+    let rows = a["rows"].as_array().expect("rows");
+    let top = &rows[0];
+    assert_eq!(top["koCategoryName"], "Wocheneinkauf");
+    assert_eq!(top["amountCents"], 5000);
+    assert_eq!(top["ownShareCents"], 2500);
+    assert_eq!(top["expenseCount"], 2);
+    // Twelve slots, the two months that carry something and no others.
+    assert_eq!(top["monthlyAmountCents"][0], 2000);
+    assert_eq!(
+        top["monthlyAmountCents"][1], 0,
+        "the excluded Februar row must not appear"
+    );
+    assert_eq!(top["monthlyAmountCents"][2], 3000);
+    assert_eq!(top["monthlyOwnShareCents"][2], 1500);
+    // Averaged over the months the household was active, not over twelve.
+    assert_eq!(top["averagePerMonthCents"], 1667);
+
+    // Who paid is a question only a shared ledger has.
+    let payers = a["paidBy"].as_array().expect("paidBy");
+    let fabi = payers.iter().find(|p| p["name"] == "Fabi").expect("Fabi");
+    assert_eq!(fabi["amountCents"], 2000 + 2250 + 1000);
+    let ada = payers.iter().find(|p| p["name"] == "Ada").expect("Ada");
+    assert_eq!(ada["amountCents"], 3000);
+
+    // One recurring purchase across the year, the "how much Kaufland" question.
+    let (status, s) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/series?year=2026&name=kaufland",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    assert_eq!(s["subject"], "kaufland");
+    assert_eq!(s["amountCents"], 5000);
+    assert_eq!(s["ownShareCents"], 2500);
+    assert_eq!(s["monthsWithData"], 2);
+    assert_eq!(s["averagePerActiveMonthCents"], 2500);
+    assert_eq!(s["averageOwnSharePerActiveMonthCents"], 1250);
+    assert_eq!(s["months"].as_array().expect("months").len(), 12);
+    assert_eq!(s["months"][0]["amountCents"], 2000);
+    assert_eq!(s["months"][2]["amountCents"], 3000);
+
+    // The uncategorised third of the corpus is reachable, not a dead end.
+    let (status, u) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/series?year=2026&uncategorized=true",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{u}");
+    assert_eq!(u["amountCents"], 1000);
+
+    // ...and asking for two subjects at once is a 400, not a silent choice.
+    let (status, _) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/series?year=2026&name=kaufland&uncategorized=true",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, subjects) = app
+        .send(
+            "GET",
+            "/kitchenowl/analysis/series/subjects?year=2026",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    // Only names seen more than once are worth a chart.
+    assert_eq!(subjects.as_array().expect("subjects").len(), 1);
+    assert_eq!(subjects[0]["name"], "Kaufland");
+    assert_eq!(subjects[0]["expenseCount"], 2);
+
+    // THE invariant, again: analysing the mirror writes nothing to the ledger.
+    let (_, bookings) = app
+        .send("GET", "/bookings?year=2026&status=all", None)
+        .await;
+    assert_eq!(bookings["total"], 0);
+}
+
+/// The background sync ran for nobody.
+///
+/// `ko_sync_state` carries forced row-level security, and the loops hold no request
+/// and therefore no `app.user_id`. A tenant-scoped read in that state returns an
+/// EMPTY LIST rather than an error, so every automatic pull iterated zero users and
+/// reported nothing, indefinitely — while the manual button, which runs inside a
+/// request, worked perfectly. This asserts both halves of that: the list the loop
+/// reads is populated, and the table it used to read is genuinely invisible from
+/// there, so the exemption is doing real work.
+#[tokio::test]
+async fn the_sync_loop_can_see_who_opted_in() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Supermarkt",
+        19.07,
+        ms(2),
+        Some((1, "Wocheneinkauf")),
+        2,
+        &[(1, 1), (2, 1)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let pool = app.tenantless_pool().await;
+    let users = finanzen::kitchenowl::mirror::participating_users(&pool)
+        .await
+        .expect("participants");
+    assert_eq!(
+        users.len(),
+        1,
+        "the loops iterate this list; empty means every automatic sync quietly does nothing"
+    );
+
+    let visible: i64 = sqlx::query_scalar("SELECT count(*)::bigint FROM ko_sync_state")
+        .fetch_one(&pool)
+        .await
+        .expect("count sync state");
+    assert_eq!(
+        visible, 0,
+        "ko_sync_state must stay invisible without a tenant — that is why the registry exists"
     );
 }

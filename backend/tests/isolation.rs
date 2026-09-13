@@ -17,7 +17,11 @@ use uuid::Uuid;
 /// establishes `app.user_id` in the first place, so a policy on them would deadlock.
 /// Any OTHER table growing a `user_id` column without RLS is a bug, which is what
 /// `every_user_scoped_table_has_forced_rls` catches.
-const SYSTEM_SCOPE: &[&str] = &["identities", "sessions"];
+/// `ko_participants` is here for the same reason and with the same justification:
+/// the KitchenOwl loop runs with no request and no tenant, and a tenant-scoped read
+/// would hand it an empty list rather than an error. It holds a user id and nothing
+/// else — no amount, no household, no name.
+const SYSTEM_SCOPE: &[&str] = &["identities", "sessions", "ko_participants"];
 
 /// Each test gets its own freshly-migrated database, so the suite stays parallel and
 /// one test's rows can never be mistaken for another's leaked data.

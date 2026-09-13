@@ -82,6 +82,15 @@ pub async fn enable(conn: &mut PgConnection, user_id: Uuid) -> Result<()> {
         .bind(user_id)
         .execute(&mut *conn)
         .await?;
+    // The same fact, in the one place a loop with no tenant can read it. Written in
+    // the caller's transaction, so a user is never a participant for the background
+    // loop without the state row the loop expects to find.
+    sqlx::query(
+        "INSERT INTO ko_participants (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+    )
+    .bind(user_id)
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }
 
@@ -92,10 +101,15 @@ pub async fn is_enabled(conn: &mut PgConnection) -> Result<bool> {
     Ok(n > 0)
 }
 
-/// Every user who opted in. Read through the system pool because the background loop
-/// has no request and therefore no tenant yet; it opens one per user afterwards.
+/// Every user who opted in.
+///
+/// Read from `ko_participants`, NOT from `ko_sync_state`: the background loop has no
+/// request and therefore no `app.user_id`, and a tenant-scoped read in that state
+/// returns an empty list instead of an error. This function is the one place that
+/// distinction matters, and getting it wrong disables every automatic sync without
+/// a single log line.
 pub async fn participating_users(pool: &sqlx::PgPool) -> Result<Vec<Uuid>> {
-    let rows = sqlx::query("SELECT user_id FROM ko_sync_state")
+    let rows = sqlx::query("SELECT user_id FROM ko_participants ORDER BY enabled_at")
         .fetch_all(pool)
         .await?;
     Ok(rows.iter().map(|r| r.get::<Uuid, _>(0)).collect())
