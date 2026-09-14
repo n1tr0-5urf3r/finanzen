@@ -509,6 +509,9 @@ export const en: Messages = {
   'ko.pushDescription': 'Description',
   'ko.pushAmount': 'Amount',
   'ko.pushSubmit': 'Send',
+  'ko.pushDone': 'Added to KitchenOwl — dated {date} {id}. KitchenOwl sorts by date, so the expense sits there rather than at the top.',
+  'ko.pushFailed': 'KitchenOwl refused the expense: {error} The booking is unchanged, and trying again creates nothing twice.',
+  'ko.pushWaiting': 'Sending …',
   'ko.pushQueued': 'Queued. The transfer runs in the background.',
   'ko.pushQueuedOffline':
     'Queued. KitchenOwl is unreachable right now — it will be retried automatically.',

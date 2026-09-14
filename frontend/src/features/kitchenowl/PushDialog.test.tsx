@@ -127,6 +127,13 @@ describe('the push dialogue', () => {
         sent = JSON.parse(String(init?.body));
         return Promise.resolve({ state: 'queued' });
       }
+      // The dialogue waits for the attempt rather than closing on the 202, so the
+      // queue has to answer — this is the second half of what the user sees.
+      if (String(path) === '/kitchenowl/push') {
+        return Promise.resolve([
+          { bookingId: 'b1', state: 'pushed', date: '2026-09-01', externalId: 467 },
+        ]);
+      }
       return Promise.resolve(METADATA);
     });
 
@@ -150,7 +157,11 @@ describe('the push dialogue', () => {
         { memberId: 2, factor: 1 },
       ],
     });
-    expect(onClose).toHaveBeenCalledWith('Vorgemerkt. Die Übertragung läuft im Hintergrund.');
+    // Not "queued": the dialogue waits for the attempt and reports the outcome,
+    // including the DATE it was filed under — KitchenOwl sorts by date, and a
+    // booking dated three weeks ago lands three weeks down the list, which once
+    // read as a failed push.
+    expect(onClose).toHaveBeenCalledWith(expect.stringContaining('01.09.2026'));
   });
 
   it('lets a weight be cleared and retyped', async () => {
@@ -192,4 +203,47 @@ describe('the push dialogue', () => {
     open();
     expect(await screen.findByText(/Kennung angehängt/)).toBeInTheDocument();
   });
+
+  /**
+   * The three ways a push ends, each said in the words the user needs.
+   */
+  it('reports a refusal instead of claiming it was queued', async () => {
+    const user = userEvent.setup();
+    const onClose = open();
+    await screen.findByLabelText('Name');
+
+    api.mockImplementation((path: string) => {
+      if (String(path) === '/bookings/b1/kitchenowl') return Promise.resolve({ state: 'queued' });
+      if (String(path) === '/kitchenowl/push') {
+        return Promise.resolve([
+          { bookingId: 'b1', state: 'failed', lastError: 'Request invalid', externalId: null },
+        ]);
+      }
+      return Promise.resolve(METADATA);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Übertragen' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 4000 });
+    expect(onClose).toHaveBeenCalledWith(expect.stringContaining('Request invalid'));
+  });
+
+  it('says it is still queued rather than waiting for ever', async () => {
+    const user = userEvent.setup();
+    const onClose = open();
+    await screen.findByLabelText('Name');
+
+    // KitchenOwl never answers: the outbox is what makes that safe, so the
+    // dialogue stops watching and says so instead of spinning.
+    api.mockImplementation((path: string) => {
+      if (String(path) === '/bookings/b1/kitchenowl') return Promise.resolve({ state: 'queued' });
+      if (String(path) === '/kitchenowl/push') {
+        return Promise.resolve([{ bookingId: 'b1', state: 'queued', externalId: null }]);
+      }
+      return Promise.resolve(METADATA);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Übertragen' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 15000 });
+    expect(onClose).toHaveBeenCalledWith(expect.stringContaining('Vorgemerkt'));
+  }, 20000);
 });

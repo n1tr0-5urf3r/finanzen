@@ -5,8 +5,8 @@ import { AlertTriangle } from 'lucide-react';
 import { DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
 import { Banner, Button, ErrorState, LoadingState } from '../../components/ui';
-import { api, jsonBody } from '../../lib/api';
-import { parseEuroInput } from '../../lib/format';
+import { api, asList, jsonBody } from '../../lib/api';
+import { formatDate, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterKitchenOwlChange, qk } from '../../lib/queryKeys';
 import type { Booking, KoMetadata, KoPushIntent } from '../../lib/types';
@@ -77,9 +77,19 @@ export function PushDialog({
     setFactors(Object.fromEntries(members.map((m) => [m.memberId, '1'])));
   }, [members, paidBy]);
 
+  const [waiting, setWaiting] = useState(false);
   const amountCents = parseEuroInput(amount);
   const weight = (memberId: number) => Math.max(1, Number(factors[memberId]) || 1);
   const chosen = members.filter((m) => participants.has(m.memberId));
+
+  // Where it landed, in the words the question is asked in: KitchenOwl sorts by
+  // DATE, so a booking dated three weeks ago arrives three weeks down the list —
+  // saying which date turns "it did not work" into "it is further down".
+  const pushedMessage = (intent: KoPushIntent) =>
+    t('ko.pushDone', {
+      date: formatDate(intent.date),
+      id: intent.externalId ? `#${intent.externalId}` : '',
+    });
 
   const push = useMutation({
     mutationFn: () =>
@@ -98,12 +108,38 @@ export function PushDialog({
           })),
         }),
       }),
-    onSuccess: (intent) => {
+    onSuccess: async (intent) => {
       invalidateAfterKitchenOwlChange(client);
-      // The 202 says "durably queued", not "delivered". Saying "übertragen" here
-      // would be a lie during an outage, and the outbox exists precisely so the
-      // user does not have to care which it was.
-      onClose(intent.state === 'pushed' ? t('ko.linkDone') : t('ko.pushQueued'));
+
+      // The 202 says "durably queued", not "delivered", and closing on that left
+      // the one question the user actually has unanswered — they went looking in
+      // KitchenOwl, did not find it where they expected, and concluded it had
+      // failed. So wait for the attempt, which normally takes about two seconds,
+      // and say what happened. The waiting is bounded: the outbox is what makes
+      // an unanswered push safe, so after eight seconds we stop watching and say
+      // that honestly instead of spinning.
+      if (intent.state === 'pushed') return onClose(pushedMessage(intent));
+
+      setWaiting(true);
+      // Short first, then backing off: a push usually lands in about two seconds,
+      // so the common case should not wait a fixed 800ms to say so.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise((r) => setTimeout(r, attempt === 0 ? 300 : 800));
+        const mine = asList<KoPushIntent>(
+          await api<KoPushIntent[]>('/kitchenowl/push'),
+        ).find((x) => x.bookingId === booking.id);
+        if (mine?.state === 'pushed') {
+          invalidateAfterKitchenOwlChange(client);
+          setWaiting(false);
+          return onClose(pushedMessage(mine));
+        }
+        if (mine?.state === 'failed' || mine?.state === 'abandoned') {
+          setWaiting(false);
+          return onClose(t('ko.pushFailed', { error: mine.lastError ?? '' }));
+        }
+      }
+      setWaiting(false);
+      onClose(t('ko.pushQueued'));
     },
   });
 
@@ -268,7 +304,7 @@ export function PushDialog({
               </Button>
               <Button
                 type="submit"
-                busy={push.isPending}
+                busy={push.isPending || waiting}
                 disabled={
                   !amountCents ||
                   amountCents <= 0 ||
@@ -276,7 +312,9 @@ export function PushDialog({
                   chosen.length === 0
                 }
               >
-                {t('ko.pushSubmit')}
+                {/* Says which of the two it is doing: handing the request over,
+                    then waiting to hear back. */}
+                {waiting ? t('ko.pushWaiting') : t('ko.pushSubmit')}
               </Button>
             </div>
           </form>

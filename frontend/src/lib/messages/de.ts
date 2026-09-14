@@ -543,6 +543,9 @@ export const de = {
   'ko.pushDescription': 'Beschreibung',
   'ko.pushAmount': 'Betrag',
   'ko.pushSubmit': 'Übertragen',
+  'ko.pushDone': 'In KitchenOwl eingetragen — datiert auf {date} {id}. KitchenOwl sortiert nach Datum, die Ausgabe steht also dort und nicht oben.',
+  'ko.pushFailed': 'KitchenOwl hat die Ausgabe abgelehnt: {error} Die Buchung bleibt unverändert; ein erneuter Versuch legt nichts doppelt an.',
+  'ko.pushWaiting': 'Wird übertragen …',
   'ko.pushQueued': 'Vorgemerkt. Die Übertragung läuft im Hintergrund.',
   'ko.pushQueuedOffline':
     'Vorgemerkt. KitchenOwl ist gerade nicht erreichbar — es wird automatisch erneut versucht.',
