@@ -175,3 +175,5 @@
   min-height: var(--tap);
 }
 .app-footer__link:hover { background: var(--surface-2); color: var(--ink); }
+.app-footer__licence { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.app-footer__licence:hover { color: var(--ink); }

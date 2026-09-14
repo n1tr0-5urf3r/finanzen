@@ -1,5 +1,5 @@
 import { useT } from '../lib/i18n';
-import { APP_VERSION, GITHUB_URL } from '../version';
+import { APP_VERSION, GITHUB_URL, LICENSE, LICENSE_URL } from '../version';
 
 /**
  * The GitHub mark, drawn here rather than imported.
@@ -29,6 +29,14 @@ export function AppFooter() {
     <footer className="app-footer">
       <p>
         {t('app.name')} v{APP_VERSION} · © 2026 Fabian Ihle
+      </p>
+      {/* The AGPL's whole point is that whoever can reach a running copy can reach
+          its source, so the licence belongs where they are: on the running copy,
+          next to the link to it. */}
+      <p>
+        <a href={LICENSE_URL} target="_blank" rel="noreferrer" className="app-footer__licence">
+          {LICENSE}
+        </a>
       </p>
       <p>{t('footer.builtWith')}</p>
       <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="app-footer__link">

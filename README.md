@@ -10,6 +10,7 @@
 
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-2e7d5b">
+  <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0--only-3c474c">
   <img alt="Rust" src="https://img.shields.io/badge/backend-Rust%20%2B%20axum-b7410e">
   <img alt="React" src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-0096c4">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/db-PostgreSQL%2017-336791">
@@ -115,4 +116,9 @@ Everything via `.env`; `.env.example` is fully commented.
 
 ## License
 
-Not decided yet.
+[GNU AGPL-3.0-only](LICENSE). The Affero clause is the point: if you run a modified
+copy of this where other people can reach it, they are entitled to its source.
+A household ledger is exactly the kind of thing that gets forked, hosted and
+quietly closed, and this is the licence that says no to that.
+
+© 2026 Fabian Ihle

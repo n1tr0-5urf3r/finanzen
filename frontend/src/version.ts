@@ -8,3 +8,7 @@
 export const APP_VERSION = '1.0.0';
 
 export const GITHUB_URL = 'https://github.com/n1tr0-5urf3r/Finanzen';
+
+/** SPDX identifier, and where the text lives for anyone running this instance. */
+export const LICENSE = 'AGPL-3.0-only';
+export const LICENSE_URL = `${GITHUB_URL}/blob/master/LICENSE`;
