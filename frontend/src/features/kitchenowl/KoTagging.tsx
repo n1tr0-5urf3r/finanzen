@@ -10,6 +10,7 @@ import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterKitchenOwlChange, qk } from '../../lib/queryKeys';
 import type { KoCategory, KoMetadata, KoTagResult, KoUntaggedGroup } from '../../lib/types';
+import { sortedByName } from '../../lib/categories';
 
 /**
  * Filing the household's uncategorised expenses.
@@ -337,7 +338,7 @@ function CategoryPicker({
         onChange={(e) => onChange(Number(e.target.value))}
       >
         <option value={0}>{t('ko.tagChoose')}</option>
-        {categories.map((c) => (
+        {sortedByName(categories).map((c) => (
           <option key={c.categoryId} value={c.categoryId}>
             {c.name}
           </option>

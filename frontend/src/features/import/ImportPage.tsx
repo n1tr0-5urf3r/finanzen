@@ -27,6 +27,7 @@ import type {
 } from '../../lib/types';
 
 import { ReviewQueue } from './ReviewQueue';
+import { sortedByName } from '../../lib/categories';
 
 type Tab = 'import' | 'pruefliste';
 
@@ -91,7 +92,7 @@ export function ImportPage() {
           onSelect={(id) => setParam('stapel', id)}
         />
       ) : batchId && categories.data ? (
-        <ReviewQueue batchId={batchId} categories={categories.data} />
+        <ReviewQueue batchId={batchId} categories={sortedByName(categories.data)} />
       ) : categories.isLoading || batches.isLoading ? (
         <LoadingState />
       ) : (

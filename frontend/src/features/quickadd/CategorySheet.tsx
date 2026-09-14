@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { DataLabel } from '../../components/DataLabel';
 import { useT } from '../../lib/i18n';
 import type { Category } from '../../lib/types';
+import { sortedByName } from '../../lib/categories';
 
 /**
  * Choosing a category outright.
@@ -28,7 +29,9 @@ export function CategorySheet({
   const [query, setQuery] = useState('');
 
   // Grouped by type, because 32 categories in one flat list is a scroll and a
-  // squint. Within a group the app's own sort order is kept.
+  // squint. Within a group they are alphabetical, like every other picker: the
+  // app's own sort order is deliberate on the Kategorien screen and invisible
+  // here, where you already know the name you are looking for.
   const groups = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('de');
     const matching = needle
@@ -36,7 +39,7 @@ export function CategorySheet({
       : categories;
 
     const byType = new Map<string, Category[]>();
-    for (const c of matching) {
+    for (const c of sortedByName(matching)) {
       const list = byType.get(c.typeLabel) ?? [];
       list.push(c);
       byType.set(c.typeLabel, list);

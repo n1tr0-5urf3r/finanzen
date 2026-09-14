@@ -25,6 +25,7 @@ import type { Booking, BookingPage, Category, KoStatus } from '../../lib/types';
 
 import { PushDialog } from '../kitchenowl/PushDialog';
 import { useMaskAmount } from '../../lib/privacy';
+import { sortedByName } from '../../lib/categories';
 
 export function BookingsPage() {
   const t = useT();
@@ -157,7 +158,7 @@ export function BookingsPage() {
             onChange={(e) => update('kategorie', e.target.value || null)}
           >
             <option value="">{t('bookings.filterAll')}</option>
-            {asList<Category>(categories.data).map((c) => (
+            {sortedByName(asList<Category>(categories.data)).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

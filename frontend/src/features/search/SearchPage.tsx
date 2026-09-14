@@ -15,6 +15,7 @@ import {
 import { api, asList } from '../../lib/api';
 import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { sortedByName } from '../../lib/categories';
 import { useMaskAmount } from '../../lib/privacy';
 import { qk } from '../../lib/queryKeys';
 import { BookingCard } from '../bookings/BookingCard';
@@ -124,7 +125,7 @@ export function SearchPage() {
             onChange={(e) => update('kategorie', e.target.value || null)}
           >
             <option value="">{t('bookings.filterAll')}</option>
-            {asList<Category>(categories.data).map((c) => (
+            {sortedByName(asList<Category>(categories.data)).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

@@ -12,6 +12,7 @@ import { qk } from '../../lib/queryKeys';
 import { SeriesChart, SERIES_ANCHOR, useSeriesSelection } from './SeriesChart';
 import type { MessageKey } from '../../lib/messages/de';
 import type { Category, CategoryAnalysis, CategoryAnalysisRow } from '../../lib/types';
+import { sortedByName } from '../../lib/categories';
 
 type SortKey = 'name' | 'type' | 'income' | 'expense' | 'net' | 'share' | 'average' | 'count';
 
@@ -112,7 +113,7 @@ export function CategoryTab({ year }: { year: number }) {
           {/* Above the table, because "how much do I spend on tanken" is the
               question people come here with; the year's totals are what they
               scroll to afterwards. */}
-          <SeriesChart year={year} categories={asList(categories.data)} />
+          <SeriesChart year={year} categories={sortedByName(asList<Category>(categories.data))} />
 
           <div className="panel table-wrap screen-table">
             <table className="data-table">

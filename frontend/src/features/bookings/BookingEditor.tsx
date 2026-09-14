@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { DataLabel } from '../../components/DataLabel';
 import { Button } from '../../components/ui';
-import { api, errorMessage, jsonBody } from '../../lib/api';
+import { api, asList, errorMessage, jsonBody } from '../../lib/api';
 import { formatEuro, MONTHS_DE, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterBookingChange, qk } from '../../lib/queryKeys';
 import type { Booking, BookingKind, Category } from '../../lib/types';
 import { useMaskedFieldClass } from '../../lib/privacy';
+import { sortedByName } from '../../lib/categories';
 
 /**
  * Editing one booking.
@@ -207,7 +208,7 @@ export function BookingEditor({
               {/* Defensive: a failed or in-flight categories fetch must leave the
                   dialog usable rather than crashing it — everything else in the
                   form still works without the list. */}
-              {(Array.isArray(categories.data) ? categories.data : []).map((c) => (
+              {sortedByName(asList<Category>(categories.data)).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} · {c.typeLabel}
                 </option>

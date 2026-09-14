@@ -13,6 +13,7 @@ import { CategorySheet } from './CategorySheet';
 import { CommentSheet } from './CommentSheet';
 import { useKeyboardBridge, usePrediction, useQuickAdd, useSuggestions } from './useQuickAdd';
 import { useMaskAmount } from '../../lib/privacy';
+import { sortedByName } from '../../lib/categories';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫'] as const;
 
@@ -229,7 +230,7 @@ export function QuickAddPage() {
 
       {categoryOpen && (
         <CategorySheet
-          categories={asList(categories.data)}
+          categories={sortedByName(asList<Category>(categories.data))}
           selectedId={override?.id ?? null}
           onPick={(picked) => {
             setOverride(picked);

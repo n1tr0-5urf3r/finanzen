@@ -23,6 +23,7 @@ import { qk } from '../../lib/queryKeys';
 import type { Category, FundOverview, FundStatus, FundSuggestion, SinkingFund } from '../../lib/types';
 
 import { FundForm } from './FundForm';
+import { sortedByName } from '../../lib/categories';
 
 type Prefill = { name: string; categoryId: string; annualCents: number; dueMonth: number };
 
@@ -353,7 +354,7 @@ export function FundsPage() {
         <FundForm
           fund={editing}
           prefill={prefill}
-          categories={asList<Category>(categories.data)}
+          categories={sortedByName(asList<Category>(categories.data))}
           onDone={(created) => {
             setFormOpen(false);
             setEditing(null);

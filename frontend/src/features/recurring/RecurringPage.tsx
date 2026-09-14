@@ -28,6 +28,7 @@ import type {
 
 import { TemplateForm } from './TemplateForm';
 import { useMaskedFieldClass } from '../../lib/privacy';
+import { sortedByName } from '../../lib/categories';
 
 /**
  * The fixed-cost ritual, as a checklist.
@@ -180,7 +181,7 @@ export function RecurringPage() {
       {formOpen && (
         <TemplateForm
           template={editing}
-          categories={asList<Category>(categories.data)}
+          categories={sortedByName(asList<Category>(categories.data))}
           defaultPeriod={{ year, month }}
           onDone={() => {
             setFormOpen(false);
