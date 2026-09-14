@@ -3014,3 +3014,52 @@ async fn savings_are_never_an_anomaly_and_a_quiet_month_reports_nothing() {
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+/// A booking made today is dated today, not the first of the month.
+///
+/// The day is not cosmetic: it is what a KitchenOwl push files the expense under,
+/// and defaulting to the 1st put a pushed booking two weeks up a date-sorted list,
+/// where its author went looking at the top and concluded the push had failed. It
+/// also decides what a bank CSV can be reconciled against.
+#[tokio::test]
+async fn a_booking_created_today_carries_today() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let today = chrono::Utc::now().date_naive();
+
+    let (status, created) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({
+                "year": today.format("%Y").to_string().parse::<i32>().unwrap(),
+                "month": today.format("%m").to_string().parse::<u8>().unwrap(),
+                "kind": "expense", "amountCents": 7356, "comment": "Kaufland"
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["bookedOn"], today.to_string());
+
+    // A month that is not this one has no defensible day, so it keeps the 1st.
+    let (_, other) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({"year": 2026, "month": 1, "kind": "expense",
+                        "amountCents": 500, "comment": "Kaufland"})),
+        )
+        .await;
+    assert_eq!(other["bookedOn"], "2026-01-01");
+
+    // And an explicit day always wins.
+    let (_, exact) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({"year": 2026, "month": 1, "bookedOn": "2026-01-17",
+                        "kind": "expense", "amountCents": 500, "comment": "Kaufland"})),
+        )
+        .await;
+    assert_eq!(exact["bookedOn"], "2026-01-17");
+}

@@ -4,9 +4,10 @@
     "title": "Finanzen",
     "description": "Haushaltsbuch. Beträge sind durchgehend ganze Cent; jedes Geldfeld endet auf `Cents`. Kategorienamen, Typ-Labels und Kommentare sind Daten und bleiben deutsch. KitchenOwl ist ein getrenntes, paralleles Journal und wird nie mit den persönlichen Buchungen verrechnet.",
     "license": {
-      "name": ""
+      "name": "AGPL-3.0-only",
+      "identifier": "AGPL-3.0-only"
     },
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "servers": [
     {

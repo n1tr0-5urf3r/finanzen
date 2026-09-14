@@ -25,7 +25,7 @@ use crate::{auth::AuthChallenge, error::ErrorBody, models::*};
 #[openapi(
     info(
         title = "Finanzen",
-        version = "0.1.0",
+        version = env!("CARGO_PKG_VERSION"),
         description = "Haushaltsbuch. Beträge sind durchgehend ganze Cent; \
                        jedes Geldfeld endet auf `Cents`. Kategorienamen, Typ-Labels \
                        und Kommentare sind Daten und bleiben deutsch. \

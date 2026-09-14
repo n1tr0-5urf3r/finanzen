@@ -113,6 +113,8 @@ export const de = {
   'bookings.editHint': 'Zeile antippen zum Bearbeiten',
   'bookings.title': 'Buchungen',
   'bookings.new': 'Neu',
+  'bookings.bookedOn': 'Tag',
+  'bookings.bookedOnHint': 'Leer bei importierten Zeilen, die nur den Monat kennen.',
   'bookings.comment': 'Kommentar',
   'bookings.category': 'Kategorie',
   'bookings.type': 'Typ',

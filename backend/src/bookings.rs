@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, Query},
     http::StatusCode,
 };
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate, Utc};
 use sqlx::{PgConnection, Row};
 use uuid::Uuid;
 
@@ -350,11 +350,22 @@ pub async fn create(
     // become transfers without a hard-coded list in the binary.
     let kind = resolved.kind_override.unwrap_or(body.kind);
 
-    // Bookings created through the API always carry a day; the schema enforces it for
-    // every origin except imported history.
-    let booked_on = body
-        .booked_on
-        .or_else(|| NaiveDate::from_ymd_opt(body.year, body.month as u32, 1));
+    // Bookings created through the API always carry a day; the schema enforces it
+    // for every origin except imported history.
+    //
+    // Today's date when the booking is in today's month, not the 1st. A booking
+    // added on the 14th is a thing that happened on the 14th, and the day matters
+    // beyond tidiness: it is what a KitchenOwl push files the expense under, and
+    // "the 1st" put a push two weeks up the list where nobody looked for it.
+    // Another month has no defensible day, so it keeps the 1st.
+    let booked_on = body.booked_on.or_else(|| {
+        let today = Utc::now().date_naive();
+        if today.year() == body.year && today.month() == body.month as u32 {
+            Some(today)
+        } else {
+            NaiveDate::from_ymd_opt(body.year, body.month as u32, 1)
+        }
+    });
 
     let id = Uuid::new_v4();
     sqlx::query(

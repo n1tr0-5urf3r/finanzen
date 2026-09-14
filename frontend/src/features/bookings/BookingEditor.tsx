@@ -36,6 +36,10 @@ export function BookingEditor({
   const [kind, setKind] = useState<BookingKind>(booking.kind);
   const [month, setMonth] = useState(booking.month);
   const [year, setYear] = useState(booking.year);
+  // Imported history genuinely has no day — 1.404 legacy rows are month-only — so
+  // an empty field is a real state here, not a missing value. Setting one is the
+  // "Tag nachtragen" the month-only import always implied.
+  const [bookedOn, setBookedOn] = useState(booking.bookedOn ?? '');
   const [taxRelevant, setTaxRelevant] = useState(booking.taxRelevant);
   // `''` means "let the rule decide"; a value is an explicit manual override.
   const [categoryId, setCategoryId] = useState(
@@ -64,6 +68,10 @@ export function BookingEditor({
         ...jsonBody({
           year,
           month,
+          // Omitted rather than sent empty: the server preserves the existing day
+          // when it is absent, and clearing one is not what an empty field means
+          // on a row that never had one.
+          ...(bookedOn ? { bookedOn } : {}),
           kind,
           amountCents: cents,
           comment: comment.trim(),
@@ -169,6 +177,22 @@ export function BookingEditor({
                 onChange={(e) => setYear(Number(e.target.value))}
               />
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="be-day">{t('bookings.bookedOn')}</label>
+            <input
+              id="be-day"
+              className="input"
+              type="date"
+              value={bookedOn}
+              // The schema keeps the day inside its own month, so the picker says
+              // so rather than letting the server reject it afterwards.
+              min={`${year}-${String(month).padStart(2, '0')}-01`}
+              max={`${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`}
+              onChange={(e) => setBookedOn(e.target.value)}
+            />
+            <span className="footnote">{t('bookings.bookedOnHint')}</span>
           </div>
 
           <div className="field">

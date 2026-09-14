@@ -99,6 +99,8 @@ export const en: Messages = {
   'bookings.editHint': 'Tap a row to edit',
   'bookings.title': 'Bookings',
   'bookings.new': 'New',
+  'bookings.bookedOn': 'Day',
+  'bookings.bookedOnHint': 'Empty on imported rows that only know their month.',
   'bookings.comment': 'Comment',
   'bookings.category': 'Category',
   'bookings.type': 'Type',
