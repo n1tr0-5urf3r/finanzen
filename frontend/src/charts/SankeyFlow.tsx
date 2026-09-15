@@ -160,15 +160,27 @@ export function SankeyFlow({
     };
   });
 
-  function nodeLabel(placed: Placed, side: 'source' | 'target') {
+  /**
+   * Room for a second line is not a property of the node but of its NEIGHBOURS:
+   * two labels collide when their centres are closer than the block is tall.
+   * Deciding on the node's own height alone dropped the figure from a band that
+   * was a hair thinner than the one above it, which reads as missing data rather
+   * than as a deliberate omission.
+   */
+  function nodeLabel(placed: Placed, side: 'source' | 'target', column: Placed[], i: number) {
     const { node, y, h } = placed;
     const source = side === 'source';
+    const centreOf = (p: Placed | undefined) => (p ? p.y + p.h / 2 : null);
+    const here = y + h / 2;
+    const above = centreOf(column[i - 1]);
+    const below = centreOf(column[i + 1]);
+    const need = narrow ? 52 : 32;
+    const roomAbove = above === null || here - above >= need;
+    const roomBelow = below === null || below - here >= need;
     const x = source ? SRC_X - LABEL_GAP : TGT_X + NODE_W + LABEL_GAP;
     const anchor = source ? 'end' : 'start';
-    const centre = y + h / 2 + (narrow ? -6 : 0);
-    // Two lines need the node to be tall enough for both to sit inside its own
-    // band; otherwise the name alone, and the figure stays in the table.
-    const twoLines = h >= (narrow ? 52 : 34);
+    const centre = here + (narrow ? -6 : 0);
+    const twoLines = roomAbove && roomBelow;
     return (
       <>
         <text
@@ -231,7 +243,7 @@ export function SankeyFlow({
           {`${model.hub.label} · ${mask(formatEuro(model.hub.amountCents))}`}
         </text>
 
-        {sources.map((s) => (
+        {sources.map((s, i) => (
           <g key={s.node.key}>
             <title>{`${s.node.label} · ${mask(formatEuro(s.node.amountCents))}`}</title>
             <rect
@@ -241,11 +253,11 @@ export function SankeyFlow({
               height={s.h}
               className={`flow__node ${toneClass(s.node.tone)}`}
             />
-            {nodeLabel(s, 'source')}
+            {nodeLabel(s, 'source', sources, i)}
           </g>
         ))}
 
-        {targets.map((tgt) => {
+        {targets.map((tgt, i) => {
           const code = tgt.node.typeCode;
           const clickable = Boolean(code && (tgt.node.expandable || tgt.node.nested) && onToggleType);
           const action = tgt.node.nested ? labels.collapse : labels.expand;
@@ -282,7 +294,7 @@ export function SankeyFlow({
                   expanded && tgt.node.typeCode === expanded ? ' flow__node--open' : ''
                 }`}
               />
-              {nodeLabel(tgt, 'target')}
+              {nodeLabel(tgt, 'target', targets, i)}
             </g>
           );
         })}

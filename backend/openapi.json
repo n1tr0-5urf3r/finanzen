@@ -6273,7 +6273,8 @@
         "required": [
           "name",
           "amountCents",
-          "expenseCount"
+          "expenseCount",
+          "monthlyAmountCents"
         ],
         "properties": {
           "amountCents": {
@@ -6290,6 +6291,14 @@
               "null"
             ],
             "format": "int64"
+          },
+          "monthlyAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Twelve slots, Januar first. The flow diagram shows one month at a time and\nthe year total alone cannot answer \"who fronted June\"."
           },
           "name": {
             "type": "string"

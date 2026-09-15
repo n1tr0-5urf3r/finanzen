@@ -1,4 +1,10 @@
-import type { CategoryAnalysisRow, CategoryTypeCode, CategoryTypeSummary } from './types';
+import type {
+  CategoryAnalysisRow,
+  CategoryTypeCode,
+  CategoryTypeSummary,
+  KoCategoryAnalysisRow,
+  KoPayerShare,
+} from './types';
 
 /**
  * Where the money came from and where it went, as one balanced flow.
@@ -292,5 +298,141 @@ export function buildFlow({
     saldoCents,
     totalCents,
     creditCount,
+  };
+}
+
+// ────────────────────────────────────────────────────────────── the household
+
+/**
+ * The same diagram for the household ledger, which is a different shape of
+ * question.
+ *
+ * There is no income here and nothing nets: KitchenOwl records what the household
+ * spent, full stop. What it does have, and the personal ledger cannot, is a
+ * SECOND fact about the same euro — who fronted it — so the left column is the
+ * payers rather than sources of income. Both sides are the same total seen twice:
+ * who paid it, and what it was for.
+ *
+ * The right column can instead show the split, which is the household's other
+ * question: of everything spent, how much is mine to carry. The two never mix —
+ * `categories` and `shares` are two decompositions of one total, never summed,
+ * which is the rule that governs every figure on the household screens.
+ */
+export type KoFlowDetail = 'categories' | 'shares';
+
+export interface KoFlowLabels {
+  hub: string;
+  mine: string;
+  others: string;
+  noCategory: string;
+  unknownPayer: string;
+}
+
+export function buildKoFlow({
+  payers,
+  rows,
+  month = null,
+  detail = 'categories',
+  labels,
+}: {
+  payers: KoPayerShare[];
+  rows: KoCategoryAnalysisRow[];
+  month?: number | null;
+  detail?: KoFlowDetail;
+  labels: KoFlowLabels;
+}): FlowModel {
+  const amountOf = (monthly: number[], total: number) =>
+    month === null ? total : (monthly[month - 1] ?? 0);
+
+  const sources: FlowNode[] = [];
+  const targets: FlowNode[] = [];
+  const links: FlowLink[] = [];
+
+  // Household colours carry no income/expense meaning — nothing here is income —
+  // so the payers are told apart by the two neutral node tones instead.
+  const payerTones: FlowTone[] = ['income', 'credit', 'sonstiges', 'none'];
+
+  payers
+    .map((payer) => ({
+      payer,
+      amountCents: amountOf(payer.monthlyAmountCents ?? [], payer.amountCents),
+    }))
+    .filter((p) => p.amountCents > 0)
+    .sort((a, b) => b.amountCents - a.amountCents)
+    .forEach(({ payer, amountCents }, i) => {
+      const key = `payer:${payer.memberId ?? 'unknown'}`;
+      const tone = payerTones[i % payerTones.length] as FlowTone;
+      sources.push({
+        key,
+        label: payer.name || labels.unknownPayer,
+        amountCents,
+        tone,
+        column: 'source',
+      });
+      links.push({ from: key, to: 'hub', amountCents, tone });
+    });
+
+  const inflowCents = sources.reduce((sum, n) => sum + n.amountCents, 0);
+
+  if (detail === 'shares') {
+    const mine = rows.reduce(
+      (sum, r) => sum + amountOf(r.monthlyOwnShareCents ?? [], r.ownShareCents),
+      0,
+    );
+    const total = rows.reduce((sum, r) => sum + amountOf(r.monthlyAmountCents ?? [], r.amountCents), 0);
+    for (const [key, label, amountCents, tone] of [
+      ['share:mine', labels.mine, mine, 'variabel'],
+      ['share:others', labels.others, total - mine, 'sonstiges'],
+    ] as [string, string, number, FlowTone][]) {
+      if (amountCents <= 0) continue;
+      targets.push({ key, label, amountCents, tone, column: 'target' });
+      links.push({ from: 'hub', to: key, amountCents, tone });
+    }
+  } else {
+    // One band per KitchenOwl category. They have no types, so the colour only
+    // has to tell them apart; the uncategorised one is deliberately the grey.
+    const tones: FlowTone[] = ['fixkosten', 'variabel', 'sparen', 'sonstiges', 'credit', 'income'];
+    rows
+      .map((row) => ({
+        row,
+        amountCents: amountOf(row.monthlyAmountCents ?? [], row.amountCents),
+      }))
+      .filter((r) => r.amountCents > 0)
+      .sort((a, b) => b.amountCents - a.amountCents)
+      .forEach(({ row, amountCents }, i) => {
+        const key = `koCat:${row.koCategoryId ?? 'none'}`;
+        const tone: FlowTone = row.koCategoryName ? (tones[i % tones.length] as FlowTone) : 'none';
+        targets.push({
+          key,
+          label: row.koCategoryName ?? labels.noCategory,
+          amountCents,
+          tone,
+          column: 'target',
+        });
+        links.push({ from: 'hub', to: key, amountCents, tone });
+      });
+  }
+
+  const outflowCents = targets.reduce((sum, n) => sum + n.amountCents, 0);
+
+  return {
+    sources,
+    hub: {
+      key: 'hub',
+      label: labels.hub,
+      amountCents: Math.max(inflowCents, outflowCents),
+      tone: 'income',
+      column: 'hub',
+    },
+    targets,
+    links,
+    inflowCents,
+    outflowCents,
+    // Both sides are the same total by construction; a household ledger has no
+    // saldo, and pretending it has one would invite comparing it with the
+    // personal balance.
+    saldoCents: 0,
+    totalCents: Math.max(inflowCents, outflowCents),
+    creditCount: 0,
   };
 }

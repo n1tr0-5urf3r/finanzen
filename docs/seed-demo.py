@@ -101,3 +101,46 @@ call("/years", {"year": 2026, "openingBalanceCents": 1284350}, cookie=cookie)
 d = call("/dashboard?year=2026", cookie=cookie)[1]
 print(f"{n} invented bookings · Bilanz {d['balanceCents']/100:.2f} · ohne Kategorie {d['uncategorizedCount']}")
 open('/tmp/demo-cookie.txt','w').write(cookie)
+
+# The household mirror, for the KitchenOwl screenshots. It normally arrives from a
+# live KitchenOwl instance; the demo has none, so two invented members and 28
+# invented expenses are written straight into the mirror tables instead. Run the
+# SQL below against the demo database as a superuser (RLS is forced, so the app
+# role could not write another user's rows):
+#
+#   docker exec -i demo-db psql -U postgres -d finanzen <<'SQL'
+#   WITH u AS (SELECT id FROM users WHERE username = 'demo')
+#   INSERT INTO ko_members (user_id, member_id, name, username, is_admin, is_owner,
+#                           balance_cents, is_me)
+#   SELECT u.id, m.member_id, m.name, m.username, false, m.member_id = 1, m.balance,
+#          m.member_id = 1
+#     FROM u, (VALUES (1,'Alex','alex',4210), (2,'Robin','robin',-4210))
+#          AS m(member_id, name, username, balance);
+#
+#   WITH u AS (SELECT id FROM users WHERE username = 'demo'),
+#        e AS (SELECT (ARRAY['Wocheneinkauf','Essen gehen','Ausflug','Haushalt',
+#                            'Hobbies'])[1 + (i % 5)] AS cat,
+#                     1 + (i % 5) AS cat_id,
+#                     (ARRAY['Supermarkt','Pizzeria','Zoo','Baumarkt',
+#                            'Kletterhalle'])[1 + (i % 5)] AS name,
+#                     DATE '2026-01-05' + (i * 9) AS d,
+#                     (1500 + ((i * 7919) % 6500))::bigint AS cents,
+#                     CASE WHEN i % 3 = 0 THEN 1 ELSE 2 END AS payer, i
+#                FROM generate_series(0, 27) AS i)
+#   INSERT INTO ko_expenses (id, user_id, external_id, name, expense_date,
+#                            amount_cents, own_share_cents, paid_by_id, paid_for,
+#                            ko_category_id, ko_category_name,
+#                            exclude_from_statistics, remote_hash)
+#   SELECT gen_random_uuid(), u.id, 9000 + e.i, e.name, e.d, e.cents, e.cents / 2,
+#          e.payer, '[{"user_id":1,"factor":1},{"user_id":2,"factor":1}]'::jsonb,
+#          e.cat_id, e.cat, false, 'demo-' || e.i
+#     FROM u, e;
+#
+#   -- and the two rows that mark the integration as set up for this account
+#   INSERT INTO ko_sync_state (user_id, max_seen_id, household_id, household_name)
+#   SELECT id, 9027, 1, 'Demo-WG' FROM users WHERE username = 'demo';
+#   INSERT INTO ko_participants (user_id) SELECT id FROM users WHERE username = 'demo';
+#   SQL
+#
+# The app then needs KITCHENOWL_URL/_TOKEN set to anything and every sync interval
+# at 0, so the screens render from the mirror without reaching for a server.

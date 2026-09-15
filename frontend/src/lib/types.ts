@@ -572,6 +572,8 @@ export interface KoPayerShare {
   name: string;
   amountCents: number;
   expenseCount: number;
+  /** Twelve slots, Januar first. */
+  monthlyAmountCents: number[];
 }
 
 export interface KoCategoryAnalysis {

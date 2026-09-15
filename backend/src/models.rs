@@ -1420,6 +1420,9 @@ pub struct KoPayerShare {
     pub name: String,
     pub amount_cents: i64,
     pub expense_count: i64,
+    /// Twelve slots, Januar first. The flow diagram shows one month at a time and
+    /// the year total alone cannot answer "who fronted June".
+    pub monthly_amount_cents: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

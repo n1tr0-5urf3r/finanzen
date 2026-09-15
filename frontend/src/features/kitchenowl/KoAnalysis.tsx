@@ -14,6 +14,7 @@ import { useT } from '../../lib/i18n';
 import { useMaskAmount } from '../../lib/privacy';
 import { qk } from '../../lib/queryKeys';
 import { KoCompare } from './KoCompare';
+import { KoFlow, KoFlowPeriodPicker } from './KoFlow';
 import type {
   KoCategoryAnalysis,
   KoExpense,
@@ -57,7 +58,9 @@ export function KoAnalysis() {
   // long screen: the comparison doubles every column, and a table that wide stops
   // being readable on the phone this app is mostly used on.
   const year = Number(params.get('jahr')) || new Date().getFullYear();
-  const view: 'year' | 'compare' = params.get('zeitraum') === 'vergleich' ? 'compare' : 'year';
+  const zeitraum = params.get('zeitraum');
+  const view: 'year' | 'flow' | 'compare' =
+    zeitraum === 'vergleich' ? 'compare' : zeitraum === 'fluss' ? 'flow' : 'year';
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -110,6 +113,13 @@ export function KoAnalysis() {
         </button>
         <button
           type="button"
+          aria-pressed={view === 'flow'}
+          onClick={() => setParam('zeitraum', 'fluss')}
+        >
+          {t('ko.viewFlow')}
+        </button>
+        <button
+          type="button"
           aria-pressed={view === 'compare'}
           onClick={() => setParam('zeitraum', 'vergleich')}
         >
@@ -129,12 +139,18 @@ export function KoAnalysis() {
             }}
           />
         </div>
+        {view === 'flow' && (
+          <div style={{ minWidth: '10rem' }}>
+            <KoFlowPeriodPicker year={year} />
+          </div>
+        )}
         <p className="footnote" style={{ margin: 0 }}>
-          {t('ko.analysisScope')}
+          {view === 'flow' ? t('koFlow.intro') : t('ko.analysisScope')}
         </p>
       </div>
 
       {view === 'compare' && <KoCompare year={year} />}
+      {view === 'flow' && <KoFlow year={year} />}
 
       {view === 'year' && analysis.isPending && <LoadingState />}
       {view === 'year' && analysis.isError && (

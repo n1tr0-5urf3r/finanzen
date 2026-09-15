@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildFlow, monthsWithActivity, netInPeriod } from './sankey';
-import type { CategoryAnalysisRow, CategoryTypeSummary } from './types';
+import { buildFlow, buildKoFlow, monthsWithActivity, netInPeriod } from './sankey';
+import type {
+  CategoryAnalysisRow,
+  CategoryTypeSummary,
+  KoCategoryAnalysisRow,
+  KoPayerShare,
+} from './types';
 
 const TYPES: CategoryTypeSummary[] = [
   { typeCode: 'einkommen', label: 'Einkommen', netCents: 0, bookingCount: 0 },
@@ -166,5 +171,84 @@ describe('buildFlow', () => {
     const january = buildFlow({ rows, types: TYPES, month: 1, labels: LABELS });
     expect(january.targets.map((n) => n.label)).toEqual(['Übrig']);
     expect(january.outflowCents).toBe(0);
+  });
+});
+
+describe('buildKoFlow', () => {
+  const KO_LABELS = {
+    hub: 'Haushaltsausgaben',
+    mine: 'Mein Anteil',
+    others: 'Anteil der anderen',
+    noCategory: 'Ohne Kategorie',
+    unknownPayer: 'Unbekannt',
+  };
+
+  function koRow(
+    name: string | null,
+    amount: number,
+    own: number,
+    monthlyAmount: number[] = [],
+    monthlyOwn: number[] = [],
+  ): KoCategoryAnalysisRow {
+    return {
+      koCategoryId: name === null ? null : name.length,
+      koCategoryName: name,
+      amountCents: amount,
+      ownShareCents: own,
+      expenseCount: 1,
+      shareOfTotal: 0,
+      averagePerMonthCents: 0,
+      averageOwnSharePerMonthCents: 0,
+      monthlyAmountCents: Array.from({ length: 12 }, (_, i) => monthlyAmount[i] ?? 0),
+      monthlyOwnShareCents: Array.from({ length: 12 }, (_, i) => monthlyOwn[i] ?? 0),
+    };
+  }
+
+  const PAYERS: KoPayerShare[] = [
+    { memberId: 2, name: 'Ante', amountCents: 6000, expenseCount: 3, monthlyAmountCents: [4000, 2000] },
+    { memberId: 1, name: 'Fabi', amountCents: 4000, expenseCount: 2, monthlyAmountCents: [1000, 3000] },
+  ];
+  const KO_ROWS = [
+    koRow('Wocheneinkauf', 7000, 3500, [3500, 3500], [1750, 1750]),
+    koRow(null, 3000, 1500, [1500, 1500], [750, 750]),
+  ];
+
+  it('reads as who fronted it on the left and what for on the right', () => {
+    const flow = buildKoFlow({ payers: PAYERS, rows: KO_ROWS, labels: KO_LABELS });
+
+    expect(flow.sources.map((n) => n.label)).toEqual(['Ante', 'Fabi']);
+    expect(flow.targets.map((n) => n.label)).toEqual(['Wocheneinkauf', 'Ohne Kategorie']);
+    expect(flow.inflowCents).toBe(10000);
+    expect(flow.outflowCents).toBe(10000);
+    // A household ledger has no balance, and must not appear to have one.
+    expect(flow.saldoCents).toBe(0);
+    expect(flow.targets.some((n) => n.key === 'surplus')).toBe(false);
+  });
+
+  it('splits the same total into the shares instead, on request', () => {
+    const flow = buildKoFlow({
+      payers: PAYERS,
+      rows: KO_ROWS,
+      detail: 'shares',
+      labels: KO_LABELS,
+    });
+
+    expect(flow.targets.map((n) => [n.label, n.amountCents])).toEqual([
+      ['Mein Anteil', 5000],
+      ['Anteil der anderen', 5000],
+    ]);
+    // ...and it is still the same total as the payer side.
+    expect(flow.outflowCents).toBe(flow.inflowCents);
+  });
+
+  it('follows one month through both columns', () => {
+    const flow = buildKoFlow({ payers: PAYERS, rows: KO_ROWS, month: 2, labels: KO_LABELS });
+
+    expect(flow.sources.map((n) => [n.label, n.amountCents])).toEqual([
+      ['Fabi', 3000],
+      ['Ante', 2000],
+    ]);
+    expect(flow.totalCents).toBe(5000);
+    expect(flow.outflowCents).toBe(5000);
   });
 });

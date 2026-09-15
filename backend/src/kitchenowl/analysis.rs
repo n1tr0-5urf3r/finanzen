@@ -156,27 +156,48 @@ pub async fn categories(
     // payer there — and it is half of what a shared ledger is for.
     let payer_rows = sqlx::query(&format!(
         "SELECT e.paid_by_id AS id, COALESCE(m.name, '?') AS name, \
+                EXTRACT(MONTH FROM e.expense_date)::int AS mon, \
                 COALESCE(SUM(e.amount_cents), 0)::bigint AS amount, \
                 count(*)::bigint AS n \
            FROM ko_expenses e \
            LEFT JOIN ko_members m \
                   ON m.user_id = e.user_id AND m.member_id = e.paid_by_id \
           WHERE {COUNTED} \
-          GROUP BY e.paid_by_id, m.name ORDER BY amount DESC"
+          GROUP BY e.paid_by_id, m.name, mon ORDER BY amount DESC"
     ))
     .bind(q.year)
     .fetch_all(ctx.tenant.conn())
     .await?;
 
-    let paid_by = payer_rows
-        .iter()
-        .map(|r| KoPayerShare {
-            member_id: r.get("id"),
-            name: r.get("name"),
-            amount_cents: r.get("amount"),
-            expense_count: r.get("n"),
-        })
-        .collect();
+    // One row per payer with twelve slots, folded in Rust for the same reason the
+    // categories above are: a crosstab would need the payer set up front.
+    let mut paid_by: Vec<KoPayerShare> = Vec::new();
+    for r in &payer_rows {
+        let id: Option<i64> = r.get("id");
+        let month: i32 = r.get("mon");
+        let amount: i64 = r.get("amount");
+        let n: i64 = r.get("n");
+        let slot = match paid_by.iter().position(|p| p.member_id == id) {
+            Some(i) => &mut paid_by[i],
+            None => {
+                paid_by.push(KoPayerShare {
+                    member_id: id,
+                    name: r.get("name"),
+                    amount_cents: 0,
+                    expense_count: 0,
+                    monthly_amount_cents: vec![0; 12],
+                });
+                paid_by.last_mut().expect("just pushed")
+            }
+        };
+        slot.amount_cents += amount;
+        slot.expense_count += n;
+        if (1..=12).contains(&month) {
+            slot.monthly_amount_cents[(month - 1) as usize] += amount;
+        }
+    }
+    // The ORDER BY above orders the month rows, not the payers.
+    paid_by.sort_by_key(|p| std::cmp::Reverse(p.amount_cents));
 
     let years: Vec<i32> = sqlx::query_scalar(
         "SELECT DISTINCT EXTRACT(YEAR FROM e.expense_date)::int \

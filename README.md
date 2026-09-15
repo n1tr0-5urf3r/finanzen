@@ -53,7 +53,8 @@ because that is the format the data was recorded in.
   one total, back out into the cost buckets or into what was left over. Switch the
   right-hand side between the five types and every single category, or tap one type
   to break out just that one. A month where a reimbursement lands shows the category
-  on the *inflow* side, because that is where the money went.
+  on the *inflow* side, because that is where the money went. The household ledger
+  has the same diagram, asking its own question: who fronted the money, and what for.
 - **Two-layer categorisation** — a rule table maps comments; a manual assignment on a
   single booking overrides it. Changing a rule recategorises the past as well, and
   says how many bookings it moved.
@@ -86,6 +87,8 @@ because that is the format the data was recorded in.
 | **Quick add** — the reason the project exists | **Mobile** — tables become cards, and nothing is ever wider than the screen |
 | <a href="docs/screenshots/pruefliste.png"><img src="docs/screenshots/pruefliste.png" alt="Review queue"></a> | <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Tax"></a> |
 | **Review queue** — 238 unknown comments, sorted by frequency | **Tax** — receipt list with camera upload and CSV/PDF export |
+| <a href="docs/screenshots/geldfluss.png"><img src="docs/screenshots/geldfluss.png" alt="Money flow"></a> | <a href="docs/screenshots/haushalt-fluss.png"><img src="docs/screenshots/haushalt-fluss.png" alt="Household money flow"></a> |
+| **Money flow** — what came in, through one total, back out; switchable to every category | **Household flow** — the same picture for the shared ledger: who fronted it, and what for |
 
 <sub>Every screenshot shows invented sample data.</sub>
 
