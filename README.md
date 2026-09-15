@@ -113,6 +113,26 @@ Everything via `.env`; `.env.example` is fully commented.
 | `KITCHENOWL_URL` / `KITCHENOWL_TOKEN` | Leaving them empty disables the integration entirely. |
 | `KITCHENOWL_*_SECONDS` | Sync intervals. `0` switches a loop off; otherwise the minimum is 60 s. |
 | `IMPORT_FUZZY_MIN_CONFIDENCE` | Default `0.92`. Lower produces suggestions you accept reflexively and that are wrong. |
+| `DATA_ROOT` | Where the database and the receipts live on the host. Default `./data`. |
+
+## Backup
+
+Everything the application keeps is under `DATA_ROOT` (default `./data`) as plain
+host directories — `postgres/` and `receipts/` — so a backup script can see them
+without extracting anything from a container.
+
+**Do not copy `data/postgres` while the server is running.** Those files are only
+consistent when it is stopped; a live copy looks fine and may refuse to start on
+the day you need it. `deploy/backup.sh` asks the running server for a consistent
+dump instead, and tars the receipts beside it:
+
+```bash
+deploy/backup.sh /srv/backups     # writes finanzen_<date>.sql.gz and receipts_<date>.tar.gz
+```
+
+Restoring is the line the script prints when it finishes. If you would rather copy
+the directory as it is, stop the stack first (`docker compose down`) — then the
+files are a valid snapshot.
 
 ## License
 

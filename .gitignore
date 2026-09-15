@@ -32,3 +32,5 @@ data/
 #   cargo run --bin extract-fixtures -- ../konten_2026_auswertung.xlsx ../konten.ods tests/fixtures
 backend/tests/fixtures/*.json
 .claude/
+data/
+backups/

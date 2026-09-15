@@ -12,7 +12,10 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
       TZ: ${APP_TIMEZONE:-Europe/Berlin}
     volumes:
-      - finanzen-db:/var/lib/postgresql/data
+      # Bind mounts rather than named volumes: everything this application keeps
+      # lives under one host directory a backup script can see, instead of inside
+      # /var/lib/docker where it has to be extracted from a container first.
+      - ${DATA_ROOT:-./data}/postgres:/var/lib/postgresql/data
       - ./deploy/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-finanzen}"]
@@ -43,10 +46,6 @@ services:
       # Loopback only: TLS terminates at the nginx reverse proxy on the host.
       - "127.0.0.1:${HOST_PORT:-3100}:3100"
     volumes:
-      - finanzen-data:/app/data
+      - ${DATA_ROOT:-./data}/receipts:/app/data
     security_opt:
       - no-new-privileges:true
-
-volumes:
-  finanzen-db:
-  finanzen-data:
