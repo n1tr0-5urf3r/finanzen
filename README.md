@@ -49,6 +49,11 @@ because that is the format the data was recorded in.
 - **Month by month, per category or per comment** — "how much do I spend on fuel,
   and is it getting worse". Click a category in the table to chart it, then expand
   the bookings behind any bar without leaving the page.
+- **Money flow** — one year, or one month, as a flow diagram: what came in, through
+  one total, back out into the cost buckets or into what was left over. Switch the
+  right-hand side between the five types and every single category, or tap one type
+  to break out just that one. A month where a reimbursement lands shows the category
+  on the *inflow* side, because that is where the money went.
 - **Two-layer categorisation** — a rule table maps comments; a manual assignment on a
   single booking overrides it. Changing a rule recategorises the past as well, and
   says how many bookings it moved.

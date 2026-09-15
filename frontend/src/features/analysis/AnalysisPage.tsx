@@ -7,8 +7,9 @@ import { useT } from '../../lib/i18n';
 import type { MessageKey } from '../../lib/messages/de';
 import { CompareTab } from '../compare/CompareTab';
 import { CategoryTab } from './CategoryTab';
+import { FlowPeriodPicker, FlowTab } from './FlowTab';
 
-type Tab = 'kategorien' | 'vergleich';
+type Tab = 'kategorien' | 'fluss' | 'vergleich';
 
 /**
  * Everything that answers "where did the money go this year".
@@ -27,7 +28,8 @@ export function AnalysisPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const year = Number(params.get('jahr')) || new Date().getFullYear();
-  const tab: Tab = params.get('ansicht') === 'vergleich' ? 'vergleich' : 'kategorien';
+  const view = params.get('ansicht');
+  const tab: Tab = view === 'vergleich' ? 'vergleich' : view === 'fluss' ? 'fluss' : 'kategorien';
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -48,13 +50,20 @@ export function AnalysisPage() {
         // Each tab states its own convention: the breakdown reads as a flow, the
         // comparison explains what it compares. One subtitle for both would be
         // wrong for one of them.
-        subtitle={tab === 'vergleich' ? t('compare.intro') : t('analysis.intro')}
+        subtitle={
+          tab === 'vergleich'
+            ? t('compare.intro')
+            : tab === 'fluss'
+              ? t('flow.intro')
+              : t('analysis.intro')
+        }
       />
 
       <div className="segmented tabs" role="tablist">
         {(
           [
             ['kategorien', 'analysis.tabCategories'],
+            ['fluss', 'analysis.tabFlow'],
             ['vergleich', 'analysis.tabCompare'],
           ] as [Tab, MessageKey][]
         ).map(([value, labelKey]) => (
@@ -79,10 +88,17 @@ export function AnalysisPage() {
             onChange={(next) => setParam('jahr', String(next))}
           />
         </div>
+        {tab === 'fluss' && (
+          <div style={{ minWidth: '10rem' }}>
+            <FlowPeriodPicker year={year} />
+          </div>
+        )}
         <ScopeNote transfersIncluded={false} />
       </div>
 
-      {tab === 'vergleich' ? <CompareTab year={year} /> : <CategoryTab year={year} />}
+      {tab === 'vergleich' && <CompareTab year={year} />}
+      {tab === 'fluss' && <FlowTab year={year} />}
+      {tab === 'kategorien' && <CategoryTab year={year} />}
     </>
   );
 }
