@@ -87,7 +87,7 @@ because that is the format the data was recorded in.
 ## Quick start
 
 ```bash
-git clone https://github.com/n1tr0-5urf3r/Finanzen.git finanzen && cd finanzen
+git clone https://github.com/n1tr0-5urf3r/finanzen.git finanzen && cd finanzen
 cp .env.example .env
 $EDITOR .env          # APP_PUBLIC_URL, APP_SESSION_SECRET and both DB passwords
 docker compose up -d
@@ -99,6 +99,17 @@ further accounts are created by that first account under **Settings**.
 Behind a TLS proxy: `nginx.finanzen.conf` is a working example. `APP_PUBLIC_URL` must
 be the exact public https URL — the session cookie's `Secure` flag and the CSRF check
 both depend on it.
+
+`docker compose up -d` builds the image from this checkout. To run the published one
+instead, drop the `build:` block and point `CONTAINER_IMAGE` at the package CI pushes
+on every commit to the default branch:
+
+```
+CONTAINER_IMAGE=ghcr.io/n1tr0-5urf3r/finanzen
+IMAGE_TAG=latest      # or sha-<commit> to pin
+```
+
+Then `docker compose pull && docker compose up -d` updates without a checkout at all.
 
 ## Configuration
 
