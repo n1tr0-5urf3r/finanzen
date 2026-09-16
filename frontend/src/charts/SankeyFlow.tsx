@@ -8,21 +8,29 @@ import type { CategoryTypeCode } from '../lib/types';
 import type { FlowModel, FlowNode, FlowTone } from '../lib/sankey';
 
 /* The viewBox is 720 units wide like every other chart here, and the columns are
-   placed so that the two label gutters survive the phone font size: below 560px
-   the CSS draws text at 22 units, so 150 units on the left is about 12 characters
-   and 200 on the right about 16. Longer names are cut with an ellipsis and kept
-   whole in the node's tooltip and in the data table underneath — which is visible
-   on exactly those screens. Nothing is ever drawn wider than the viewBox: a chart
-   wider than the phone makes the whole page wider than the phone. */
-const SRC_X = 150;
-const HUB_X = 330;
-const TGT_X = 500;
+   placed so that the label gutters survive the phone font size: below 560px the
+   CSS draws text at 22 units, so 150 units is about 12 characters. Longer names
+   are cut with an ellipsis and kept whole in the node's tooltip and in the data
+   table underneath — which is visible on exactly those screens. Nothing is ever
+   drawn wider than the viewBox: a chart wider than the phone makes the whole page
+   wider than the phone.
+
+   Fanning the types out into their categories adds a fourth column, and 720
+   units cannot carry three label gutters. So in that layout the middle column
+   labels itself ABOVE its own band, in the gap the padding opens up, and the two
+   outer gutters keep the rest. */
+const COLUMNS = {
+  three: { src: 150, hub: 330, tgt: 500, leaf: 0 },
+  four: { src: 126, hub: 276, tgt: 410, leaf: 560 },
+};
 const NODE_W = 10;
 const LABEL_GAP = 8;
 
 const TOP = 30;
 const BOTTOM = 12;
-const PAD = 14;
+/* Room between two nodes of a column. The four-column layout needs more of it,
+   because the type labels live in that gap. */
+const PAD = { three: { wide: 14, narrow: 14 }, four: { wide: 24, narrow: 38 } };
 
 /* How many characters fit a gutter, and how tall a node's slot is. Both depend on
    the rendered scale, which depends on the screen: a phone draws this 720-unit
@@ -31,6 +39,7 @@ const PAD = 14;
    there. Same data, two geometries. */
 const SRC_CHARS = { wide: 22, narrow: 11 };
 const TGT_CHARS = { wide: 26, narrow: 15 };
+const LEAF_CHARS = { wide: 20, narrow: 11 };
 const SLOT = { wide: 58, narrow: 104 };
 const MIN_HEIGHT = { wide: 300, narrow: 520 };
 
@@ -64,15 +73,15 @@ interface Placed {
   h: number;
 }
 
-/** Stack a column, centred in the space the taller column needs. */
-function place(nodes: FlowNode[], k: number, usable: number): Placed[] {
+/** Stack a column, centred in the space the tallest column needs. */
+function place(nodes: FlowNode[], k: number, usable: number, pad: number): Placed[] {
   const bodies = nodes.map((n) => Math.max(1, n.amountCents * k));
-  const used = bodies.reduce((a, b) => a + b, 0) + Math.max(0, nodes.length - 1) * PAD;
+  const used = bodies.reduce((a, b) => a + b, 0) + Math.max(0, nodes.length - 1) * pad;
   let y = TOP + Math.max(0, (usable - used) / 2);
   return nodes.map((node, i) => {
     const h = bodies[i] as number;
     const placed = { node, y, h };
-    y += h + PAD;
+    y += h + pad;
     return placed;
   });
 }
@@ -96,6 +105,10 @@ function ribbon(x0: number, y0: number, x1: number, y1: number, h: number): stri
  * Every band's width is its share of the same total, both columns are drawn to
  * one scale, and the two sides balance by construction — so an eye can read
  * "half of it went to fixed costs" off the picture without reading a number.
+ *
+ * With `model.leaves` filled, the targets fan out once more into their own
+ * categories. Same totals, one column further: the type keeps its band and its
+ * subtotal and the detail hangs off it, instead of the two being alternatives.
  */
 export function SankeyFlow({
   title,
@@ -118,16 +131,48 @@ export function SankeyFlow({
   const narrow = useNarrow();
   const size = narrow ? 'narrow' : 'wide';
 
-  const count = Math.max(model.sources.length, model.targets.length, 1);
+  const fan = model.leaves.length > 0;
+  const shape = fan ? 'four' : 'three';
+  const x = COLUMNS[shape];
+  const pad = PAD[shape][size];
+
+  const count = Math.max(model.sources.length, model.targets.length, model.leaves.length, 1);
+  // The fanned-out layout is allowed to be a good deal taller: it is opt-in, and
+  // thirty categories squeezed into the three-column cap is the crowding this
+  // switch exists to let you choose.
   const height = Math.min(
-    1600,
+    fan ? 2600 : 1600,
     Math.max(MIN_HEIGHT[size], TOP + BOTTOM + count * SLOT[size]),
   );
-  const usable = height - TOP - BOTTOM - Math.max(0, count - 1) * PAD;
+  const usable = height - TOP - BOTTOM - Math.max(0, count - 1) * pad;
   const k = model.totalCents > 0 ? usable / model.totalCents : 0;
 
-  const sources = place(model.sources, k, usable);
-  const targets = place(model.targets, k, usable);
+  const sources = place(model.sources, k, usable, pad);
+  const leaves = place(model.leaves, k, usable, pad);
+  const targets = place(model.targets, k, usable, pad);
+
+  // With a fourth column the middle one belongs to its children, not to a stack
+  // of its own: each type is centred on the block of categories hanging off it.
+  // Its own band is never taller than that block (the block carries the padding
+  // as well), so centring cannot make two types overlap.
+  const childrenOf = new Map<string, Placed[]>();
+  if (fan) {
+    const parent = new Map(model.links.map((link) => [link.to, link.from] as const));
+    for (const leaf of leaves) {
+      const key = parent.get(leaf.node.key);
+      if (key === undefined) continue;
+      const bucket = childrenOf.get(key);
+      if (bucket) bucket.push(leaf);
+      else childrenOf.set(key, [leaf]);
+    }
+    for (const target of targets) {
+      const mine = childrenOf.get(target.node.key);
+      if (!mine || mine.length === 0) continue;
+      const first = mine[0] as Placed;
+      const last = mine[mine.length - 1] as Placed;
+      target.y = (first.y + last.y + last.h) / 2 - target.h / 2;
+    }
+  }
 
   // The hub is one rect; its two faces are consumed in the same order as the
   // columns beside it, which is what keeps the ribbons from crossing.
@@ -147,18 +192,30 @@ export function SankeyFlow({
     return y;
   });
 
-  const data: ChartDatum[] = model.links.map((link) => {
-    const from = model.sources.find((n) => n.key === link.from);
-    const to = model.targets.find((n) => n.key === link.to);
-    return {
-      label: (
-        <span lang="de" translate="no">
-          {from ? `${from.label} → ${model.hub.label}` : `${model.hub.label} → ${to?.label ?? ''}`}
-        </span>
-      ),
-      values: [link.amountCents],
-    };
+  // Each leaf leaves its parent's right face, in the order the model listed them
+  // — which is the order they are stacked in, so again no ribbon crosses.
+  const targetIndex = new Map(targets.map((t, i) => [t.node.key, i] as const));
+  const faceCursor = targets.map((t) => t.y);
+  const leafSlots = leaves.map((leaf) => {
+    const key = [...childrenOf.entries()].find(([, kids]) => kids.includes(leaf))?.[0];
+    const i = key === undefined ? undefined : targetIndex.get(key);
+    if (i === undefined) return leaf.y;
+    const y = faceCursor[i] as number;
+    faceCursor[i] = y + leaf.h;
+    return y;
   });
+
+  const labelOf = new Map<string, string>(
+    [model.hub, ...model.sources, ...model.targets, ...model.leaves].map((n) => [n.key, n.label]),
+  );
+  const data: ChartDatum[] = model.links.map((link) => ({
+    label: (
+      <span lang="de" translate="no">
+        {`${labelOf.get(link.from) ?? ''} → ${labelOf.get(link.to) ?? ''}`}
+      </span>
+    ),
+    values: [link.amountCents],
+  }));
 
   /**
    * Room for a second line is not a property of the node but of its NEIGHBOURS:
@@ -167,34 +224,34 @@ export function SankeyFlow({
    * was a hair thinner than the one above it, which reads as missing data rather
    * than as a deliberate omission.
    */
-  function nodeLabel(placed: Placed, side: 'source' | 'target', column: Placed[], i: number) {
+  function sideLabel(placed: Placed, column: Placed[], i: number, side: 'left' | 'right') {
     const { node, y, h } = placed;
-    const source = side === 'source';
+    const left = side === 'left';
     const centreOf = (p: Placed | undefined) => (p ? p.y + p.h / 2 : null);
     const here = y + h / 2;
     const above = centreOf(column[i - 1]);
     const below = centreOf(column[i + 1]);
     const need = narrow ? 52 : 32;
-    const roomAbove = above === null || here - above >= need;
-    const roomBelow = below === null || below - here >= need;
-    const x = source ? SRC_X - LABEL_GAP : TGT_X + NODE_W + LABEL_GAP;
-    const anchor = source ? 'end' : 'start';
+    const twoLines =
+      (above === null || here - above >= need) && (below === null || below - here >= need);
+    const textX = left ? x.src - LABEL_GAP : (fan ? x.leaf : x.tgt) + NODE_W + LABEL_GAP;
+    const anchor = left ? 'end' : 'start';
     const centre = here + (narrow ? -6 : 0);
-    const twoLines = roomAbove && roomBelow;
+    const chars = left ? SRC_CHARS[size] : fan ? LEAF_CHARS[size] : TGT_CHARS[size];
     return (
       <>
         <text
           {...DATA_TEXT}
-          x={x}
+          x={textX}
           y={twoLines ? centre - 2 : centre + 4}
           textAnchor={anchor}
           className="flow__label"
         >
-          {cut(node.label, source ? SRC_CHARS[size] : TGT_CHARS[size])}
+          {cut(node.label, chars)}
         </text>
         {twoLines && (
           <text
-            x={x}
+            x={textX}
             y={centre + (narrow ? 26 : 16)}
             textAnchor={anchor}
             className="flow__value"
@@ -203,6 +260,23 @@ export function SankeyFlow({
           </text>
         )}
       </>
+    );
+  }
+
+  /** In the fanned-out layout the middle column has no gutter of its own, so it
+      writes its name and subtotal on one line just above its band. */
+  function capLabel(placed: Placed) {
+    const { node, y } = placed;
+    return (
+      <text
+        {...DATA_TEXT}
+        x={x.tgt}
+        y={y - 6}
+        textAnchor="start"
+        className="flow__label flow__label--cap"
+      >
+        {`${cut(node.label, TGT_CHARS[size])} · ${mask(formatEuro(node.amountCents))}`}
+      </text>
     );
   }
 
@@ -221,25 +295,32 @@ export function SankeyFlow({
           <path
             key={`link-${s.node.key}`}
             className={`flow__link ${toneClass(s.node.tone)}`}
-            d={ribbon(SRC_X + NODE_W, s.y, HUB_X, leftSlots[i] as number, s.h)}
+            d={ribbon(x.src + NODE_W, s.y, x.hub, leftSlots[i] as number, s.h)}
           />
         ))}
         {targets.map((tgt, i) => (
           <path
             key={`link-${tgt.node.key}`}
             className={`flow__link ${toneClass(tgt.node.tone)}`}
-            d={ribbon(HUB_X + NODE_W, rightSlots[i] as number, TGT_X, tgt.y, tgt.h)}
+            d={ribbon(x.hub + NODE_W, rightSlots[i] as number, x.tgt, tgt.y, tgt.h)}
+          />
+        ))}
+        {leaves.map((leaf, i) => (
+          <path
+            key={`link-${leaf.node.key}`}
+            className={`flow__link ${toneClass(leaf.node.tone)}`}
+            d={ribbon(x.tgt + NODE_W, leafSlots[i] as number, x.leaf, leaf.y, leaf.h)}
           />
         ))}
 
         <rect
-          x={HUB_X}
+          x={x.hub}
           y={hubY}
           width={NODE_W}
           height={hubH}
           className="flow__node flow--einkommen"
         />
-        <text x={HUB_X + NODE_W / 2} y={TOP - 14} textAnchor="middle" className="flow__hub">
+        <text x={x.hub + NODE_W / 2} y={TOP - 14} textAnchor="middle" className="flow__hub">
           {`${model.hub.label} · ${mask(formatEuro(model.hub.amountCents))}`}
         </text>
 
@@ -247,19 +328,21 @@ export function SankeyFlow({
           <g key={s.node.key}>
             <title>{`${s.node.label} · ${mask(formatEuro(s.node.amountCents))}`}</title>
             <rect
-              x={SRC_X}
+              x={x.src}
               y={s.y}
               width={NODE_W}
               height={s.h}
               className={`flow__node ${toneClass(s.node.tone)}`}
             />
-            {nodeLabel(s, 'source', sources, i)}
+            {sideLabel(s, sources, i, 'left')}
           </g>
         ))}
 
         {targets.map((tgt, i) => {
           const code = tgt.node.typeCode;
-          const clickable = Boolean(code && (tgt.node.expandable || tgt.node.nested) && onToggleType);
+          const clickable = Boolean(
+            code && (tgt.node.expandable || tgt.node.nested) && onToggleType,
+          );
           const action = tgt.node.nested ? labels.collapse : labels.expand;
           return (
             <g
@@ -286,7 +369,7 @@ export function SankeyFlow({
                 }`}
               </title>
               <rect
-                x={TGT_X}
+                x={x.tgt}
                 y={tgt.y}
                 width={NODE_W}
                 height={tgt.h}
@@ -294,10 +377,24 @@ export function SankeyFlow({
                   expanded && tgt.node.typeCode === expanded ? ' flow__node--open' : ''
                 }`}
               />
-              {nodeLabel(tgt, 'target', targets, i)}
+              {fan ? capLabel(tgt) : sideLabel(tgt, targets, i, 'right')}
             </g>
           );
         })}
+
+        {leaves.map((leaf, i) => (
+          <g key={leaf.node.key}>
+            <title>{`${leaf.node.label} · ${mask(formatEuro(leaf.node.amountCents))}`}</title>
+            <rect
+              x={x.leaf}
+              y={leaf.y}
+              width={NODE_W}
+              height={leaf.h}
+              className={`flow__node ${toneClass(leaf.node.tone)}`}
+            />
+            {sideLabel(leaf, leaves, i, 'right')}
+          </g>
+        ))}
       </g>
     </ChartFrame>
   );

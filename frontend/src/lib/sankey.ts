@@ -42,7 +42,7 @@ export interface FlowNode {
   /** Always positive: the magnitude of what passes through the node. */
   amountCents: number;
   tone: FlowTone;
-  column: 'source' | 'hub' | 'target';
+  column: 'source' | 'hub' | 'target' | 'leaf';
   /** Present for a node that stands for one category. */
   categoryId?: string | null;
   /** Present for a type node; the handle the drill-down is keyed on. */
@@ -66,6 +66,12 @@ export interface FlowModel {
   sources: FlowNode[];
   hub: FlowNode;
   targets: FlowNode[];
+  /**
+   * A fourth column: each target's own categories, fanned out beside it. Empty
+   * unless it was asked for — four columns of labels is a lot of diagram, and on
+   * a phone it is most of the screen.
+   */
+  leaves: FlowNode[];
   links: FlowLink[];
   /** Money in, netted. */
   inflowCents: number;
@@ -134,6 +140,7 @@ export function buildFlow({
   types,
   month = null,
   detail = 'types',
+  fanOut = false,
   expanded = null,
   labels,
 }: {
@@ -152,6 +159,12 @@ export function buildFlow({
    * The totals are identical either way; only the grouping changes.
    */
   detail?: FlowDetail;
+  /**
+   * Fan every type out into its categories as a fourth column, rather than
+   * replacing the types with them. Off by default: it is the most informative
+   * and the most crowded way to draw this.
+   */
+  fanOut?: boolean;
   /** One type broken out inside the `types` view, or `null`. */
   expanded?: CategoryTypeCode | null;
   labels: FlowLabels;
@@ -176,6 +189,7 @@ export function buildFlow({
 
   const sources: FlowNode[] = [];
   const targets: FlowNode[] = [];
+  const leaves: FlowNode[] = [];
   const links: FlowLink[] = [];
 
   // ── left: everything that brought money in ────────────────────────────────
@@ -252,9 +266,28 @@ export function buildFlow({
       tone,
       column: 'target',
       typeCode: code === 'none' ? undefined : code,
-      expandable: code !== 'none' && bucket.length > 1,
+      expandable: !fanOut && code !== 'none' && bucket.length > 1,
     });
     links.push({ from: 'hub', to: typeKey, amountCents: total, tone });
+
+    if (!fanOut) continue;
+
+    // The fourth column. The type keeps its band and its subtotal; the
+    // categories hang off it, in the same order, so no ribbon has to cross.
+    for (const entry of bucket) {
+      const key = `leaf:${entry.row.categoryId ?? entry.row.categoryName}`;
+      leaves.push({
+        key,
+        label: entry.row.categoryName,
+        amountCents: entry.net,
+        tone,
+        column: 'leaf',
+        categoryId: entry.row.categoryId,
+        typeCode: code === 'none' ? undefined : code,
+        nested: true,
+      });
+      links.push({ from: typeKey, to: key, amountCents: entry.net, tone });
+    }
   }
 
   // ── the saldo, on whichever side makes both sides add up ──────────────────
@@ -267,6 +300,24 @@ export function buildFlow({
       column: 'target',
     });
     links.push({ from: 'hub', to: 'surplus', amountCents: saldoCents, tone: 'surplus' });
+    // What is left over has no categories under it, so it passes straight through
+    // the fourth column. Dropping it there would make that column short of the
+    // others by exactly the saldo.
+    if (fanOut) {
+      leaves.push({
+        key: 'leaf:surplus',
+        label: labels.surplus,
+        amountCents: saldoCents,
+        tone: 'surplus',
+        column: 'leaf',
+      });
+      links.push({
+        from: 'surplus',
+        to: 'leaf:surplus',
+        amountCents: saldoCents,
+        tone: 'surplus',
+      });
+    }
   } else if (saldoCents < 0) {
     // A deficit month is funded from the balance, not from income. Drawing it as
     // a source is the only way the diagram can stay balanced without hiding it.
@@ -292,6 +343,7 @@ export function buildFlow({
       column: 'hub',
     },
     targets,
+    leaves,
     links,
     inflowCents,
     outflowCents,
@@ -425,6 +477,7 @@ export function buildKoFlow({
       column: 'hub',
     },
     targets,
+    leaves: [],
     links,
     inflowCents,
     outflowCents,

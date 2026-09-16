@@ -88,6 +88,7 @@ export function FlowTab({ year }: { year: number }) {
   const [month] = useFlowMonth();
   const [expanded, setExpanded] = useState<CategoryTypeCode | null>(null);
   const [detail, setDetail] = useState<FlowDetail>('types');
+  const [fanOut, setFanOut] = useState(false);
 
   // Same key as the category tab: switching tabs must not refetch what is
   // already in the cache, and both read the identical figures.
@@ -115,6 +116,7 @@ export function FlowTab({ year }: { year: number }) {
         types: asList<CategoryTypeSummary>(types.data),
         month,
         detail,
+        fanOut: detail === 'types' && fanOut,
         expanded,
         labels: {
           hub: t('flow.hub'),
@@ -123,7 +125,7 @@ export function FlowTab({ year }: { year: number }) {
           noType: t('flow.noType'),
         },
       }),
-    [rows, types.data, month, detail, expanded, t],
+    [rows, types.data, month, detail, fanOut, expanded, t],
   );
 
   const periodLabel = month === null ? String(year) : `${monthName(month)} ${year}`;
@@ -175,7 +177,20 @@ export function FlowTab({ year }: { year: number }) {
                       </button>
                     ))}
                   </div>
-                  {expanded && detail === 'types' && (
+                  {detail === 'types' && (
+                    <label className="flow__switch">
+                      <input
+                        type="checkbox"
+                        checked={fanOut}
+                        onChange={(event) => {
+                          setFanOut(event.target.checked);
+                          setExpanded(null);
+                        }}
+                      />
+                      {t('flow.fanOut')}
+                    </label>
+                  )}
+                  {expanded && detail === 'types' && !fanOut && (
                     <button type="button" className="linkish" onClick={() => setExpanded(null)}>
                       {t('flow.collapseAll')}
                     </button>
@@ -187,7 +202,7 @@ export function FlowTab({ year }: { year: number }) {
                   model={model}
                   expanded={expanded}
                   onToggleType={
-                    detail === 'types'
+                    detail === 'types' && !fanOut
                       ? (code) => setExpanded((prev) => (prev === code ? null : code))
                       : undefined
                   }

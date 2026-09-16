@@ -176,6 +176,7 @@ export const de = {
   'flow.detail': 'Aufteilung',
   'flow.detailTypes': 'Nach Typ',
   'flow.detailCategories': 'Nach Kategorie',
+  'flow.fanOut': 'Kategorien auffächern',
   'flow.chartTitle': 'Geldfluss {period}',
   'flow.chartNote': 'Die Breite eines Bandes ist sein Betrag. Beide Seiten sind gleich hoch: was hereinkam, ging entweder hinaus oder blieb übrig. Auf einen Typ tippen, um seine Kategorien aufzuschlüsseln.',
   'flow.credits': '{count} Kategorien haben in diesem Zeitraum mehr eingebracht als gekostet und stehen deshalb links.',

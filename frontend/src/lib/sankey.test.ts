@@ -148,6 +148,43 @@ describe('buildFlow', () => {
     expect(flow.totalCents).toBe(buildFlow({ rows: YEAR_2026, types: TYPES, labels: LABELS }).totalCents);
   });
 
+  it('fans every type out into a fourth column without changing a figure', () => {
+    const plain = buildFlow({ rows: YEAR_2026, types: TYPES, labels: LABELS });
+    const flow = buildFlow({ rows: YEAR_2026, types: TYPES, fanOut: true, labels: LABELS });
+
+    // The types keep their own column and their own subtotals...
+    expect(flow.targets.map((n) => n.label)).toEqual(plain.targets.map((n) => n.label));
+    expect(flow.targets.map((n) => n.amountCents)).toEqual(plain.targets.map((n) => n.amountCents));
+    expect(flow.totalCents).toBe(plain.totalCents);
+
+    // ...and the categories hang off them, in the same order.
+    expect(flow.leaves.map((n) => n.label)).toEqual([
+      'Miete',
+      'Versicherungen',
+      'Reisen & Urlaub',
+      'Sparen & Anlage',
+      'Bargeld',
+      // What is left over has no categories, so it passes straight through.
+      'Übrig',
+    ]);
+    // Every leaf hangs off a target, and each type's leaves sum to it.
+    const parent = new Map(flow.links.map((l) => [l.to, l.from]));
+    for (const target of flow.targets) {
+      const mine = flow.leaves.filter((leaf) => parent.get(leaf.key) === target.key);
+      expect(mine.reduce((sum, n) => sum + n.amountCents, 0)).toBe(target.amountCents);
+    }
+    // ...so the fourth column still adds up to the same total as the first.
+    expect(flow.leaves.reduce((sum, n) => sum + n.amountCents, 0)).toBe(flow.totalCents);
+  });
+
+  it('draws no fourth column unless it was asked for', () => {
+    expect(buildFlow({ rows: YEAR_2026, types: TYPES, labels: LABELS }).leaves).toEqual([]);
+    // ...and the per-type drill-down stands down while it is on, so the two ways
+    // of showing the same categories cannot both be active.
+    const fanned = buildFlow({ rows: YEAR_2026, types: TYPES, fanOut: true, labels: LABELS });
+    expect(fanned.targets.every((n) => !n.expandable)).toBe(true);
+  });
+
   it('keeps a category with no type visible instead of folding it into Sonstiges', () => {
     const flow = buildFlow({
       rows: [row('Gehalt', 'Einkommen', -100000), row('Ohne Kategorie', null, 5000)],

@@ -159,6 +159,7 @@ export const en: Messages = {
   'flow.detail': 'Breakdown',
   'flow.detailTypes': 'By type',
   'flow.detailCategories': 'By category',
+  'flow.fanOut': 'Fan out categories',
   'flow.chartTitle': 'Money flow {period}',
   'flow.chartNote': 'A band\u2019s width is its amount. Both sides are the same height: what came in either went out or was left over. Tap a type to break it into its categories.',
   'flow.credits': '{count} categories brought in more than they cost in this period, which is why they sit on the left.',

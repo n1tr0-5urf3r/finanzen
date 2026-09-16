@@ -200,4 +200,24 @@ describe('the money flow', () => {
       expect(rows.find((r) => r.includes('Einnahmen → Übrig'))).toContain('1.600,00');
     });
   });
+
+  it('adds the categories as a fourth column when the fan-out is switched on', async () => {
+    const user = userEvent.setup();
+    const { container } = renderTab();
+    await screen.findByText(/Geldfluss 2026/);
+
+    await user.click(screen.getByLabelText('Kategorien auffächern'));
+
+    await waitFor(() => {
+      const rows = [...container.querySelectorAll('.chart__data tbody tr')].map(
+        (r) => r.textContent ?? '',
+      );
+      // The type keeps its own band from the hub...
+      expect(rows.find((r) => r.includes('Einnahmen → Fixkosten'))).toContain('1.300,00');
+      // ...and the categories now hang off the type, not off the hub.
+      expect(rows.find((r) => r.includes('Fixkosten → Miete'))).toContain('1.100,00');
+      expect(rows.some((r) => r.includes('Fixkosten → Strom'))).toBe(true);
+      expect(rows.some((r) => r.includes('Einnahmen → Miete'))).toBe(false);
+    });
+  });
 });

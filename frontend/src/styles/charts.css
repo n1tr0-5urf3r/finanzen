@@ -137,3 +137,17 @@
   display: flex; flex-wrap: wrap; gap: .5rem .9rem;
   align-items: center; justify-content: space-between; margin-bottom: .6rem;
 }
+/* The fan-out switch, beside the type/category segmented control. */
+.flow__switch {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .82rem; color: var(--ink-2); cursor: pointer;
+}
+.flow__switch input { accent-color: var(--accent); }
+/* The middle column of the fanned-out layout has no gutter: its label sits above
+   its own band, over the ribbons, so it is a size smaller and a shade quieter. */
+.flow__label--cap { font-size: 11px; fill: var(--muted); }
+@media (max-width: 559px) { .flow__label--cap { font-size: 18px; } }
+/* A flow table's row header is a whole sentence ("Fixkosten → Miete"), and the
+   table's default `nowrap` on headers pushed the amount column off the side of a
+   phone. Here they wrap instead; the amounts stay where they can be read. */
+.chart__data .data-table th[scope='row'] { white-space: normal; }
