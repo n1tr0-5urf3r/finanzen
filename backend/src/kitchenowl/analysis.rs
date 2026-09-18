@@ -28,8 +28,8 @@ use crate::{
     locale::{div_round_half_up, month_name_de},
     models::{
         KoCategoryAnalysis, KoCategoryAnalysisRow, KoComparePayer, KoCompareRow, KoCompareTotals,
-        KoMonthlySeries, KoPayerShare, KoSeriesMonth, KoSeriesSubject, KoTrailingCategory,
-        KoTrailingMonth, KoTrailingWindow, KoYearComparison,
+        KoMonthlySeries, KoOverYears, KoOverYearsSeries, KoPayerShare, KoSeriesMonth,
+        KoSeriesSubject, KoTrailingCategory, KoTrailingMonth, KoTrailingWindow, KoYearComparison,
     },
 };
 
@@ -853,4 +853,138 @@ mod tests {
         assert_eq!(ratio(2_000, 10_000), Some(0.2));
         assert_eq!(ratio(-2_000, 10_000), Some(-0.2));
     }
+}
+
+// ------------------------------------------------------------------ over years
+
+/// Every year the household mirror covers, side by side.
+///
+/// The personal ledger's twin, with the household's own pair of figures: what was
+/// spent and the share carried, never summed. It also answers a question the
+/// personal one cannot — who fronted the money, year by year — which is the
+/// closest thing a shared purse has to a trend.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/analysis/over-years",
+    tag = "kitchenowl",
+    responses((status = 200, description = "Haushaltsbetrag und eigener Anteil je Kategorie und Zahler über alle Jahre", body = KoOverYears)),
+)]
+pub async fn over_years(mut ctx: Ctx) -> Result<Json<KoOverYears>> {
+    const COUNTED_ALL: &str = "e.user_id = app.current_user_id() AND NOT e.exclude_from_statistics";
+
+    let rows = sqlx::query(&format!(
+        "SELECT EXTRACT(YEAR FROM e.expense_date)::int AS y, \
+                EXTRACT(MONTH FROM e.expense_date)::int AS mon, \
+                e.ko_category_id AS cat, max(e.ko_category_name) AS cat_name, \
+                e.paid_by_id AS payer, COALESCE(m.name, '?') AS payer_name, \
+                COALESCE(SUM(e.amount_cents), 0)::bigint AS amount, \
+                COALESCE(SUM(e.own_share_cents), 0)::bigint AS own, \
+                count(*)::bigint AS n \
+           FROM ko_expenses e \
+           LEFT JOIN ko_members m \
+                  ON m.user_id = e.user_id AND m.member_id = e.paid_by_id \
+          WHERE {COUNTED_ALL} \
+          GROUP BY y, mon, e.ko_category_id, e.paid_by_id, m.name"
+    ))
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+
+    let mut years: Vec<i32> = rows.iter().map(|r| r.get::<i32, _>("y")).collect();
+    years.sort_unstable();
+    years.dedup();
+    let index: std::collections::HashMap<i32, usize> =
+        years.iter().enumerate().map(|(i, y)| (*y, i)).collect();
+    let n = years.len();
+
+    struct Acc {
+        label: String,
+        amount: Vec<i64>,
+        own: Vec<i64>,
+        count: Vec<i64>,
+    }
+    let mut by_category: std::collections::BTreeMap<String, Acc> = Default::default();
+    let mut by_payer: std::collections::BTreeMap<String, Acc> = Default::default();
+    let mut amount = vec![0i64; n];
+    let mut own_share = vec![0i64; n];
+    let mut months: Vec<std::collections::HashSet<i32>> = vec![Default::default(); n];
+    let mut expense_count = 0i64;
+
+    for row in &rows {
+        let i = index[&row.get::<i32, _>("y")];
+        let a: i64 = row.get("amount");
+        let o: i64 = row.get("own");
+        let c: i64 = row.get("n");
+        amount[i] += a;
+        own_share[i] += o;
+        expense_count += c;
+        months[i].insert(row.get::<i32, _>("mon"));
+
+        let cat_id: Option<i64> = row.get("cat");
+        let cat_name: Option<String> = row.get("cat_name");
+        // An expense KitchenOwl never categorised keeps its own row: 173 of them
+        // exist, and folding them into anything would be inventing a category.
+        let cat_key = cat_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "none".into());
+        let cat = by_category.entry(cat_key).or_insert_with(|| Acc {
+            label: cat_name.unwrap_or_default(),
+            amount: vec![0; n],
+            own: vec![0; n],
+            count: vec![0; n],
+        });
+        cat.amount[i] += a;
+        cat.own[i] += o;
+        cat.count[i] += c;
+
+        let payer_id: Option<i64> = row.get("payer");
+        let payer_key = payer_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "unknown".into());
+        let payer = by_payer.entry(payer_key).or_insert_with(|| Acc {
+            label: row.get("payer_name"),
+            amount: vec![0; n],
+            own: vec![0; n],
+            count: vec![0; n],
+        });
+        payer.amount[i] += a;
+        payer.count[i] += c;
+    }
+
+    let series = |key: String, acc: Acc| KoOverYearsSeries {
+        key,
+        label: acc.label,
+        total_amount_cents: acc.amount.iter().sum(),
+        total_own_share_cents: acc.own.iter().sum(),
+        years_active: acc.count.iter().filter(|c| **c > 0).count() as i64,
+        expense_count: acc.count.iter().sum(),
+        per_year_amount_cents: acc.amount,
+        per_year_own_share_cents: acc.own,
+    };
+
+    let mut by_category: Vec<KoOverYearsSeries> =
+        by_category.into_iter().map(|(k, a)| series(k, a)).collect();
+    by_category.sort_by_key(|s| std::cmp::Reverse(s.total_amount_cents));
+    let mut by_payer: Vec<KoOverYearsSeries> =
+        by_payer.into_iter().map(|(k, a)| series(k, a)).collect();
+    by_payer.sort_by_key(|s| std::cmp::Reverse(s.total_amount_cents));
+
+    let excluded_count: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM ko_expenses e \
+          WHERE e.user_id = app.current_user_id() AND e.exclude_from_statistics",
+    )
+    .fetch_one(ctx.tenant.conn())
+    .await?;
+
+    let out = KoOverYears {
+        months_per_year: months.iter().map(|m| m.len() as i64).collect(),
+        amount_per_year_cents: amount,
+        own_share_per_year_cents: own_share,
+        years,
+        by_category,
+        by_payer,
+        expense_count,
+        excluded_count,
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
 }

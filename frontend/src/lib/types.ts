@@ -166,6 +166,28 @@ export interface Dashboard {
  * everywhere else: `<FlowMoney netCents={deltaCents}>` reads as the direction money
  * moved, which is the same for a cost that fell and an income that rose.
  */
+export interface KoOverYearsSeries {
+  key: string;
+  label: string;
+  perYearAmountCents: number[];
+  perYearOwnShareCents: number[];
+  totalAmountCents: number;
+  totalOwnShareCents: number;
+  yearsActive: number;
+  expenseCount: number;
+}
+
+export interface KoOverYears {
+  years: number[];
+  amountPerYearCents: number[];
+  ownSharePerYearCents: number[];
+  monthsPerYear: number[];
+  byCategory: KoOverYearsSeries[];
+  byPayer: KoOverYearsSeries[];
+  expenseCount: number;
+  excludedCount: number;
+}
+
 export interface OverYearsSeries {
   key: string;
   label: string;

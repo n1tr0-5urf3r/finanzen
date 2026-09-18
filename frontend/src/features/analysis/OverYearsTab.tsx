@@ -145,8 +145,16 @@ export function OverYearsTab() {
         </div>
       </div>
 
-      <div className="panel panel--pad">
-        <div className="flow__detail">
+      {/* The same shape as the per-month series: a switch for what is being
+          listed and a dropdown for which one of them, rather than a chart that
+          can only be aimed from a table row thirty lines further down. */}
+      <section className="panel panel--pad series">
+        <header className="series__header">
+          <h2>{t('overYears.subjectTitle')}</h2>
+          <p className="footnote">{t('overYears.subjectHint')}</p>
+        </header>
+
+        <div className="series__controls">
           <div className="segmented" role="group" aria-label={t('overYears.grouping')}>
             {(
               [
@@ -167,6 +175,24 @@ export function OverYearsTab() {
               </button>
             ))}
           </div>
+
+          <div className="field series__picker">
+            <label htmlFor="over-years-subject" className="sr-only">
+              {t(grouping === 'types' ? 'bookings.type' : 'bookings.category')}
+            </label>
+            <select
+              id="over-years-subject"
+              className="select"
+              value={selected?.key ?? ''}
+              onChange={(event) => setCharted(event.target.value)}
+            >
+              {rows.map((row) => (
+                <option key={row.key} value={row.key}>
+                  {`${row.label} (${row.yearsActive})`}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {selected && (
@@ -176,7 +202,7 @@ export function OverYearsTab() {
             bars={bars}
           />
         )}
-      </div>
+      </section>
 
       {/* Wide on a desktop, cards on a phone — the same pair every report screen
           here uses, because a thirteen-column table cannot be made one-handed. */}
@@ -198,23 +224,15 @@ export function OverYearsTab() {
             {rows.map((row) => (
               <tr key={row.key} className={row.key === selected?.key ? 'is-charted' : undefined}>
                 <th scope="row">
-                  <button
-                    type="button"
-                    className="linkish"
-                    aria-pressed={row.key === selected?.key}
-                    title={t('overYears.chartThis')}
-                    onClick={() => setCharted(row.key)}
-                  >
-                    {grouping === 'types' ? (
-                      <DataLabel>{row.label}</DataLabel>
-                    ) : (
-                      <CategoryChip
-                        name={row.label}
-                        typeLabel={row.categoryType}
-                        fallback={t('bookings.sourceNone')}
-                      />
-                    )}
-                  </button>
+                  {grouping === 'types' ? (
+                    <DataLabel>{row.label}</DataLabel>
+                  ) : (
+                    <CategoryChip
+                      name={row.label}
+                      typeLabel={row.categoryType}
+                      fallback={t('bookings.sourceNone')}
+                    />
+                  )}
                 </th>
                 <td className="num">
                   <Money cents={row.totalCents} basis="net" tone="auto" />
@@ -260,9 +278,6 @@ export function OverYearsTab() {
                 <dd>{row.bookingCount}</dd>
               </div>
             </dl>
-            <button type="button" className="linkish" onClick={() => setCharted(row.key)}>
-              {t('overYears.chartThis')}
-            </button>
           </article>
         ))}
       </div>

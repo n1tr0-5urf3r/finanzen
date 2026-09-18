@@ -2059,6 +2059,28 @@
         }
       }
     },
+    "/api/v1/kitchenowl/analysis/over-years": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "Every year the household mirror covers, side by side.",
+        "description": "The personal ledger's twin, with the household's own pair of figures: what was\nspent and the share carried, never summed. It also answers a question the\npersonal one cannot — who fronted the money, year by year — which is the\nclosest thing a shared purse has to a trend.",
+        "operationId": "over_years",
+        "responses": {
+          "200": {
+            "description": "Haushaltsbetrag und eigener Anteil je Kategorie und Zahler über alle Jahre",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KoOverYears"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/analysis/series": {
       "get": {
         "tags": [
@@ -6286,6 +6308,123 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "KoOverYears": {
+        "type": "object",
+        "description": "The household mirror, one column per year.",
+        "required": [
+          "years",
+          "amountPerYearCents",
+          "ownSharePerYearCents",
+          "monthsPerYear",
+          "byCategory",
+          "byPayer",
+          "expenseCount",
+          "excludedCount"
+        ],
+        "properties": {
+          "amountPerYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "byCategory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoOverYearsSeries"
+            }
+          },
+          "byPayer": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KoOverYearsSeries"
+            }
+          },
+          "excludedCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Kept out by KitchenOwl itself, and therefore out of every figure here."
+          },
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthsPerYear": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "ownSharePerYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "KoOverYearsSeries": {
+        "type": "object",
+        "description": "One household subject — a KitchenOwl category or a member who paid — across\nevery year the mirror covers.\n\nTwo figures per year, never added to each other: what the household spent, and\nthe slice of it the user carries. For a payer the second is meaningless (they\nfronted the whole amount) and is zero.",
+        "required": [
+          "key",
+          "label",
+          "perYearAmountCents",
+          "perYearOwnShareCents",
+          "totalAmountCents",
+          "totalOwnShareCents",
+          "yearsActive",
+          "expenseCount"
+        ],
+        "properties": {
+          "expenseCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "perYearAmountCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "perYearOwnShareCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "totalAmountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalOwnShareCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "yearsActive": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

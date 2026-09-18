@@ -142,16 +142,16 @@ describe('the over-the-years screen', () => {
     await screen.findByText(/Angebrochene Jahre: 2014/);
   });
 
-  it('charts the row that was clicked, across all years', async () => {
+  it('charts whatever the picker names, across all years', async () => {
     const user = userEvent.setup();
     const { container } = renderTab();
     await screen.findByText('2014–2016');
 
-    // The first row is charted before anything is touched, so the screen answers
-    // something on arrival.
+    // The largest row is charted before anything is touched, so the screen
+    // answers something on arrival.
     expect(screen.getByText('Miete über die Jahre')).toBeTruthy();
 
-    await user.click(screen.getAllByTitle('Diese Zeile im Diagramm zeigen')[2] as HTMLElement);
+    await user.selectOptions(screen.getByLabelText('Kategorie'), 'dienstreisen');
 
     await waitFor(() => expect(screen.getByText('Dienstreisen über die Jahre')).toBeTruthy());
     // A reimbursement year is money IN and is shown as a gain, not as a negative

@@ -354,6 +354,40 @@ pub struct CategoryAnalysis {
     pub excluded_transfer_count: i64,
 }
 
+/// One household subject — a KitchenOwl category or a member who paid — across
+/// every year the mirror covers.
+///
+/// Two figures per year, never added to each other: what the household spent, and
+/// the slice of it the user carries. For a payer the second is meaningless (they
+/// fronted the whole amount) and is zero.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoOverYearsSeries {
+    pub key: String,
+    pub label: String,
+    pub per_year_amount_cents: Vec<i64>,
+    pub per_year_own_share_cents: Vec<i64>,
+    pub total_amount_cents: i64,
+    pub total_own_share_cents: i64,
+    pub years_active: i64,
+    pub expense_count: i64,
+}
+
+/// The household mirror, one column per year.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoOverYears {
+    pub years: Vec<i32>,
+    pub amount_per_year_cents: Vec<i64>,
+    pub own_share_per_year_cents: Vec<i64>,
+    pub months_per_year: Vec<i64>,
+    pub by_category: Vec<KoOverYearsSeries>,
+    pub by_payer: Vec<KoOverYearsSeries>,
+    pub expense_count: i64,
+    /// Kept out by KitchenOwl itself, and therefore out of every figure here.
+    pub excluded_count: i64,
+}
+
 /// One subject — a category or a type — across every year the ledger covers.
 ///
 /// `per_year` is aligned with [`OverYears::years`] by index, and a year the

@@ -331,6 +331,31 @@ pub(crate) async fn resolve_category(
     }
 }
 
+/// Makes sure the year a booking lands in exists as a fiscal year.
+///
+/// The year list, the year picker and the whole carryover chain are driven by
+/// `fiscal_years`, and until now only the importer ever wrote to it. A booking
+/// entered through the app in a year with no row — the first booking of a new
+/// January, every single year — left that year out of the list and out of the
+/// chain, so its dashboard opened at a balance of zero and the picker could not
+/// even select it. The row is derived, not configured: it carries no opinion
+/// about the opening balance, only the fact that the year exists.
+pub(crate) async fn ensure_fiscal_year(
+    conn: &mut PgConnection,
+    user_id: Uuid,
+    year: i32,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO fiscal_years (user_id, year, opening_cents, opening_source) \
+         VALUES ($1, $2::smallint, 0, 'derived') ON CONFLICT (user_id, year) DO NOTHING",
+    )
+    .bind(user_id)
+    .bind(year)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/api/v1/bookings",
@@ -366,6 +391,9 @@ pub async fn create(
             NaiveDate::from_ymd_opt(body.year, body.month as u32, 1)
         }
     });
+
+    let user_id = ctx.tenant.user_id();
+    ensure_fiscal_year(ctx.tenant.conn(), user_id, body.year).await?;
 
     let id = Uuid::new_v4();
     sqlx::query(
@@ -420,6 +448,11 @@ pub async fn update(
     } else {
         resolve_category(ctx.tenant.conn(), &body.comment, body.category_id).await?
     };
+
+    // ...and an edit can move a booking into a year that has no row yet, exactly
+    // like a new booking can.
+    let user_id = ctx.tenant.user_id();
+    ensure_fiscal_year(ctx.tenant.conn(), user_id, body.year).await?;
 
     // booked_on is preserved when the client omits it, and re-clamped when the
     // booking moves to a different month — otherwise the day would fall outside its

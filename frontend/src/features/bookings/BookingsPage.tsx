@@ -84,6 +84,13 @@ export function BookingsPage() {
     },
   });
 
+  const uncategorizedHref = (() => {
+    const next = new URLSearchParams(params);
+    next.set('ohneKategorie', '1');
+    next.delete('seite');
+    return `?${next.toString()}`;
+  })();
+
   function update(key: string, value: string | null) {
     setParams(
       (prev) => {
@@ -214,7 +221,11 @@ export function BookingsPage() {
             {query.data.uncategorizedCount > 0 && (
               <>
                 {' · '}
-                <Link to="?ohneKategorie=1" style={{ color: 'var(--uncategorized)' }}>
+                {/* Adds the filter to the ones already set instead of replacing
+                    the query string: `to="?ohneKategorie=1"` dropped the year, and
+                    the page then fell back to the current one and showed nothing
+                    at all — which reads as "no uncategorised bookings here". */}
+                <Link to={uncategorizedHref} style={{ color: 'var(--uncategorized)' }}>
                   {t('bookings.summaryUncategorized', { count: query.data.uncategorizedCount })}
                 </Link>
               </>

@@ -3,7 +3,9 @@ import { bands, niceTicks } from './scales';
 import { formatEuroCompact, monthShort } from '../lib/format';
 import { useMaskAmount } from '../lib/privacy';
 
-const LEFT = 62;
+/* Wide enough for the axis labels a yearly chart gets: German has no short form
+   for thousands, so 28.000 stays eight characters. */
+const LEFT = 76;
 const RIGHT = 710;
 
 /**
@@ -27,13 +29,16 @@ export function GroupedMonthBars({
   previous,
   valueBasis = 'net',
   height = 240,
+  labels,
 }: {
   title: string;
   note?: string;
   labelCurrent: string;
   labelPrevious: string;
-  /** Twelve stored-convention values, Januar first. */
+  /** Stored-convention values, one per band. Twelve months by default. */
   current: number[];
+  /** The second series, or empty when the subject has only one — a payer fronted
+      the whole amount, so there is no share of it to draw beside it. */
   previous: number[];
   /**
    * `net` — stored expense-positive figures, drawn as flows: money in points up,
@@ -43,24 +48,36 @@ export function GroupedMonthBars({
    */
   valueBasis?: 'net' | 'gross';
   height?: number;
+  /**
+   * The band labels. Twelve month abbreviations unless given: the household's
+   * over-the-years screen draws the same pair of bars over years instead, and
+   * "two series across a row of bands" is one chart, not two.
+   */
+  labels?: string[];
 }) {
   const maskAmount = useMaskAmount();
   const flip = valueBasis === 'net' ? -1 : 1;
 
-  const a = Array.from({ length: 12 }, (_, i) => (current[i] ?? 0) * flip);
-  const b = Array.from({ length: 12 }, (_, i) => (previous[i] ?? 0) * flip);
+  const ticksLabels = labels ?? Array.from({ length: 12 }, (_, i) => monthShort(i + 1));
+  const count = ticksLabels.length;
+  const hasPrevious = previous.length > 0;
+  const a = Array.from({ length: count }, (_, i) => (current[i] ?? 0) * flip);
+  const b = Array.from({ length: count }, (_, i) => (previous[i] ?? 0) * flip);
   const ticks = niceTicks(Math.min(0, ...a, ...b), Math.max(0, ...a, ...b));
 
   const lo = ticks[0] ?? 0;
   const hi = ticks[ticks.length - 1] ?? 1;
   const span = hi - lo || 1;
   const y = (v: number) => 14 + (1 - (v - lo) / span) * (height - 52);
-  const band = bands(12, LEFT, RIGHT);
+  const band = bands(count, LEFT, RIGHT);
   const zeroY = y(0);
-  // Two bars in the middle 70% of each band, with a hair of air between them.
-  const barWidth = Math.max(2, (band.width * 0.7) / 2 - 1);
+  // Two bars in the middle 70% of each band, with a hair of air between them —
+  // or one bar filling that space when there is no second series.
+  const barWidth = hasPrevious
+    ? Math.max(2, (band.width * 0.7) / 2 - 1)
+    : Math.max(2, band.width * 0.7);
 
-  const legend = (
+  const legend = !hasPrevious ? undefined : (
       <p className="chart-legend">
         <span className="chart-legend__item">
           <span className="chart-legend__swatch chart-legend__swatch--now" aria-hidden="true" />
@@ -78,11 +95,11 @@ export function GroupedMonthBars({
         title={title}
         legend={legend}
         note={note}
-        columns={[labelCurrent, labelPrevious]}
+        columns={hasPrevious ? [labelCurrent, labelPrevious] : [labelCurrent]}
         valueBasis={valueBasis}
-        data={Array.from({ length: 12 }, (_, i) => ({
-          label: monthShort(i + 1),
-          values: [current[i] ?? 0, previous[i] ?? 0],
+        data={Array.from({ length: count }, (_, i) => ({
+          label: ticksLabels[i] ?? '',
+          values: hasPrevious ? [current[i] ?? 0, previous[i] ?? 0] : [current[i] ?? 0],
         }))}
         height={height}
       >
@@ -94,11 +111,11 @@ export function GroupedMonthBars({
             </text>
           </g>
         ))}
-        {Array.from({ length: 12 }, (_, i) => {
+        {Array.from({ length: count }, (_, i) => {
           const left = band.start(i) + band.width * 0.15;
           return (
             <g key={i}>
-              {[a[i], b[i]].map((value, slot) => (
+              {(hasPrevious ? [a[i], b[i]] : [a[i]]).map((value, slot) => (
                 <rect
                   key={slot}
                   x={left + slot * (barWidth + 2)}
@@ -114,7 +131,7 @@ export function GroupedMonthBars({
                 className="chart__tick"
                 textAnchor="middle"
               >
-                {monthShort(i + 1)}
+                {ticksLabels[i]}
               </text>
             </g>
           );

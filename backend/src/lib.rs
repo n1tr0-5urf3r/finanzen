@@ -193,6 +193,10 @@ pub fn router(state: AppState) -> Router {
             get(kitchenowl::analysis::series_subjects),
         )
         .route(
+            "/kitchenowl/analysis/over-years",
+            get(kitchenowl::analysis::over_years),
+        )
+        .route(
             "/kitchenowl/analysis/compare",
             get(kitchenowl::analysis::compare),
         )

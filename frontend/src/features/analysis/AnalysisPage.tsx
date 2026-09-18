@@ -1,16 +1,16 @@
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from "react-router-dom";
 
-import { ScopeNote } from '../../components/Money';
-import { PageHeader } from '../../components/ui';
-import { YearPicker } from '../../components/YearPicker';
-import { useT } from '../../lib/i18n';
-import type { MessageKey } from '../../lib/messages/de';
-import { CompareTab } from '../compare/CompareTab';
-import { CategoryTab } from './CategoryTab';
-import { FlowPeriodPicker, FlowTab } from './FlowTab';
-import { OverYearsTab } from './OverYearsTab';
+import { ScopeNote } from "../../components/Money";
+import { PageHeader } from "../../components/ui";
+import { YearPicker } from "../../components/YearPicker";
+import { useT } from "../../lib/i18n";
+import type { MessageKey } from "../../lib/messages/de";
+import { CompareTab } from "../compare/CompareTab";
+import { CategoryTab } from "./CategoryTab";
+import { FlowPeriodPicker, FlowTab } from "./FlowTab";
+import { OverYearsTab } from "./OverYearsTab";
 
-type Tab = 'kategorien' | 'fluss' | 'vergleich' | 'jahre';
+type Tab = "kategorien" | "fluss" | "vergleich" | "jahre";
 
 /**
  * Everything that answers "where did the money go this year".
@@ -28,16 +28,16 @@ type Tab = 'kategorien' | 'fluss' | 'vergleich' | 'jahre';
 export function AnalysisPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
-  const year = Number(params.get('jahr')) || new Date().getFullYear();
-  const view = params.get('ansicht');
+  const year = Number(params.get("jahr")) || new Date().getFullYear();
+  const view = params.get("ansicht");
   const tab: Tab =
-    view === 'vergleich'
-      ? 'vergleich'
-      : view === 'fluss'
-        ? 'fluss'
-        : view === 'jahre'
-          ? 'jahre'
-          : 'kategorien';
+    view === "vergleich"
+      ? "vergleich"
+      : view === "fluss"
+        ? "fluss"
+        : view === "jahre"
+          ? "jahre"
+          : "kategorien";
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -54,28 +54,28 @@ export function AnalysisPage() {
   return (
     <>
       <PageHeader
-        title={t('analysis.title')}
+        title={t("analysis.title")}
         // Each tab states its own convention: the breakdown reads as a flow, the
         // comparison explains what it compares. One subtitle for both would be
         // wrong for one of them.
         subtitle={
-          tab === 'vergleich'
-            ? t('compare.intro')
-            : tab === 'fluss'
-              ? t('flow.intro')
-              : tab === 'jahre'
-                ? t('overYears.intro')
-                : t('analysis.intro')
+          tab === "vergleich"
+            ? t("compare.intro")
+            : tab === "fluss"
+              ? t("flow.intro")
+              : tab === "jahre"
+                ? t("overYears.intro")
+                : t("analysis.intro")
         }
       />
 
       <div className="segmented tabs" role="tablist">
         {(
           [
-            ['kategorien', 'analysis.tabCategories'],
-            ['fluss', 'analysis.tabFlow'],
-            ['vergleich', 'analysis.tabCompare'],
-            ['jahre', 'analysis.tabOverYears'],
+            ["kategorien", "analysis.tabCategories"],
+            ["fluss", "analysis.tabFlow"],
+            ["vergleich", "analysis.tabCompare"],
+            ["jahre", "analysis.tabOverYears"],
           ] as [Tab, MessageKey][]
         ).map(([value, labelKey]) => (
           <button
@@ -84,37 +84,40 @@ export function AnalysisPage() {
             role="tab"
             aria-pressed={tab === value}
             aria-selected={tab === value}
-            onClick={() => setParam('ansicht', value === 'kategorien' ? null : value)}
+            onClick={() =>
+              setParam("ansicht", value === "kategorien" ? null : value)
+            }
           >
             {t(labelKey)}
           </button>
         ))}
       </div>
 
-      <div className="panel panel--pad filter-bar">
-        {/* The over-the-years tab IS every year, so a year picker there is a
-            control that does nothing. It keeps its value for the other tabs. */}
-        {tab !== 'jahre' && (
-          <div style={{ minWidth: '8rem' }}>
+      {/* The over-the-years tab IS every year, so the year picker there is a
+          control that does nothing — and a filter bar holding nothing else is
+          furniture. Both go; the year keeps its value for the other tabs. */}
+      {tab !== "jahre" && (
+        <div className="panel panel--pad filter-bar">
+          <div style={{ minWidth: "8rem" }}>
             <YearPicker
               id="analysis-year"
               value={year}
-              onChange={(next) => setParam('jahr', String(next))}
+              onChange={(next) => setParam("jahr", String(next))}
             />
           </div>
-        )}
-        {tab === 'fluss' && (
-          <div style={{ minWidth: '10rem' }}>
-            <FlowPeriodPicker year={year} />
-          </div>
-        )}
-        <ScopeNote transfersIncluded={false} />
-      </div>
+          {tab === "fluss" && (
+            <div style={{ minWidth: "10rem" }}>
+              <FlowPeriodPicker year={year} />
+            </div>
+          )}
+          <ScopeNote transfersIncluded={false} />
+        </div>
+      )}
 
-      {tab === 'vergleich' && <CompareTab year={year} />}
-      {tab === 'jahre' && <OverYearsTab />}
-      {tab === 'fluss' && <FlowTab year={year} />}
-      {tab === 'kategorien' && <CategoryTab year={year} />}
+      {tab === "vergleich" && <CompareTab year={year} />}
+      {tab === "jahre" && <OverYearsTab />}
+      {tab === "fluss" && <FlowTab year={year} />}
+      {tab === "kategorien" && <CategoryTab year={year} />}
     </>
   );
 }

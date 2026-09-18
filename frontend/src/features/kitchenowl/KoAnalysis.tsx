@@ -15,6 +15,7 @@ import { useMaskAmount } from '../../lib/privacy';
 import { qk } from '../../lib/queryKeys';
 import { KoCompare } from './KoCompare';
 import { KoFlow, KoFlowPeriodPicker } from './KoFlow';
+import { KoOverYears } from './KoOverYears';
 import type {
   KoCategoryAnalysis,
   KoExpense,
@@ -59,8 +60,14 @@ export function KoAnalysis() {
   // being readable on the phone this app is mostly used on.
   const year = Number(params.get('jahr')) || new Date().getFullYear();
   const zeitraum = params.get('zeitraum');
-  const view: 'year' | 'flow' | 'compare' =
-    zeitraum === 'vergleich' ? 'compare' : zeitraum === 'fluss' ? 'flow' : 'year';
+  const view: 'year' | 'flow' | 'compare' | 'overYears' =
+    zeitraum === 'vergleich'
+      ? 'compare'
+      : zeitraum === 'fluss'
+        ? 'flow'
+        : zeitraum === 'jahre'
+          ? 'overYears'
+          : 'year';
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -125,32 +132,49 @@ export function KoAnalysis() {
         >
           {t('ko.viewCompare')}
         </button>
+        <button
+          type="button"
+          aria-pressed={view === 'overYears'}
+          onClick={() => setParam('zeitraum', 'jahre')}
+        >
+          {t('ko.viewOverYears')}
+        </button>
       </div>
 
+      {/* Over the years IS every year, so the year picker there controls nothing,
+          and the bar around it would hold only a footnote. Both go; the year keeps
+          its value for the views that do use it. */}
       <div className="panel panel--pad filter-bar">
-        <div style={{ minWidth: '8rem' }}>
-          <YearPicker
-            id="ko-analysis-year"
-            value={year}
-            years={analysis.data?.years}
-            onChange={(next) => {
-              setParam('jahr', String(next));
-              setSubject(null);
-            }}
-          />
-        </div>
+        {view !== 'overYears' && (
+          <div style={{ minWidth: '8rem' }}>
+            <YearPicker
+              id="ko-analysis-year"
+              value={year}
+              years={analysis.data?.years}
+              onChange={(next) => {
+                setParam('jahr', String(next));
+                setSubject(null);
+              }}
+            />
+          </div>
+        )}
         {view === 'flow' && (
           <div style={{ minWidth: '10rem' }}>
             <KoFlowPeriodPicker year={year} />
           </div>
         )}
         <p className="footnote" style={{ margin: 0 }}>
-          {view === 'flow' ? t('koFlow.intro') : t('ko.analysisScope')}
+          {view === 'flow'
+            ? t('koFlow.intro')
+            : view === 'overYears'
+              ? t('koOverYears.intro')
+              : t('ko.analysisScope')}
         </p>
       </div>
 
       {view === 'compare' && <KoCompare year={year} />}
       {view === 'flow' && <KoFlow year={year} />}
+      {view === 'overYears' && <KoOverYears />}
 
       {view === 'year' && analysis.isPending && <LoadingState />}
       {view === 'year' && analysis.isError && (

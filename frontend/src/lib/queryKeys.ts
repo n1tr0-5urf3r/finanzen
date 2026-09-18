@@ -84,6 +84,8 @@ export const qk = {
       ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,
     seriesSubjects: (year: number) => ['kitchenowl', 'analysis', year, 'subjects'] as const,
     compare: (year: number) => ['kitchenowl', 'analysis', year, 'compare'] as const,
+    /** Not scoped by year: this one IS every year. */
+    overYears: () => ['kitchenowl', 'analysis', 'over-years'] as const,
     trailing: (year: number, month: number) =>
       ['kitchenowl', 'analysis', year, 'trailing', month] as const,
   },
