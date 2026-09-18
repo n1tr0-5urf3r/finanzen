@@ -8,6 +8,7 @@ import { Banner, EmptyState, ErrorState, Kpi, LoadingState } from '../../compone
 import { api } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
+import { sortedByLabel } from '../../lib/categories';
 import type { MessageKey } from '../../lib/messages/de';
 import type { KoOverYears as KoOverYearsData, KoOverYearsSeries } from '../../lib/types';
 
@@ -43,6 +44,9 @@ export function KoOverYears() {
     return grouping === 'payers' ? data.byPayer : data.byCategory;
   }, [data, grouping]);
   const selected = rows.find((r) => r.key === charted) ?? rows[0];
+  // Largest first in the table, by name in the picker — the same split the
+  // personal screen makes, and the same one every other dropdown here follows.
+  const options = useMemo(() => sortedByLabel(rows), [rows]);
 
   if (query.isPending) return <LoadingState />;
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />;
@@ -127,7 +131,7 @@ export function KoOverYears() {
               value={selected?.key ?? ''}
               onChange={(event) => setCharted(event.target.value)}
             >
-              {rows.map((row) => (
+              {options.map((row) => (
                 <option key={row.key} value={row.key}>
                   {`${row.label || t('ko.noCategory')} (${row.yearsActive})`}
                 </option>

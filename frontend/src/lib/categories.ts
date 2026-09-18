@@ -21,6 +21,12 @@ export function sortedByName<T extends { name: string }>(categories: T[]): T[] {
   return [...categories].sort((a, b) => byName.compare(a.name, b.name));
 }
 
+/** The same, for anything whose display name is a `label` rather than a `name` —
+    the over-the-years rows, which are categories, types or household members. */
+export function sortedByLabel<T extends { label: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => byName.compare(a.label, b.label));
+}
+
 /** The same, for the KitchenOwl categories, which carry a nullable name. */
 export function sortedByNameNullable<T extends { name: string | null }>(items: T[]): T[] {
   return [...items].sort((a, b) => byName.compare(a.name ?? '', b.name ?? ''));

@@ -161,6 +161,24 @@ describe('the over-the-years screen', () => {
     expect(within(chart).getByText(/^\+300,00/)).toBeTruthy();
   });
 
+  /**
+   * The table leads with the largest figure; a picker is read by name, and
+   * hunting for one in thirty sorted by something you cannot see is the problem
+   * every other dropdown here already solved.
+   */
+  it('sorts the picker by name while the table keeps its largest-first order', async () => {
+    const { container } = renderTab();
+    await screen.findByText('2014–2016');
+
+    const options = [...(screen.getByLabelText('Kategorie') as HTMLSelectElement).options].map(
+      (o) => o.textContent,
+    );
+    expect(options).toEqual(['Anschaffungen (1)', 'Dienstreisen (2)', 'Miete (3)']);
+
+    const firstRow = container.querySelector('.screen-table tbody tr');
+    expect(firstRow?.textContent).toContain('Miete');
+  });
+
   it('switches the matrix to the five types', async () => {
     const user = userEvent.setup();
     const { container } = renderTab();

@@ -9,6 +9,7 @@ import { Banner, EmptyState, ErrorState, Kpi, LoadingState } from '../../compone
 import { api, asList } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
+import { sortedByLabel } from '../../lib/categories';
 import type { OverYears, OverYearsSeries, Year } from '../../lib/types';
 
 type Grouping = 'categories' | 'types';
@@ -56,6 +57,10 @@ export function OverYearsTab() {
   }, [data, grouping]);
 
   const selected = rows.find((r) => r.key === charted) ?? rows[0];
+  // The table leads with the largest figure, which is the order that screen is
+  // read in. A picker is read the other way round: you already know the name you
+  // are looking for, so it sorts by name like every other dropdown here.
+  const options = useMemo(() => sortedByLabel(rows), [rows]);
 
   const points: BandPoint[] = useMemo(() => {
     if (!data) return [];
@@ -186,7 +191,7 @@ export function OverYearsTab() {
               value={selected?.key ?? ''}
               onChange={(event) => setCharted(event.target.value)}
             >
-              {rows.map((row) => (
+              {options.map((row) => (
                 <option key={row.key} value={row.key}>
                   {`${row.label} (${row.yearsActive})`}
                 </option>
