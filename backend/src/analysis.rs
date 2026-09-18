@@ -16,8 +16,8 @@ use crate::{
     locale::{div_round_half_up, month_name_de},
     models::{
         CategoryAnalysis, CategoryAnalysisRow, CategoryTypeSummary, Dashboard, MonthlyOverview,
-        MonthlyRow, MonthlySeries, SeriesMonth, SeriesSubject, TaxCategorySummary, TaxEntry,
-        TaxReport,
+        MonthlyRow, MonthlySeries, OverYears, OverYearsSeries, SeriesMonth, SeriesSubject,
+        TaxCategorySummary, TaxEntry, TaxReport,
     },
 };
 
@@ -517,6 +517,152 @@ pub async fn series_subjects(
             category_name: r.get("category_name"),
         })
         .collect();
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+// ------------------------------------------------------------------ over years
+
+/// Every year the ledger covers, side by side.
+///
+/// The year-on-year screen answers "what changed since last year". This answers
+/// the question a decade of history makes possible and that one cannot: what a
+/// category has been doing all along — rent climbing from 400 to 1.100, a car
+/// bought in one January and never again, a subscription nobody cancelled.
+///
+/// Three things it must not do, all of them ways a long series lies:
+///
+/// * a year with no bookings is absent, not a zero — this ledger starts in
+///   November 2014, and drawing 2014 as a full year beside 2015 would say the year
+///   was frugal when ten months of it are simply not here. `months_per_year`
+///   travels with every figure so the caller can say so;
+/// * a category with no activity in one year is a zero WITHIN its row, because a
+///   hole in the middle of a time series reads as missing data;
+/// * nothing is averaged per year here. An average over a part year is the same
+///   lie one level down, and the caller has the month counts to do it honestly.
+#[utoipa::path(
+    get,
+    path = "/api/v1/analysis/over-years",
+    tag = "analysis",
+    responses((status = 200, description = "Netto je Kategorie und Typ über alle Jahre", body = OverYears)),
+)]
+pub async fn over_years(mut ctx: Ctx) -> Result<Json<OverYears>> {
+    let rows = sqlx::query(
+        "SELECT period_year, period_month, kind, amount_cents, net_cents, \
+                category_id, category_name, type_code, type_label \
+           FROM v_ledger",
+    )
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+
+    // One pass, folded in Rust: the matrix is years × categories and building it in
+    // SQL would need the year list up front to pivot on.
+    let mut years: Vec<i32> = rows
+        .iter()
+        .map(|r| r.get::<i16, _>("period_year") as i32)
+        .collect();
+    years.sort_unstable();
+    years.dedup();
+    let index: std::collections::HashMap<i32, usize> =
+        years.iter().enumerate().map(|(i, y)| (*y, i)).collect();
+    let n = years.len();
+
+    struct Acc {
+        label: String,
+        category_id: Option<Uuid>,
+        category_type: Option<String>,
+        per_year: Vec<i64>,
+        count: Vec<i64>,
+    }
+    let mut by_category: std::collections::BTreeMap<String, Acc> = Default::default();
+    let mut by_type: std::collections::BTreeMap<String, Acc> = Default::default();
+
+    let mut income = vec![0i64; n];
+    let mut expense = vec![0i64; n];
+    let mut months: Vec<std::collections::HashSet<i16>> = vec![Default::default(); n];
+    let mut uncategorized = 0i64;
+
+    for row in &rows {
+        let year = row.get::<i16, _>("period_year") as i32;
+        let i = index[&year];
+        let amount: i64 = row.get("amount_cents");
+        let net: i64 = row.get("net_cents");
+        match row.get::<String, _>("kind").as_str() {
+            "income" => income[i] += amount,
+            "expense" => expense[i] += amount,
+            _ => {}
+        }
+        months[i].insert(row.get::<i16, _>("period_month"));
+
+        let category_id: Option<Uuid> = row.get("category_id");
+        let category_name: Option<String> = row.get("category_name");
+        let type_label: Option<String> = row.get("type_label");
+        let type_code: Option<String> = row.get("type_code");
+        if category_id.is_none() {
+            uncategorized += 1;
+        }
+
+        // An uncategorised booking gets its own row rather than being folded into
+        // `Sonstiges`, which is a category somebody may have chosen on purpose.
+        let cat_key = category_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "none".to_string());
+        let cat = by_category.entry(cat_key).or_insert_with(|| Acc {
+            label: category_name.clone().unwrap_or_default(),
+            category_id,
+            category_type: type_label.clone(),
+            per_year: vec![0; n],
+            count: vec![0; n],
+        });
+        cat.per_year[i] += net;
+        cat.count[i] += 1;
+
+        let type_key = type_code.clone().unwrap_or_else(|| "none".to_string());
+        let ty = by_type.entry(type_key).or_insert_with(|| Acc {
+            label: type_label.clone().unwrap_or_default(),
+            category_id: None,
+            category_type: type_code,
+            per_year: vec![0; n],
+            count: vec![0; n],
+        });
+        ty.per_year[i] += net;
+        ty.count[i] += 1;
+    }
+
+    let series = |key: String, acc: Acc| OverYearsSeries {
+        key,
+        label: acc.label,
+        category_id: acc.category_id,
+        category_type: acc.category_type,
+        total_cents: acc.per_year.iter().sum(),
+        years_active: acc.count.iter().filter(|c| **c > 0).count() as i64,
+        booking_count: acc.count.iter().sum(),
+        per_year_cents: acc.per_year,
+    };
+
+    let mut by_category: Vec<OverYearsSeries> = by_category
+        .into_iter()
+        .map(|(key, acc)| series(key, acc))
+        .collect();
+    // Largest cost first: the same order the category table opens in.
+    by_category.sort_by_key(|s| std::cmp::Reverse(s.total_cents));
+    let mut by_type: Vec<OverYearsSeries> = by_type
+        .into_iter()
+        .map(|(key, acc)| series(key, acc))
+        .collect();
+    by_type.sort_by_key(|s| std::cmp::Reverse(s.total_cents));
+
+    let out = OverYears {
+        balance_per_year_cents: income.iter().zip(&expense).map(|(i, e)| i - e).collect(),
+        income_per_year_cents: income,
+        expense_per_year_cents: expense,
+        months_per_year: months.iter().map(|m| m.len() as i64).collect(),
+        years,
+        by_type,
+        by_category,
+        booking_count: rows.len() as i64,
+        uncategorized_count: uncategorized,
+    };
     ctx.tenant.commit().await?;
     Ok(Json(out))
 }

@@ -233,6 +233,28 @@
         }
       }
     },
+    "/api/v1/analysis/over-years": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Every year the ledger covers, side by side.",
+        "description": "The year-on-year screen answers \"what changed since last year\". This answers\nthe question a decade of history makes possible and that one cannot: what a\ncategory has been doing all along — rent climbing from 400 to 1.100, a car\nbought in one January and never again, a subscription nobody cancelled.\n\nThree things it must not do, all of them ways a long series lies:\n\n* a year with no bookings is absent, not a zero — this ledger starts in\n  November 2014, and drawing 2014 as a full year beside 2015 would say the year\n  was frugal when ten months of it are simply not here. `months_per_year`\n  travels with every figure so the caller can say so;\n* a category with no activity in one year is a zero WITHIN its row, because a\n  hole in the middle of a time series reads as missing data;\n* nothing is averaged per year here. An average over a part year is the same\n  lie one level down, and the caller has the month counts to do it honestly.",
+        "operationId": "over_years",
+        "responses": {
+          "200": {
+            "description": "Netto je Kategorie und Typ über alle Jahre",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverYears"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analysis/series": {
       "get": {
         "tags": [
@@ -7741,6 +7763,134 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "OverYears": {
+        "type": "object",
+        "description": "The whole ledger, one column per year.",
+        "required": [
+          "years",
+          "incomePerYearCents",
+          "expensePerYearCents",
+          "balancePerYearCents",
+          "monthsPerYear",
+          "byType",
+          "byCategory",
+          "bookingCount",
+          "uncategorizedCount"
+        ],
+        "properties": {
+          "balancePerYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Income minus expense, per year: the flow convention, positive is a surplus."
+          },
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "byCategory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverYearsSeries"
+            }
+          },
+          "byType": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverYearsSeries"
+            }
+          },
+          "expensePerYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "incomePerYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "monthsPerYear": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Months with at least one booking, per year. A part year compared with a full\none is the single way this screen could mislead, so the count travels with\nthe figures."
+          },
+          "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "OverYearsSeries": {
+        "type": "object",
+        "description": "One subject — a category or a type — across every year the ledger covers.\n\n`per_year` is aligned with [`OverYears::years`] by index, and a year the\nsubject had no activity in is a zero rather than a hole: the row is a time\nseries, and a gap in the middle of one is read as \"no data\", which is a\ndifferent claim from \"nothing was spent\".",
+        "required": [
+          "key",
+          "label",
+          "perYearCents",
+          "totalCents",
+          "yearsActive",
+          "bookingCount"
+        ],
+        "properties": {
+          "bookingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "perYearCents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Stored expense-positive convention, like every other net in the app."
+          },
+          "totalCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "yearsActive": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many of the years carry any booking at all, so \"5.000 € over ten years\"\nand \"5.000 € in one\" can be told apart without reading the row."
           }
         }
       },

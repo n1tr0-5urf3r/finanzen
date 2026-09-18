@@ -354,6 +354,47 @@ pub struct CategoryAnalysis {
     pub excluded_transfer_count: i64,
 }
 
+/// One subject — a category or a type — across every year the ledger covers.
+///
+/// `per_year` is aligned with [`OverYears::years`] by index, and a year the
+/// subject had no activity in is a zero rather than a hole: the row is a time
+/// series, and a gap in the middle of one is read as "no data", which is a
+/// different claim from "nothing was spent".
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverYearsSeries {
+    pub key: String,
+    pub label: String,
+    pub category_id: Option<Uuid>,
+    pub category_type: Option<String>,
+    /// Stored expense-positive convention, like every other net in the app.
+    pub per_year_cents: Vec<i64>,
+    pub total_cents: i64,
+    /// How many of the years carry any booking at all, so "5.000 € over ten years"
+    /// and "5.000 € in one" can be told apart without reading the row.
+    pub years_active: i64,
+    pub booking_count: i64,
+}
+
+/// The whole ledger, one column per year.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverYears {
+    pub years: Vec<i32>,
+    pub income_per_year_cents: Vec<i64>,
+    pub expense_per_year_cents: Vec<i64>,
+    /// Income minus expense, per year: the flow convention, positive is a surplus.
+    pub balance_per_year_cents: Vec<i64>,
+    /// Months with at least one booking, per year. A part year compared with a full
+    /// one is the single way this screen could mislead, so the count travels with
+    /// the figures.
+    pub months_per_year: Vec<i64>,
+    pub by_type: Vec<OverYearsSeries>,
+    pub by_category: Vec<OverYearsSeries>,
+    pub booking_count: i64,
+    pub uncategorized_count: i64,
+}
+
 // ---------------------------------------------------------------- year on year
 
 /// One category, this year against last.

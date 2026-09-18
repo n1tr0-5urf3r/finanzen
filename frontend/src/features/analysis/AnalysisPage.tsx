@@ -8,8 +8,9 @@ import type { MessageKey } from '../../lib/messages/de';
 import { CompareTab } from '../compare/CompareTab';
 import { CategoryTab } from './CategoryTab';
 import { FlowPeriodPicker, FlowTab } from './FlowTab';
+import { OverYearsTab } from './OverYearsTab';
 
-type Tab = 'kategorien' | 'fluss' | 'vergleich';
+type Tab = 'kategorien' | 'fluss' | 'vergleich' | 'jahre';
 
 /**
  * Everything that answers "where did the money go this year".
@@ -29,7 +30,14 @@ export function AnalysisPage() {
   const [params, setParams] = useSearchParams();
   const year = Number(params.get('jahr')) || new Date().getFullYear();
   const view = params.get('ansicht');
-  const tab: Tab = view === 'vergleich' ? 'vergleich' : view === 'fluss' ? 'fluss' : 'kategorien';
+  const tab: Tab =
+    view === 'vergleich'
+      ? 'vergleich'
+      : view === 'fluss'
+        ? 'fluss'
+        : view === 'jahre'
+          ? 'jahre'
+          : 'kategorien';
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -55,7 +63,9 @@ export function AnalysisPage() {
             ? t('compare.intro')
             : tab === 'fluss'
               ? t('flow.intro')
-              : t('analysis.intro')
+              : tab === 'jahre'
+                ? t('overYears.intro')
+                : t('analysis.intro')
         }
       />
 
@@ -65,6 +75,7 @@ export function AnalysisPage() {
             ['kategorien', 'analysis.tabCategories'],
             ['fluss', 'analysis.tabFlow'],
             ['vergleich', 'analysis.tabCompare'],
+            ['jahre', 'analysis.tabOverYears'],
           ] as [Tab, MessageKey][]
         ).map(([value, labelKey]) => (
           <button
@@ -81,13 +92,17 @@ export function AnalysisPage() {
       </div>
 
       <div className="panel panel--pad filter-bar">
-        <div style={{ minWidth: '8rem' }}>
-          <YearPicker
-            id="analysis-year"
-            value={year}
-            onChange={(next) => setParam('jahr', String(next))}
-          />
-        </div>
+        {/* The over-the-years tab IS every year, so a year picker there is a
+            control that does nothing. It keeps its value for the other tabs. */}
+        {tab !== 'jahre' && (
+          <div style={{ minWidth: '8rem' }}>
+            <YearPicker
+              id="analysis-year"
+              value={year}
+              onChange={(next) => setParam('jahr', String(next))}
+            />
+          </div>
+        )}
         {tab === 'fluss' && (
           <div style={{ minWidth: '10rem' }}>
             <FlowPeriodPicker year={year} />
@@ -97,6 +112,7 @@ export function AnalysisPage() {
       </div>
 
       {tab === 'vergleich' && <CompareTab year={year} />}
+      {tab === 'jahre' && <OverYearsTab />}
       {tab === 'fluss' && <FlowTab year={year} />}
       {tab === 'kategorien' && <CategoryTab year={year} />}
     </>

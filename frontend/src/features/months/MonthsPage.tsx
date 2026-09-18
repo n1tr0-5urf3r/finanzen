@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 
-import { CumulativeLine, MonthlyBars, TypeBreakdown, type MonthPoint } from '../../charts/MonthlyCharts';
+import {
+  CumulativeLine,
+  MonthlyBars,
+  TypeBreakdown,
+  type BandPoint,
+} from '../../charts/MonthlyCharts';
 import { DataLabel } from '../../components/DataLabel';
 import { FlowMoney, Money, ScopeNote } from '../../components/Money';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
@@ -107,8 +112,8 @@ function MonthsBody({
   const cumulative = (index: number) =>
     index <= lastWithData ? data.months[index].cumulativeCents : null;
 
-  const points: MonthPoint[] = data.months.map((m) => ({
-    monthName: m.monthName,
+  const points: BandPoint[] = data.months.map((m) => ({
+    label: m.monthName,
     short: monthShort(m.month),
     incomeCents: m.incomeCents,
     expenseCents: m.expenseCents,

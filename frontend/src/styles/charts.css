@@ -61,6 +61,9 @@
 
 .chart-grid { display: grid; gap: 1rem; }
 @media (min-width: 1120px) { .chart-grid--pair { grid-template-columns: 3fr 2fr; } }
+/* Two charts of equal standing, unlike the pair above where the second one is a
+   companion to the first. */
+@media (min-width: 900px) { .chart-grid--even { grid-template-columns: 1fr 1fr; } }
 
 /* ── the per-subject series ──────────────────────────────────────────────── */
 .series { margin-bottom: 1rem; }

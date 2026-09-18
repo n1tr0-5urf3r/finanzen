@@ -13,12 +13,23 @@ import { useT } from '../lib/i18n';
  */
 const DATA_TEXT: Record<string, string> = { lang: 'de', translate: 'no' };
 
-const LEFT = 58;
+/* Wide enough for the axis labels these charts actually get. German has no short
+   form for thousands — CLDR renders 28.000 as "28.000", not "28 Tsd." — so a
+   yearly figure is eight or nine characters and a narrower gutter clips it
+   against the panel edge. */
+const LEFT = 76;
 const RIGHT = 710;
 const TOP = 12;
 
-export interface MonthPoint {
-  monthName: string;
+/**
+ * One band of a bar chart: a month on the monthly overview, a year on the
+ * over-the-years screen. The shape is the same and so is every rule about drawing
+ * it, which is why this is not two charts.
+ */
+export interface BandPoint {
+  /** The full label, used in the data table and as the row key. Data, never
+      translated. */
+  label: string;
   short: string;
   incomeCents: number;
   expenseCents: number;
@@ -34,7 +45,16 @@ export interface MonthPoint {
  * "what came in and what went out" is a cash question. The net story is the type
  * chart below it, and the table beside both.
  */
-export function MonthlyBars({ points, height = 220 }: { points: MonthPoint[]; height?: number }) {
+export function MonthlyBars({
+  points,
+  height = 220,
+  title,
+}: {
+  points: BandPoint[];
+  height?: number;
+  /** Defaults to the monthly wording; the yearly screen passes its own. */
+  title?: string;
+}) {
   const t = useT();
   const bottom = height - 26;
   const scale = linearScale(
@@ -46,13 +66,13 @@ export function MonthlyBars({ points, height = 220 }: { points: MonthPoint[]; he
   const barWidth = Math.max(3, band.width / 2 - 4);
 
   const data: ChartDatum[] = points.map((p) => ({
-    label: <DataLabel>{p.monthName}</DataLabel>,
+    label: <DataLabel>{p.label}</DataLabel>,
     values: p.hasData ? [p.incomeCents, p.expenseCents] : [null, null],
   }));
 
   return (
     <ChartFrame
-      title={t('chart.monthly')}
+      title={title ?? t('chart.monthly')}
       columns={[t('bookings.income'), t('bookings.expense')]}
       data={data}
       valueBasis="gross"
@@ -68,7 +88,7 @@ export function MonthlyBars({ points, height = 220 }: { points: MonthPoint[]; he
       {points.map((p, i) => {
         const x = band.start(i);
         return (
-          <g key={p.monthName}>
+          <g key={p.label}>
             {p.hasData && (
               <>
                 <rect
@@ -108,9 +128,13 @@ export function MonthlyBars({ points, height = 220 }: { points: MonthPoint[]; he
 export function CumulativeLine({
   points,
   height = 200,
+  title,
+  note,
 }: {
-  points: MonthPoint[];
+  points: BandPoint[];
   height?: number;
+  title?: string;
+  note?: string;
 }) {
   const t = useT();
   const bottom = height - 26;
@@ -138,14 +162,14 @@ export function CumulativeLine({
     .join(' ');
 
   const data: ChartDatum[] = points.map((p, i) => ({
-    label: <DataLabel>{p.monthName}</DataLabel>,
+    label: <DataLabel>{p.label}</DataLabel>,
     values: [i <= last ? p.cumulativeCents : null],
   }));
 
   return (
     <ChartFrame
-      title={t('chart.cumulative')}
-      note={t('chart.stopsAtLastMonth')}
+      title={title ?? t('chart.cumulative')}
+      note={note ?? t('chart.stopsAtLastMonth')}
       columns={[t('months.cumulative')]}
       valueBasis="flow"
       data={data}
@@ -170,7 +194,7 @@ export function CumulativeLine({
       ))}
       {points.map((p, i) => (
         <text
-          key={p.monthName}
+          key={p.label}
           x={band.centre(i)}
           y={bottom + 15}
           className={i <= last ? 'chart__tick' : 'chart__tick chart__tick--dim'}

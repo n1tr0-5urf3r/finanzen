@@ -142,6 +142,7 @@ pub fn router(state: AppState) -> Router {
         .route("/analysis/categories", get(analysis::categories))
         .route("/analysis/series", get(analysis::series))
         .route("/analysis/series/subjects", get(analysis::series_subjects))
+        .route("/analysis/over-years", get(analysis::over_years))
         .route("/analysis/compare", get(compare::compare))
         .route("/analysis/trailing", get(compare::trailing))
         .route("/analysis/forecast", get(forecast::forecast))

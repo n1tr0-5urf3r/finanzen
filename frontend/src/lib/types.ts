@@ -166,6 +166,30 @@ export interface Dashboard {
  * everywhere else: `<FlowMoney netCents={deltaCents}>` reads as the direction money
  * moved, which is the same for a cost that fell and an income that rose.
  */
+export interface OverYearsSeries {
+  key: string;
+  label: string;
+  categoryId: string | null;
+  categoryType: string | null;
+  /** Stored expense-positive convention, one entry per year of `OverYears.years`. */
+  perYearCents: number[];
+  totalCents: number;
+  yearsActive: number;
+  bookingCount: number;
+}
+
+export interface OverYears {
+  years: number[];
+  incomePerYearCents: number[];
+  expensePerYearCents: number[];
+  balancePerYearCents: number[];
+  monthsPerYear: number[];
+  byType: OverYearsSeries[];
+  byCategory: OverYearsSeries[];
+  bookingCount: number;
+  uncategorizedCount: number;
+}
+
 export interface CompareRow {
   categoryId: string | null;
   categoryName: string;
