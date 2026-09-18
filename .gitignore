@@ -26,6 +26,9 @@ data/
 # source spreadsheets — personal financial data, never commit
 *.xlsx
 *.ods
+# ...except the tiny invented workbooks the readers are tested against. They carry
+# the SHAPE of the real files and none of their data; monthly_shape.py rebuilds them.
+!backend/tests/fixtures/*.xlsx
 
 # extracted golden fixtures — derived from the source spreadsheets, so they carry
 # the same personal financial data. Regenerate with:

@@ -18,6 +18,10 @@ COPY backend/Cargo.toml backend/Cargo.lock ./
 # migrations/ is needed at BUILD time: sqlx::migrate! embeds the SQL into the binary,
 # so it is not required in the runtime image.
 COPY backend/migrations ./migrations
+# build.rs is what tells cargo that the macro above reads that directory. Without
+# it here, a migration added since the last build is silently left out of the
+# binary.
+COPY backend/build.rs ./build.rs
 COPY backend/src ./src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/backend/target \

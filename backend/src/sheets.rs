@@ -534,3 +534,213 @@ pub fn read_ods_legacy(
         row_total_cents: row_total,
     })
 }
+
+// ------------------------------------------------- xlsx (month blocks, 2014–2023)
+
+/// The third workbook shape: one sheet, one block per month, the month named in
+/// column A on the block's first row.
+///
+/// `Monat | Einnahmen | Ausgaben | Zweck | Kontostand | Gewinn`, and everything to
+/// the right of `Gewinn` is scratch — savings-account snapshots, a running side
+/// calculation, notes to self. Those columns are read by nothing here on purpose:
+/// they are not bookings, and a reader that took "any number in the row" would
+/// quietly import 209 cells of somebody's mental arithmetic.
+///
+/// What the file actually does, all of it verified against the 1580 rows:
+///
+/// * every one of the 99 blocks is labelled, so the month is never inferred — but
+///   the label's apostrophe is U+0027, U+2018 or U+201A depending on the year, and
+///   one of them reads `Januar ' 15`, with a space inside;
+/// * `Gewinn` on the block's last row is the month's saldo and is the marker worth
+///   comparing rows against. `Kontostand` is a BALANCE, not a saldo: it appears at
+///   the top of a block (the previous month's close, restated) as well as at the
+///   bottom, so treating either as a marker would compare two different things;
+/// * five blocks carry neither figure, and three disagree with their own rows. Both
+///   are reported, neither is adjusted.
+///
+/// An expense recorded as a negative number is an income and is stored as one. That
+/// happens once in this file (a −19,98 refund) and the alternative — a booking whose
+/// `amount_cents` is negative — is unrepresentable, by a CHECK constraint that
+/// exists precisely so this decision has to be made here, in the open.
+pub fn read_xlsx_monthly(bytes: &[u8]) -> Result<LegacySheet> {
+    let mut wb: Xlsx<_> = Xlsx::new(Cursor::new(bytes))
+        .map_err(|e| AppError::Validation(format!("Arbeitsmappe nicht lesbar: {e}")))?;
+
+    let sheet_name = wb
+        .sheet_names()
+        .iter()
+        .find(|name| {
+            wb.worksheet_range(name)
+                .ok()
+                .and_then(|r| {
+                    let head = r.rows().next()?;
+                    let cell = |i: usize| {
+                        head.get(i)
+                            .and_then(cell_text)
+                            .unwrap_or_default()
+                            .to_lowercase()
+                    };
+                    Some(cell(0) == "monat" && cell(1) == "einnahmen" && cell(3) == "zweck")
+                })
+                .unwrap_or(false)
+        })
+        .cloned()
+        .ok_or_else(|| {
+            AppError::Validation(
+                "Kein Blatt mit den Spalten 'Monat | Einnahmen | Ausgaben | Zweck' gefunden".into(),
+            )
+        })?;
+
+    let range = wb
+        .worksheet_range(&sheet_name)
+        .map_err(|e| AppError::Validation(format!("Blatt '{sheet_name}' nicht lesbar: {e}")))?;
+
+    let mut bookings = Vec::new();
+    let mut blocks: Vec<MonthBlock> = Vec::new();
+    let mut marker_total = 0i64;
+    // Only the months that HAVE a marker are counted into either total: comparing a
+    // sum of 94 markers against a sum of 99 months' rows would invent a gap.
+    let mut marked_row_total = 0i64;
+
+    let mut current: Option<MonthBlock> = None;
+    let mut expected: Option<(i32, u8)> = None;
+
+    for (idx, row) in range.rows().enumerate() {
+        if idx == 0 {
+            continue;
+        }
+        let sheet_row = idx + 1; // 1-based, as a spreadsheet shows it
+
+        if let Some(label) = row.first().and_then(cell_text) {
+            let (head, label_year) = split_month_label(&label);
+            let month = month_from_de(head).ok_or_else(|| {
+                AppError::Unprocessable(format!("Zeile {sheet_row}: '{label}' ist kein Monatsname"))
+            })?;
+            let year = label_year.map(|y| y as i32).ok_or_else(|| {
+                AppError::Unprocessable(format!(
+                    "Zeile {sheet_row}: '{label}' nennt keinen Jahrgang"
+                ))
+            })?;
+            if let Some((ey, em)) = expected
+                && (year, month) != (ey, em)
+            {
+                return Err(AppError::Unprocessable(format!(
+                    "Zeile {sheet_row}: '{label}' unterbricht die Monatsfolge (erwartet {} {ey})",
+                    locale::month_name_de(em)
+                )));
+            }
+            if let Some(done) = current.take() {
+                finish_block(done, &mut blocks, &mut marker_total, &mut marked_row_total);
+            }
+            expected = Some(next_month(year, month));
+            current = Some(MonthBlock {
+                index: blocks.len(),
+                year,
+                month,
+                first_row: sheet_row,
+                last_row: sheet_row,
+                row_count: 0,
+                label_source: "label",
+                raw_label: Some(label),
+                marker_cents: None,
+                computed_cents: 0,
+            });
+        }
+
+        let Some(block) = current.as_mut() else {
+            // Anything above the first month label is a header or a stray note.
+            continue;
+        };
+
+        // `Gewinn` is the month's saldo. It sits on the block's last row, but the
+        // last row is only known once the next label arrives, so take the last one
+        // seen rather than assuming which row it is on.
+        if let Some(gewinn) = row.get(5).and_then(cell_f64) {
+            block.marker_cents = Some(locale::cents_from_f64(gewinn)?);
+        }
+
+        let income = row.get(1).and_then(cell_f64);
+        let expense = row.get(2).and_then(cell_f64);
+        if income.is_none() && expense.is_none() {
+            continue;
+        }
+        if income.is_some() && expense.is_some() {
+            return Err(AppError::Unprocessable(format!(
+                "Zeile {sheet_row}: Einnahme und Ausgabe stehen beide in derselben Zeile"
+            )));
+        }
+
+        let signed = locale::cents_from_f64(income.or(expense).expect("one of the two"))?;
+        if signed == 0 {
+            continue;
+        }
+        // The sign wins over the column: a negative expense is money that came in.
+        let positive_is_income = income.is_some();
+        let (income_cents, expense_cents) = match (positive_is_income, signed > 0) {
+            (true, true) | (false, false) => (signed.abs(), 0),
+            _ => (0, signed.abs()),
+        };
+
+        block.row_count += 1;
+        block.last_row = sheet_row;
+        block.computed_cents += income_cents - expense_cents;
+        bookings.push(SheetBooking {
+            source_ref: format!("xlsx!{sheet_name}:{sheet_row}"),
+            period_year: block.year,
+            period_month: block.month,
+            income_cents,
+            expense_cents,
+            // Six rows carry an amount and no purpose at all. They are still
+            // money that moved, so they are imported — but a booking may not have
+            // an empty comment (a CHECK enforces it, because a nameless booking is
+            // one nobody can ever identify), and one shared placeholder would put
+            // five salaries and one expense behind a single review decision. The
+            // row number keeps them distinct, traceable, and separately
+            // categorisable, without inventing a purpose none of them states.
+            comment: row
+                .get(3)
+                .and_then(cell_text)
+                .unwrap_or_else(|| format!("(ohne Zweck, Zeile {sheet_row})")),
+            tax_relevant: false,
+            manual_category: None,
+            raw_amount: format!("{:?}", income.or(expense)),
+        });
+    }
+
+    if let Some(done) = current.take() {
+        finish_block(done, &mut blocks, &mut marker_total, &mut marked_row_total);
+    }
+    if blocks.is_empty() {
+        return Err(AppError::Unprocessable(format!(
+            "Blatt '{sheet_name}' enthält keine Monatsblöcke"
+        )));
+    }
+
+    Ok(LegacySheet {
+        bookings,
+        blocks,
+        marker_total_cents: marker_total,
+        row_total_cents: marked_row_total,
+    })
+}
+
+fn next_month(year: i32, month: u8) -> (i32, u8) {
+    if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    }
+}
+
+fn finish_block(
+    block: MonthBlock,
+    blocks: &mut Vec<MonthBlock>,
+    marker_total: &mut i64,
+    marked_rows: &mut i64,
+) {
+    if let Some(marker) = block.marker_cents {
+        *marker_total += marker;
+        *marked_rows += block.computed_cents;
+    }
+    blocks.push(block);
+}

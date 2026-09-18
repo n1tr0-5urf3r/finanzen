@@ -774,6 +774,31 @@ fn fixtures_match_the_source_workbooks() {
     assert_eq!(legacy.blocks.len(), 31);
     assert_eq!(legacy.marker_total_cents, 4_000_000);
     assert_eq!(legacy.row_total_cents, 4_485_541);
+
+    // The 2014–2023 workbook: 99 consecutive months, every one of them labelled.
+    let umsatz = std::fs::read("../Umsatz.xlsx").expect("umsatz");
+    let monthly = finanzen::sheets::read_xlsx_monthly(&umsatz).unwrap();
+    assert_eq!(monthly.bookings.len(), 1580);
+    assert_eq!(monthly.blocks.len(), 99);
+    assert_eq!(
+        (monthly.blocks[0].year, monthly.blocks[0].month),
+        (2014, 11)
+    );
+    assert_eq!(
+        (monthly.blocks[98].year, monthly.blocks[98].month),
+        (2023, 1)
+    );
+    // Five months carry no `Gewinn`, and three disagree with their own rows —
+    // together by 500,00 — which is recorded and never adjusted.
+    assert_eq!(
+        monthly
+            .blocks
+            .iter()
+            .filter(|b| b.marker_cents.is_none())
+            .count(),
+        5
+    );
+    assert_eq!(monthly.row_total_cents - monthly.marker_total_cents, 50_000);
 }
 
 // ----------------------------------------------------------- the suggester
@@ -911,4 +936,79 @@ fn a_gap_inside_the_data_keeps_the_running_balance() {
         months[3].cumulative_cents, None,
         "nach den Daten endet der Saldo"
     );
+}
+
+// -------------------------------------------- the month-block workbook (2014–2023)
+
+/// The third workbook shape, read from a nine-row fixture that carries every trap
+/// the real 2014–2023 file does. The fixture is invented data and committed, so
+/// this runs in CI; `monthly_shape.py` beside it regenerates both files.
+#[test]
+fn month_block_workbook_reads_every_trap() {
+    let bytes = std::fs::read("tests/fixtures/monthly_shape.xlsx").expect("fixture");
+    let sheet = finanzen::sheets::read_xlsx_monthly(&bytes).unwrap();
+
+    // Four months, in sequence, each named by its own label — three different
+    // apostrophes and one with a space inside it.
+    let labels: Vec<(i32, u8)> = sheet.blocks.iter().map(|b| (b.year, b.month)).collect();
+    assert_eq!(labels, vec![(2014, 11), (2014, 12), (2015, 1), (2015, 2)]);
+    assert!(sheet.blocks.iter().all(|b| b.label_source == "label"));
+
+    // Nine bookings: the marker-only row is not one, and neither is the scratch.
+    assert_eq!(sheet.bookings.len(), 9);
+    // `net_cents` is expenses minus income, so the file's saldo is its negation:
+    // 25,00 + 109,98 − 30,00 + 5,00 came in over the four months.
+    assert_eq!(
+        sheet.bookings.iter().map(|b| b.net_cents()).sum::<i64>(),
+        -(2500 + 10998 - 3000 + 500)
+    );
+    assert_eq!(
+        sheet.blocks.iter().map(|b| b.computed_cents).sum::<i64>(),
+        2500 + 10998 - 3000 + 500
+    );
+
+    // A negative expense is money that came in, and is stored as income.
+    let refund = sheet
+        .bookings
+        .iter()
+        .find(|b| b.comment == "Rueckerstattung")
+        .expect("the refund");
+    assert_eq!(refund.kind(), "income");
+    assert_eq!(refund.amount_cents(), 1998);
+
+    // A row with an amount and no purpose is still money that moved. It cannot
+    // keep an empty comment — a booking nobody can identify is refused by the
+    // schema — so it carries its own row number and stays separately reviewable.
+    let nameless = sheet
+        .bookings
+        .iter()
+        .filter(|b| b.comment.starts_with("(ohne Zweck"))
+        .collect::<Vec<_>>();
+    assert_eq!(nameless.len(), 1);
+    assert_eq!(nameless[0].comment, "(ohne Zweck, Zeile 7)");
+    assert_eq!(nameless[0].amount_cents(), 1000);
+    assert_eq!(nameless[0].kind(), "expense");
+
+    // `Gewinn` is the marker, not `Kontostand`: November's 1.000,00 opening sits on
+    // the block's FIRST row, and reading it as a saldo would be off by a thousand.
+    assert_eq!(sheet.blocks[0].marker_cents, Some(2400));
+    assert_eq!(sheet.blocks[0].computed_cents, 2500);
+    // A month with no marker is left out of both totals rather than counted as zero.
+    assert_eq!(sheet.blocks[3].marker_cents, None);
+    assert_eq!(sheet.marker_total_cents, 2400 + 10998 - 3000);
+    assert_eq!(sheet.row_total_cents, 2500 + 10998 - 3000);
+
+    // ...and its rows are imported all the same.
+    assert_eq!(sheet.blocks[3].row_count, 2);
+}
+
+/// A month missing from the middle is refused, not absorbed: shifting every
+/// following block by one is the one failure nobody would notice.
+#[test]
+fn month_block_workbook_refuses_a_broken_sequence() {
+    let bytes = std::fs::read("tests/fixtures/broken_sequence.xlsx").expect("fixture");
+    let err = finanzen::sheets::read_xlsx_monthly(&bytes).unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("Monatsfolge"), "{message}");
+    assert!(message.contains("Dezember"), "{message}");
 }

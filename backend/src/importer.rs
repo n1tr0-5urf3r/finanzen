@@ -182,15 +182,46 @@ pub async fn upload(
             Some(legacy.row_total_cents),
         )
     } else if lower.ends_with(".xlsx") {
-        let bookings = sheets::read_xlsx_bookings(&bytes)?;
-        (
-            "xlsx_2026",
-            "Buchungen".to_string(),
-            bookings,
-            Vec::new(),
-            None,
-            None,
-        )
+        // Two different workbooks share the extension, so the shape decides, not the
+        // file name: the 2026 book has a `Buchungen` sheet, the 2014–2023 one has a
+        // `Monat | Einnahmen | Ausgaben | Zweck` header and a block per month.
+        match sheets::read_xlsx_bookings(&bytes) {
+            Ok(bookings) => (
+                "xlsx_2026",
+                "Buchungen".to_string(),
+                bookings,
+                Vec::new(),
+                None,
+                None,
+            ),
+            Err(buchungen_err) => {
+                let monthly = sheets::read_xlsx_monthly(&bytes).map_err(|monthly_err| {
+                    // Neither shape fits. Reporting only the second attempt would
+                    // send someone looking for a month column in a file that was
+                    // meant to be the other kind, so both reasons are named.
+                    AppError::Validation(format!(
+                        "Unbekannte Arbeitsmappe. Als Buchungsblatt: {buchungen_err}.                          Als Monatsblöcke: {monthly_err}"
+                    ))
+                })?;
+                (
+                    "xlsx_monthly",
+                    monthly
+                        .bookings
+                        .first()
+                        .map(|b| b.source_ref.clone())
+                        .and_then(|r| {
+                            r.strip_prefix("xlsx!")
+                                .and_then(|r| r.split(':').next())
+                                .map(str::to_string)
+                        })
+                        .unwrap_or_else(|| "Tabelle1".to_string()),
+                    monthly.bookings,
+                    monthly.blocks,
+                    Some(monthly.marker_total_cents),
+                    Some(monthly.row_total_cents),
+                )
+            }
+        }
     } else {
         return Err(AppError::Validation(
             "Nur .xlsx und .ods werden unterstützt".into(),
@@ -486,6 +517,23 @@ async fn load_preview(ctx: &mut Ctx, batch_id: Uuid) -> Result<ImportPreview> {
              Die Zeilen werden unverändert übernommen; der Vortrag bleibt ein \
              konfigurierter Wert.",
             mismatched.len()
+        ));
+    }
+
+    // A month with no marker at all is a different thing from one that disagrees:
+    // nothing is wrong with its rows, there is simply nothing to check them against,
+    // and the totals above therefore leave it out.
+    let unmarked: Vec<String> = blocks
+        .iter()
+        .filter(|b| b.marker_cents.is_none())
+        .map(|b| format!("{} {}", crate::locale::month_name_de(b.month), b.year))
+        .collect();
+    if !unmarked.is_empty() {
+        warnings.push(format!(
+            "{} Monate ohne eigenen Saldo-Marker ({}). \
+             Ihre Zeilen werden importiert, stehen aber in keiner Gegenprobe.",
+            unmarked.len(),
+            unmarked.join(", ")
         ));
     }
 

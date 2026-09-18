@@ -48,7 +48,10 @@ pub fn month_name_de(month: u8) -> &'static str {
 /// the month blocks, which shifts every subsequent month by one.
 pub fn split_month_label(raw: &str) -> (&str, Option<u16>) {
     let trimmed = raw.trim();
-    for sep in ['\u{2018}', '\u{2019}', '\'', '`', '\u{00B4}'] {
+    // The apostrophes are mixed in the real files: `Mai ‘25` is U+2018, `Juni '25`
+    // is U+0027, and `Januar ‚21` in the 2014–2023 workbook is U+201A, the single
+    // low-9 quote a German keyboard layout produces by accident.
+    for sep in ['\u{2018}', '\u{2019}', '\u{201A}', '\'', '`', '\u{00B4}'] {
         if let Some((head, tail)) = trimmed.split_once(sep) {
             let year = tail
                 .trim()
