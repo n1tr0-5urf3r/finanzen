@@ -5,7 +5,7 @@
 <h1 align="center">Finanzen</h1>
 
 <p align="center">
-  <em>A household ledger that replaces the spreadsheet — and finally makes recording a booking a phone-sized job.</em>
+  <em>A household ledger that replaces the spreadsheet — and makes recording a booking a phone-sized job.</em>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 <div align="center">
 
-This repo is rather for my personal use for tracking finances. There are already dozens of other finance trackers out there. However, if you find mine useful, feel free to use it, or support me in the development:
+This repo is rather for my personal use for tracking my finances over the years. There are already dozens of other financial trackers out there. However, if you find mine useful, feel free to use it, or even support me in the development:
 
 <a href="https://www.paypal.com/donate/?hosted_button_id=KXMYX49C6MLLN">
   <img src="https://img.shields.io/badge/Support%20the%20project-Donate%20via%20PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal">
@@ -28,78 +28,62 @@ This repo is rather for my personal use for tracking finances. There are already
 
 </div>
 
-
 ---
 
-The spreadsheet could do everything — two-layer categorisation, net arithmetic, a tax
-sheet, charts. The one thing it could not do is the thing that happens most often:
-record a booking in a shop, on a phone, in ten seconds. That is what this project is
-for.
+A spreadsheet handled the categorisation, the net arithmetic, the tax sheet and the
+charts. What it could not do was record a booking in a shop, on a phone, in ten
+seconds. That is what this replaces.
 
-**The spreadsheet's arithmetic is the specification.** Every figure was recomputed
-from the raw columns rather than read out of the formula cells, and the test suite
-asserts that the app reproduces it exactly.
+The spreadsheet's arithmetic is the specification: every figure is recomputed from
+the raw columns rather than read out of a formula cell, and the test suite asserts
+the app reproduces it exactly. The UI ships in German and English; amounts and dates
+always render de-DE.
 
-The interface ships in German and English; amounts and dates always render de-DE,
-because that is the format the data was recorded in.
+## Features
 
-## What it does
-
-- **Quick add in three taps** — the amount on a cents-first keypad, the comment from
-  your own most frequent bookings, done. The category is predicted by the rule table
-  in the browser, with no server and no connection; you can still pick one yourself
-  at any point.
-- **Net everywhere** — a category shows expenses *minus income of the same category*.
-  Rent reads 3,960 € net because a flatmate pays half of the 7,920 € that actually
-  left the account. Both figures stay visible, and the sign always says direction:
-  green and a `+` for money in, red and a `−` for money out.
-- **Three savings figures, not one** — what you actually paid into the savings
-  categories (the one you can check against a bank statement), how much of real
-  income you did not consume, and the spreadsheet's own rate kept as a footnote
-  because it understates the truth by 26 points.
-- **Month by month, per category or per comment** — "how much do I spend on fuel,
-  and is it getting worse". Click a category in the table to chart it, then expand
-  the bookings behind any bar without leaving the page.
-- **Money flow** — one year, or one month, as a flow diagram: what came in, through
-  one total, back out into the cost buckets or into what was left over. Switch the
-  right-hand side between the five types and every single category, or tap one type
-  to break out just that one. A month where a reimbursement lands shows the category
-  on the *inflow* side, because that is where the money went. The household ledger
-  has the same diagram, asking its own question: who fronted the money, and what for.
-- **Two-layer categorisation** — a rule table maps comments; a manual assignment on a
-  single booking overrides it. Changing a rule recategorises the past as well, and
-  says how many bookings it moved.
-- **Import from .xlsx and .ods** — with a preview before committing, and a review
-  queue for comments no rule knows: sorted by frequency, one decision per comment,
-  by keyboard.
-- **Tax** — flag bookings, photograph receipts, export as CSV or PDF.
-- **Recurring templates** — the eighteen items that are the same every month, booked
-  in two taps instead of eighteen.
-- **KitchenOwl** — the household's shared expenses as a *separate* ledger of their
-  own, with an analysis of its own: same questions, same tables, but every figure
-  is a pair — what the household spent and your share of it — and the two are never
-  added. Never netted against the personal bookings, and matching one up never
-  books anything by itself.
-- **Privacy mode** — one eye button in the header masks every euro figure while
-  categories, months, counts and the shape of every chart stay exactly as they
-  were. For a screen someone else can see.
-- **Multiple users** — separate data, enforced by row-level security in the database
-  rather than by handler discipline.
+- **Quick add** — cents-first keypad, comment picked from your most frequent
+  bookings, category predicted in the browser from the rule table. No server round
+  trip; you can always override.
+- **Net figures** — a category shows expenses minus income of the *same* category,
+  both legs visible. Rent nets to 3.960 € when a flatmate pays half of 7.920 €.
+- **Three savings figures** — what you paid into savings categories (checkable
+  against a bank statement), how much income you did not consume, and the
+  spreadsheet's own rate as a footnote.
+- **Month by month** — per category or per comment. Click a category to chart it,
+  expand the bookings behind any bar in place.
+- **Money flow** — a year or a single month as a flow diagram: income, one total,
+  then out into cost buckets or what was left. The household ledger gets the same
+  diagram for who fronted what.
+- **Rules and overrides** — a rule table maps comments; a manual assignment on one
+  booking wins. Editing a rule recategorises the past and reports how many bookings
+  moved.
+- **Import .xlsx / .ods** — preview before committing, then a review queue for
+  comments no rule knows, sorted by frequency, one keystroke per decision.
+- **Tax** — flag bookings, attach receipt photos, export CSV or PDF.
+- **Recurring templates** — the fixed monthly items in two taps. Amounts marked as
+  estimates materialise as drafts, never as confirmed bookings.
+- **KitchenOwl** — shared household expenses as a separate, parallel ledger. Every
+  figure is a pair (household total and your share); never summed with personal
+  bookings, never auto-booked.
+- **Privacy mode** — masks every amount while categories, counts and chart shapes
+  stay intact.
+- **Multiple users** — isolation enforced by Postgres row-level security, not by
+  handler discipline.
 
 ## A look around
 
 | | |
 |:--:|:--:|
 | <a href="docs/screenshots/dashboard.png"><img src="docs/screenshots/dashboard.png" alt="Dashboard"></a> | <a href="docs/screenshots/monate.png"><img src="docs/screenshots/monate.png" alt="Monthly overview"></a> |
-| **Dashboard** — what you paid into savings, beside how much of your income you kept | **Monthly overview** — the line ends at the last month with bookings instead of running on flat |
+| **Dashboard** — savings paid in, beside income kept | **Monthly overview** — the line stops at the last month with data |
 | <a href="docs/screenshots/auswertung.png"><img src="docs/screenshots/auswertung.png" alt="Analysis"></a> | <a href="docs/screenshots/buchungen.png"><img src="docs/screenshots/buchungen.png" alt="Bookings"></a> |
-| **Analysis** — any category or comment across twelve months, with the bookings one click away | **Bookings** — filter by year, text or category; edit in place; uncategorised rows stay flagged |
-| <a href="docs/screenshots/quickadd.png"><img src="docs/screenshots/quickadd.png" alt="Quick add" width="260"></a> | <a href="docs/screenshots/mobil.png"><img src="docs/screenshots/mobil.png" alt="Mobile" width="260"></a> |
-| **Quick add** — the reason the project exists | **Mobile** — tables become cards, and nothing is ever wider than the screen |
-| <a href="docs/screenshots/pruefliste.png"><img src="docs/screenshots/pruefliste.png" alt="Review queue"></a> | <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Tax"></a> |
-| **Review queue** — 238 unknown comments, sorted by frequency | **Tax** — receipt list with camera upload and CSV/PDF export |
+| **Analysis** — any category or comment across twelve months | **Bookings** — filter by year, text or category; edit in place |
 | <a href="docs/screenshots/geldfluss.png"><img src="docs/screenshots/geldfluss.png" alt="Money flow"></a> | <a href="docs/screenshots/haushalt-fluss.png"><img src="docs/screenshots/haushalt-fluss.png" alt="Household money flow"></a> |
-| **Money flow** — what came in, through one total, back out; switchable to every category | **Household flow** — the same picture for the shared ledger: who fronted it, and what for |
+| **Money flow** — in, through one total, back out | **Household flow** — who fronted it, and what for |
+| <a href="docs/screenshots/quickadd.png"><img src="docs/screenshots/quickadd.png" alt="Quick add" width="260"></a> | <a href="docs/screenshots/mobil.png"><img src="docs/screenshots/mobil.png" alt="Mobile" width="260"></a> |
+| **Quick add** — the reason the project exists | **Mobile** — tables become cards |
+| <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Tax"></a> | |
+| **Tax** — receipt list with camera upload and CSV/PDF export | |
 
 <sub>Every screenshot shows invented sample data.</sub>
 
@@ -112,23 +96,20 @@ $EDITOR .env          # APP_PUBLIC_URL, APP_SESSION_SECRET and both DB passwords
 docker compose up -d
 ```
 
-Then complete first-run setup in the browser. Registration is closed afterwards;
-further accounts are created by that first account under **Settings**.
+Finish setup in the browser. Registration closes afterwards; further accounts are
+created by the first account under **Settings**.
 
-Behind a TLS proxy: `nginx.finanzen.conf` is a working example. `APP_PUBLIC_URL` must
-be the exact public https URL — the session cookie's `Secure` flag and the CSRF check
-both depend on it.
+Behind a TLS proxy, `nginx.finanzen.conf` is a working example. `APP_PUBLIC_URL`
+must be the exact public https URL — the session cookie's `Secure` flag and the
+CSRF check both derive from it.
 
-`docker compose up -d` builds the image from this checkout. To run the published one
-instead, drop the `build:` block and point `CONTAINER_IMAGE` at the package CI pushes
-on every commit to the default branch:
+To run the published image instead of building, drop the `build:` block and point
+`CONTAINER_IMAGE` at the package CI pushes on every commit to the default branch:
 
 ```
 CONTAINER_IMAGE=ghcr.io/n1tr0-5urf3r/finanzen
 IMAGE_TAG=latest      # or sha-<commit> to pin
 ```
-
-Then `docker compose pull && docker compose up -d` updates without a checkout at all.
 
 ## Configuration
 
@@ -140,35 +121,35 @@ Everything via `.env`; `.env.example` is fully commented.
 | `APP_SESSION_SECRET` | At least 32 characters. Changing it signs everyone out. |
 | `APP_DB_USER` / `APP_DB_PASSWORD` | The role the app connects as — **not** a superuser, or RLS would be inert. The app refuses to start in that case. |
 | `AUTH_ALLOW_REGISTRATION` | Default `false`: accounts are created by the admin. |
-| `KITCHENOWL_URL` / `KITCHENOWL_TOKEN` | Leaving them empty disables the integration entirely. |
-| `KITCHENOWL_*_SECONDS` | Sync intervals. `0` switches a loop off; otherwise the minimum is 60 s. |
-| `IMPORT_FUZZY_MIN_CONFIDENCE` | Default `0.92`. Lower produces suggestions you accept reflexively and that are wrong. |
-| `DATA_ROOT` | Where the database and the receipts live on the host. Default `./data`. |
+| `KITCHENOWL_URL` / `KITCHENOWL_TOKEN` | Leave empty to disable the integration. |
+| `KITCHENOWL_*_SECONDS` | Sync intervals. `0` switches a loop off; the minimum is otherwise 60 s. |
+| `IMPORT_FUZZY_MIN_CONFIDENCE` | Default `0.92`. Lower yields suggestions that get accepted by reflex and are wrong. |
+| `DATA_ROOT` | Where the database and receipts live on the host. Default `./data`. |
 
 ## Backup
 
-Everything the application keeps is under `DATA_ROOT` (default `./data`) as plain
-host directories — `postgres/` and `receipts/` — so a backup script can see them
-without extracting anything from a container.
+Everything lives under `DATA_ROOT` (default `./data`) as plain host directories,
+`postgres/` and `receipts/`.
 
-**Do not copy `data/postgres` while the server is running.** Those files are only
-consistent when it is stopped; a live copy looks fine and may refuse to start on
-the day you need it. `deploy/backup.sh` asks the running server for a consistent
-dump instead, and tars the receipts beside it:
+**Do not copy `data/postgres` while the server runs** — those files are only
+consistent when it is stopped, and a live copy may refuse to start on the day you
+need it. `deploy/backup.sh` takes a consistent dump instead and tars the receipts
+beside it:
 
 ```bash
-deploy/backup.sh /srv/backups     # writes finanzen_<date>.sql.gz and receipts_<date>.tar.gz
+deploy/backup.sh /srv/backups     # finanzen_<date>.sql.gz and receipts_<date>.tar.gz
 ```
 
-Restoring is the line the script prints when it finishes. If you would rather copy
-the directory as it is, stop the stack first (`docker compose down`) — then the
-files are a valid snapshot.
+The script prints the restore command when it finishes. To copy the directory as
+it is, stop the stack first with `docker compose down`.
 
 ## License
 
-[GNU AGPL-3.0-only](LICENSE). The Affero clause is the point: if you run a modified
-copy of this where other people can reach it, they are entitled to its source.
-A household ledger is exactly the kind of thing that gets forked, hosted and
-quietly closed, and this is the licence that says no to that.
+Copyright © 2026 Fabian Ihle.
 
-© 2026 Fabian Ihle
+This financial tracker is free software licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you
+run a modified version as a network service, its users must be offered the
+corresponding source under the same license.
+
+---
