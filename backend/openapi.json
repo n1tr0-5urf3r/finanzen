@@ -8150,7 +8150,7 @@
           },
           "amountIsEstimate": {
             "type": "boolean",
-            "description": "The amount varies month to month (the gym is 29,00 / 31,50 / 34,50), so\nmaterialising must produce a **draft** the user confirms with the real figure."
+            "description": "The amount varies month to month — a membership billed differently in\ndifferent months — so materialising must produce a **draft** the user\nconfirms with the real figure."
           },
           "anchor": {
             "$ref": "#/components/schemas/Period",

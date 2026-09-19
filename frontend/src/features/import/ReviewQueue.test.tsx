@@ -39,8 +39,8 @@ function item(over: Partial<ReviewItem>): ReviewItem {
 }
 
 /**
- * Taken from the real legacy queue: `Malve` is the top item by frequency and has
- * only an edit-distance hint (`mapet` → Sport), which is exactly the confidently
+ * The shape a legacy queue produces: `Malve` is the top item by frequency and has
+ * only an edit-distance hint (`mafit` → Sport), which is exactly the confidently
  * wrong answer the design refuses to preselect.
  */
 const ITEMS: ReviewItem[] = [
@@ -51,7 +51,7 @@ const ITEMS: ReviewItem[] = [
     rowCount: 11,
     expenseCents: 10729,
     weakHints: [
-      { categoryId: 'sport', categoryName: 'Sport', matchedRule: 'mapet', confidence: 0.78, tier: 'similar', isSuggestion: false },
+      { categoryId: 'sport', categoryName: 'Sport', matchedRule: 'mafit', confidence: 0.78, tier: 'similar', isSuggestion: false },
     ],
   }),
   item({

@@ -687,8 +687,8 @@ async fn importing_the_real_workbooks_reproduces_the_acceptance_numbers() {
     let mut app = app!();
     app.setup_admin().await;
 
-    // Load the workbook's own rule table, with the one correction: Mafit is the gym,
-    // so it belongs to Sport rather than the workbook's Haustier.
+    // Load the workbook's own rule table, with the one correction: the pattern
+    // below is filed under Haustier there and belongs to Sport.
     let taxonomy = {
         let bytes = std::fs::read("../konten_2026_auswertung.xlsx").unwrap();
         finanzen::sheets::read_xlsx_taxonomy(&bytes).unwrap()
@@ -1277,9 +1277,9 @@ async fn a_quarterly_template_is_due_only_in_the_right_months() {
     assert_eq!(may["items"][0]["templateName"], "Versicherung");
 }
 
-/// The whole reason `amount_is_estimate` exists: the gym costs 29,00 / 31,50 / 34,50
-/// depending on the month, so materialising it as a confirmed 29,00 would put a wrong
-/// figure into the year's total and nothing would ever flag it.
+/// The whole reason `amount_is_estimate` exists: a membership billed a different
+/// amount in different months. Materialising it as a confirmed figure would put a
+/// wrong number into the year's total and nothing would ever flag it.
 #[tokio::test]
 async fn an_estimate_materialises_as_a_draft_that_moves_no_total_until_confirmed() {
     let mut app = app!();
@@ -2076,7 +2076,7 @@ async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
         })
         .collect();
     for (pattern, category) in &taxonomy.rules {
-        // Mafit is the gym, not the pet shop — the one correction applied at import.
+        // The one correction applied at import: Sport, not the workbook's Haustier.
         let category = match pattern.as_str() {
             "mapet" | "mapet guthaben" => "Sport",
             _ => category.as_str(),
@@ -2291,7 +2291,7 @@ async fn a_search_spans_every_year_and_sums_each_one() {
     }
 
     let (status, out) = app
-        .send("GET", "/bookings/search?q=thomas%20philipps", None)
+        .send("GET", "/bookings/search?q=hofladen%20brinkmann", None)
         .await;
     assert_eq!(status, StatusCode::OK, "{out}");
 
@@ -2323,9 +2323,9 @@ async fn a_search_spans_every_year_and_sums_each_one() {
     assert_eq!(out["sumExpenseCents"], 4_210 + 1_999 + 3_000 + 2_500);
     assert_eq!(out["sumIncomeCents"], 500);
 
-    // Spellings: `Hofladen Brinkmann` and `hofladen brinkmann` are ONE merchant, folded by
-    // the stored match_key, reported under the spelling used most recently. The
-    // suffixed one is a different key and stays its own row.
+    // Spellings: `Hofladen Brinkmann` and `hofladen brinkmann` are ONE merchant,
+    // folded by the stored match_key and reported under the spelling used most
+    // recently. The suffixed one is a different key and stays its own row.
     let comments = out["comments"].as_array().expect("comments");
     assert_eq!(comments.len(), 2, "{comments:?}");
     assert_eq!(comments[0]["comment"], "Hofladen Brinkmann");

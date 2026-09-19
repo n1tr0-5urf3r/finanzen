@@ -91,7 +91,7 @@ describe('the cross-year search', () => {
    * exists to give — it comes before the rows, and it must be complete.
    */
   it('answers per year, newest first, before showing a single booking', async () => {
-    const { container } = renderPage('/suche?q=thomas%20philipps');
+    const { container } = renderPage('/suche?q=hofladen%20brinkmann');
     await screen.findByText('2026');
 
     const rows = [...container.querySelectorAll<HTMLElement>('.search-years tbody tr')];
@@ -121,7 +121,7 @@ describe('the cross-year search', () => {
    * is only trustworthy if it says which ones.
    */
   it('names the spellings it folded together', async () => {
-    renderPage('/suche?q=thomas');
+    renderPage('/suche?q=hofladen');
     await screen.findByText('Hofladen Brinkmann Berlin');
     expect(screen.getByText(/×4/)).toBeInTheDocument();
   });
@@ -139,7 +139,7 @@ describe('the cross-year search', () => {
   /** A result is usually how a miscategorised booking gets found, so it opens. */
   it('opens a hit in the editor', async () => {
     const user = userEvent.setup();
-    renderPage('/suche?q=thomas');
+    renderPage('/suche?q=hofladen');
     const cards = await screen.findAllByRole('button', { name: /Hofladen Brinkmann/ });
     await user.click(cards[0]);
     expect(await screen.findByRole('dialog')).toBeInTheDocument();

@@ -387,9 +387,9 @@ pub async fn materialize(
     let (mut created, mut skipped, mut drafts) = (0i64, 0i64, 0i64);
 
     for tmpl in &templates {
-        // An estimate is never a confirmed figure. The gym is 29,00 / 31,50 / 34,50
-        // depending on the month, so booking the template's amount as fact would put
-        // a wrong number into every total until somebody noticed.
+        // An estimate is never a confirmed figure. A membership billed differently
+        // in different months would otherwise have its template amount booked as
+        // fact, putting a wrong number into every total until somebody noticed.
         let status = if tmpl.amount_is_estimate {
             "draft"
         } else {

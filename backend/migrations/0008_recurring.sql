@@ -4,8 +4,8 @@
 --   active AND p >= active_from_ord AND (active_to_ord IS NULL OR p <= active_to_ord)
 --   AND (p - anchor_ord) % interval_months = 0
 --
--- amount_is_estimate matters concretely: Mafit is 29,00 in January, 31,50 from March
--- and 34,50 in February and August. Materialising such a template must produce a
+-- amount_is_estimate matters concretely: some templates are billed a different
+-- amount in different months. Materialising such a template must produce a
 -- DRAFT the user confirms, never a confirmed booking.
 CREATE TABLE recurring_templates (
   id                 uuid PRIMARY KEY,

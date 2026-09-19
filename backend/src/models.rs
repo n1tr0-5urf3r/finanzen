@@ -764,8 +764,9 @@ pub struct RecurringTemplate {
     pub comment: String,
     pub kind: BookingKind,
     pub amount_cents: i64,
-    /// The amount varies month to month (the gym is 29,00 / 31,50 / 34,50), so
-    /// materialising must produce a **draft** the user confirms with the real figure.
+    /// The amount varies month to month — a membership billed differently in
+    /// different months — so materialising must produce a **draft** the user
+    /// confirms with the real figure.
     pub amount_is_estimate: bool,
     pub category_id: Option<Uuid>,
     /// The category this template books into: the override if it has one, otherwise

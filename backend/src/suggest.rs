@@ -1,17 +1,16 @@
 //! Category suggestions for comments no rule matches.
 //!
-//! Measured against the real 240 unknown comments in `konten.ods`, a three-stage
+//! Measured against a legacy workbook's 240 unknown comments, a three-stage
 //! suggester produces a suggestion for 95 of them (39%), covering 130 of 362 rows.
 //! Essentially all of those hits come from **containment** — a known rule key
 //! appearing as a token or substring of the unknown comment. Edit distance adds
 //! almost nothing and is where the confidently-wrong answers come from
-//! (`trinken`→`tanken`, `Malve`→`Mafit`, `iPad`→`Pfand`), so it is gated hard and
-//! its output is labelled a hint rather than a suggestion.
+//! (`trinken`→`tanken` is the shape of it: one letter apart, unrelated category),
+//! so it is gated hard and its output is labelled a hint rather than a suggestion.
 //!
 //! The honest consequence: the matcher is not the feature, the review queue is. The
-//! high-frequency unknowns — `Malve` 11x, `Hofladen Brinkmann` 10x, `Burgerbude` 9x,
-//! `Vela` 5x — are new merchants, not typos, and no string algorithm can recover a
-//! category that is not in the rule table at all.
+//! unknowns that recur are new merchants, not typos, and no string algorithm can
+//! recover a category that is not in the rule table at all.
 
 use uuid::Uuid;
 
@@ -226,7 +225,7 @@ mod tests {
             ("geschenk", "Geschenke"),
             ("gehalt", "Gehalt"),
             ("tanken", "Auto & Parken"),
-            ("mapet", "Sport"),
+            ("mafit", "Sport"),
             ("pfand", "Lebensmittel"),
             ("steam", "Games & Software"),
             ("paypal", "Sonstiges"),
@@ -263,16 +262,16 @@ mod tests {
 
     #[test]
     fn new_merchants_get_no_suggestion_rather_than_a_wrong_one() {
-        // These are the highest-frequency unknowns in the real legacy file. None is
-        // recoverable from the rule table, and inventing an answer would be worse
-        // than admitting none.
+        // A merchant the rule table has never seen is the common case in a review
+        // queue. None of these is recoverable from it, and inventing an answer
+        // would be worse than admitting none.
         let r = rules();
         for comment in [
             "Malve",
             "Hofladen Brinkmann",
             "Burgerbude",
             "Vela",
-            "Burger King",
+            "Kiosk am Park",
         ] {
             let (s, _, _) = suggest(comment, &r, 0.92);
             assert!(
