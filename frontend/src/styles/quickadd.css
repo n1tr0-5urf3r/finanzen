@@ -8,12 +8,11 @@
   position: fixed; inset: 0 0 auto 0; height: 100svh; z-index: 40;
   background: var(--surface-inverse); color: var(--on-inverse);
   display: flex; flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .quick__top {
   display: flex; align-items: center; gap: .5rem;
-  padding: .5rem .75rem; padding-top: calc(.5rem + env(safe-area-inset-top, 0px));
+  padding: .5rem .75rem;
 }
 .quick__top h1 { font-size: .95rem; font-weight: 600; flex: 1; text-align: center; }
 .quick__top .icon-button { color: var(--on-inverse-muted); }
@@ -134,7 +133,6 @@
   max-height: calc(85svh - var(--keyboard-inset, 0px));
   display: flex; flex-direction: column; min-height: 0;
   box-shadow: var(--shadow-3);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .sheet__header { padding: .75rem; border-bottom: 1px solid var(--line); }
 .sheet__list { overflow-y: auto; flex: 1 1 auto; min-height: 0; overscroll-behavior: contain; }

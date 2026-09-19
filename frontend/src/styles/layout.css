@@ -61,45 +61,52 @@
    the one thing the phone is used for. */
 .mobile-bar, .mobile-dock { display: none; }
 @media (max-width: 819px) {
-  /* The bar FLOATS, inset from every edge — and the document it floats over is
-     laid out the way Gecko's default viewport path expects.
+  /* The bar FLOATS as an island — but what kept it moving was never where it was
+     put, it was what its offset was MADE OF.
 
-     Six attempts held it flush against the bottom of the screen — fixed, then
-     with svh, then a compositor hint, then visualViewport correction, then a
-     non-scrolling shell, then sticky — and the browser's toolbar animation beat
-     every one. Two things were wrong, and only one of them was ever fixed.
+     Seven attempts guessed: fixed, svh, a compositor hint, visualViewport
+     correction, a non-scrolling shell, sticky, a 96px overhang, then the viewport
+     meta. The eighth measured instead. /nav-lab.html put four bars in one
+     document on the actual phone and reported, for each, how far its bottom edge
+     travelled against the visible screen while Firefox collapsed its toolbar:
 
-     FLUSHNESS was the first. A bar welded to the screen edge has no tolerance,
-     so the pixel or two Gecko is out by mid-animation (bug 1734261: the toolbar
-     clip was carried as an integer) tears a visible strip of page out of the
-     bottom of the screen, and that strip is what reads as jumping. Inset by
-     .6rem on three sides it is an island instead: page content is SUPPOSED to be
-     visible around and under it, so the same movement is the island shifting
-     slightly against a background it never owned.
+       A  coffee-tracker's, `bottom: 12px`          0px   calm
+       C  flush to the edge, `bottom: 0`            0px   calm
+       D  `position: sticky`                        0px   calm
+       B  this app's, `bottom: calc(… + env(…))`   48px   JUMPS
 
-     The VIEWPORT DECLARATION was the second, and it is why the island alone was
-     not enough here while it is enough in coffee-tracker. The island tolerates a
-     pixel; it does not tolerate a reflow. Two things were causing one on every
-     frame of the toolbar animation — `interactive-widget` in the viewport meta,
-     which opts Gecko out of the path that holds the initial containing block
-     static while the toolbar moves, and `dvh` heights, which re-resolve as it
-     moves. Both are gone; see index.html and base.css.
+     So flushness was innocent — C is welded to the edge and holds still. `fixed`
+     was innocent. `svh`, the shell, the viewport meta: all innocent, all shared
+     with variants that do not move.
 
-     `fixed` is then the right method after all, against a containing block that
-     now stays still for the length of the animation. */
-  .app-shell { flex-direction: column; }
+     48px is the tell. That is not jitter, it is the exact height of Firefox's
+     dynamic toolbar, and the only term in B's offset that can vary by it is
+     `env(safe-area-inset-bottom)`. The assumption that killed six attempts is
+     written in index.html: no `viewport-fit=cover`, therefore the safe-area
+     insets are zero. They are not. Firefox reports the dynamic toolbar's height
+     through that inset and tracks it as the toolbar slides, so `calc(.6rem +
+     env(…))` added a whole toolbar to the bar's offset when it hid and took it
+     away when it came back. The bar was doing precisely what it was told.
+
+     It also explains the tap that had to be made twice: with the toolbar shown,
+     the bar's hit area sat 48px below where it was drawn, so the first tap went
+     to the browser rather than to the page.
+
+     The rule for anything fixed in this app, therefore: a CONSTANT offset. No
+     env() on the inset OR the padding of a viewport-fixed element — the other
+     four uses are gone too (feedback.css, quickadd.css, screens.css), for the
+     same reason and with nothing lost, since they were only ever meant to be
+     zero here. */
+  .app-shell { display: block; padding-bottom: 5.75rem; }
   .sidebar { display: none; }
-  /* Enough room under the content for the island plus its inset, so the last row
-     of a list is never parked underneath it. */
-  .main {
-    flex: 1 1 auto; min-width: 0;
-    padding-bottom: calc(5.75rem + max(0px, env(safe-area-inset-bottom, 0px)));
-  }
-  /* The dock carries both the island and the "Mehr" sheet, so the sheet rides
-     with it by construction rather than by agreement. */
+  /* The room under the content is the shell's now, not the main column's — one
+     plain value on one plain block, exactly the shape variant A had. */
+  /* A's exact numbers, in px. `rem` is not a constant on this browser: Firefox
+     for Android inflates text, and a root font-size that moves takes every rem
+     offset with it. The lab's calm variants were all px. */
   .mobile-dock {
     display: block; position: fixed; z-index: 40;
-    inset: auto .6rem calc(.6rem + max(0px, env(safe-area-inset-bottom, 0px))) .6rem;
+    left: 12px; right: 12px; bottom: 12px;
   }
   .mobile-bar {
     display: flex;

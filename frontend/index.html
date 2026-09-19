@@ -2,26 +2,23 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <!-- The viewport line is EXACTLY coffee-tracker's, and that is the point.
-         It is the one declaration that decides what `position: fixed` is measured
-         against, and coffee-tracker has the same floating bottom navigation on the
-         same phones without the drift this app kept reporting.
+    <!-- No `viewport-fit=cover`. Cover lays the page out edge to edge, behind the
+         browser's own chrome, so `bottom` for a fixed element would mean the
+         bottom of the DISPLAY rather than the bottom of what the page has been
+         given. It stays off.
 
-         No `viewport-fit=cover`: cover lays the page out edge to edge, behind the
-         browser's own chrome, so `bottom` for a fixed element means the bottom of
-         the DISPLAY rather than the bottom of what the page has been given.
+         What must NOT be read into that: an earlier version of this comment
+         reasoned "no cover, therefore `env(safe-area-inset-*)` is zero, therefore
+         harmless". Measured on the phone, Firefox reports its dynamic toolbar's
+         height — 48px — through `safe-area-inset-bottom` and tracks it as the
+         toolbar slides. Every fixed offset built on env() moved by a whole
+         toolbar. They are all gone now; see the note in layout.css.
 
-         No `interactive-widget` either, and THAT is the part six previous attempts
-         missed — the last of them removed `viewport-fit=cover` and recorded in
-         this very comment that the two documents were now identical, while this
-         key sat in the same tag, unexamined. It is not cosmetic. Gecko carries a
-         separate code path for viewport handling while the dynamic toolbar is
-         moving once `interactive-widget` is present; the default path keeps the
-         initial containing block static through the whole toolbar animation
-         (bug 1586144), which is precisely the property a bottom-anchored fixed
-         element needs. Setting the key opts out of it, for a keyboard behaviour
-         that is now handled where it belongs — in the one sheet that wanted it,
-         see `--keyboard-inset` in quickadd.css. -->
+         `interactive-widget=resizes-content` is also gone, but honesty about why:
+         it was removed on a theory that the nav-lab measurement then DISPROVED —
+         it was never the cause. It stays out because the keyboard behaviour it
+         bought is now explicit in `useKeyboardInset`, not because it was guilty.
+         Putting it back and deleting that hook is a reasonable follow-up. -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#14181b" />
     <link rel="icon" type="image/png" href="/fi.png" />

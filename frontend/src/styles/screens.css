@@ -184,7 +184,7 @@
     width: 100%;
     max-height: 92svh;
     border-radius: var(--r-lg) var(--r-lg) 0 0;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 1rem;
   }
 }
 .booking-editor__row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }

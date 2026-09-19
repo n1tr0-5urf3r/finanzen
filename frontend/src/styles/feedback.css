@@ -14,7 +14,8 @@
 
 .toast-stack {
   position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  /* A constant, like every other fixed offset here — see layout.css. */
+  bottom: 80px;
   display: flex; flex-direction: column; gap: .5rem; width: min(92vw, 30rem);
 }
 @media (min-width: 820px) { .toast-stack { bottom: 1.5rem; } }
