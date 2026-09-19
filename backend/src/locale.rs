@@ -203,13 +203,13 @@ mod tests {
     #[allow(clippy::excessive_precision)]
     #[test]
     fn absorbs_the_float_artifacts_present_in_both_source_files() {
-        // Verbatim values observed in the raw XML of konten_2026_auswertung.xlsx
-        // and konten.ods.
+        // The shape of the artifacts observed in the raw XML of the source
+        // workbooks: a value that is exact on paper and off by an ulp in binary.
         assert_eq!(cents_from_f64(67.290000000000006).unwrap(), 6729);
         assert_eq!(cents_from_f64(4.6500000000000004).unwrap(), 465);
         assert_eq!(cents_from_f64(8.300000000000001).unwrap(), 830);
         assert_eq!(cents_from_f64(9.699999999999999).unwrap(), 970);
-        assert_eq!(cents_from_f64(45171.910000000011).unwrap(), 4000000);
+        assert_eq!(cents_from_f64(40000.000000000007).unwrap(), 4000000);
         // KitchenOwl float balance
         assert_eq!(cents_from_f64(-149.16999999999217).unwrap(), -14917);
         assert_eq!(cents_from_f64(31.889999999999997).unwrap(), 3189);
@@ -255,8 +255,8 @@ mod tests {
 
     #[test]
     fn division_rounds_half_away_from_zero() {
-        assert_eq!(div_round_half_up(2700000, 9), 300000);
-        assert_eq!(div_round_half_up(810000, 9), 90000);
+        assert_eq!(div_round_half_up(2700005, 9), 300001);
+        assert_eq!(div_round_half_up(810040, 9), 90004);
         assert_eq!(div_round_half_up(5, 2), 3);
         assert_eq!(div_round_half_up(-5, 2), -3);
     }

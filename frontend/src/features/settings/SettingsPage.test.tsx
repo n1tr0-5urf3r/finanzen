@@ -33,7 +33,7 @@ const YEARS: Year[] = [
     carryoverGapCents: null,
   },
   {
-    // The 250,00 € the legacy rows are short of their own month markers.
+    // The amount the legacy rows fall short of their own month markers.
     year: 2026,
     openingBalanceCents: 4000000,
     openingSource: 'configured',

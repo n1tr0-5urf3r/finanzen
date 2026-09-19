@@ -38,14 +38,14 @@ const NEBENKOSTEN = {
   duePassed: true,
 };
 
-/** Kfz-Versicherung: 307,00, due in Juli, not yet paid. */
+/** A yearly car insurance: 307,00, due in Juli, not yet paid. */
 const KFZ = {
   fund: {
     id: 'kfz',
     name: 'Kfz-Versicherung',
     categoryId: 'c-kfz',
     categoryName: 'Versicherungen',
-    annualCents: 30_700,
+    annualCents: 30700,
     dueMonth: 7,
     dueMonthName: 'Juli',
     note: null,
@@ -55,7 +55,7 @@ const KFZ = {
   monthlyAccrualCents: 2_558,
   accruedByMonthCents: 15_350,
   spentCents: 0,
-  remainingCents: 30_700,
+  remainingCents: 30700,
   overUnderCents: 15_350,
   duePassed: false,
 };
@@ -67,7 +67,7 @@ const OVERVIEW = {
   monthlyAccrualCents: 14_558,
   accruedByMonthCents: 111_350,
   spentCents: 144_000,
-  owedToTheFutureCents: 30_700,
+  owedToTheFutureCents: 30700,
 };
 
 const SUGGESTIONS = [

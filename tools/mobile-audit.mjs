@@ -8,9 +8,10 @@
  *    entire page down — navigation bar included — and by making vertical scrolling
  *    fight a horizontal one. It looks like three unrelated bugs and it is one.
  * 2. The bottom bar is on screen with its full height, at the top of the page AND
- *    after scrolling. It is `position: sticky`, so unlike the URL-bar behaviour it
- *    depends on, this part IS reproducible headlessly: a sticky element that is
- *    not pinned to the scrollport shows up here immediately.
+ *    after scrolling. The drift this bar is famous for is Firefox's toolbar
+ *    animation and is not reproducible headlessly — but a bar that is mispositioned
+ *    at rest, or that leaves the screen on an ordinary scroll, shows up here
+ *    immediately, and every regression so far announced itself that way first.
  *
  * Run (needs nothing installed but Docker):
  *
@@ -93,13 +94,10 @@ for (const route of ROUTES) {
         });
       }
     }
-    // The bottom bar must be laid out inside the screen, and the DOCUMENT must
-    // not scroll — the app scrolls inside its shell. Both together are what keep
-    // the browser's URL bar out of the layout: it cannot hide if nothing scrolls
-    // it, so there is no viewport transition for a bar to be caught in.
-    // The first nav item, not the bar's box: the box deliberately overhangs the
-    // bottom of the scrollport to cover the browser's toolbar animation, so its
-    // own rectangle says nothing about whether the bar is usable.
+    // The bar is a fixed island inset from every edge, so its own rectangle is
+    // the thing to measure — but the first nav item is measured instead, because
+    // that is the tap target, and a bar whose box is on screen while its contents
+    // are not has failed in the way that matters.
     const bar = document.querySelector('.mobile-bar a, .mobile-bar__more');
     const barRect = bar ? bar.getBoundingClientRect() : null;
     return {
@@ -135,10 +133,10 @@ for (const route of ROUTES) {
       );
     }
 
-    // Scrolling, then settled. The bar deliberately leaves for the length of the
-    // gesture — that is when the browser's URL bar is animating and nothing
-    // anchored to the bottom holds still — so both halves are checked: gone while
-    // the page moves, and back on screen once it has stopped.
+    // And again once the page has been scrolled: the bar is fixed, so it must be
+    // in exactly the same place. The one thing headless Chromium cannot show is
+    // the Firefox toolbar animation this bar is designed around, so passing here
+    // is necessary and not sufficient — the real check is a phone.
     if (report.docScrollHeight > report.innerHeight + 200) {
       const barRect = () =>
         page.evaluate(() => {

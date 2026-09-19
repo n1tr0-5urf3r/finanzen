@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { DataLabel } from '../../components/DataLabel';
 import { useT } from '../../lib/i18n';
+import { useKeyboardInset } from '../../lib/keyboard';
 import type { Category } from '../../lib/types';
 import { sortedByName } from '../../lib/categories';
 
@@ -26,6 +27,7 @@ export function CategorySheet({
   onClose: () => void;
 }) {
   const t = useT();
+  useKeyboardInset();
   const [query, setQuery] = useState('');
 
   // Grouped by type, because 32 categories in one flat list is a scroll and a

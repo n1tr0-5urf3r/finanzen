@@ -10,7 +10,13 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
-  min-height: 100dvh;
+  /* `svh`, never `dvh`, and the same goes for every other height in this app.
+     `dvh` re-resolves as the browser's toolbar slides away, so a page using it
+     reflows on every frame of that animation — and a bottom-anchored fixed
+     element is then being re-placed, by the main thread, against a box that is
+     still changing. `svh` is the smallest viewport: one value, constant while
+     the toolbar moves, nothing to be caught out by. */
+  min-height: 100svh;
 }
 
 /* Euro columns must line up, which is the whole reason this app carries a webfont. */

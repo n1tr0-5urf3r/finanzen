@@ -673,15 +673,55 @@ async fn filters_narrow_and_report_their_own_sums() {
 /// Imports the real workbooks through the HTTP API and asserts the acceptance
 /// numbers come out of the database, not just out of the pure engine.
 ///
+/// The figures the real workbooks must produce, read from the frozen fixture the
+/// golden suite uses. They are a real household's totals, so they live in
+/// `tests/fixtures/expected.json`, which `.gitignore` covers — see `golden.rs`.
+fn expected(path: &str) -> i64 {
+    static EXPECTED: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    let doc = EXPECTED.get_or_init(|| {
+        let raw = std::fs::read_to_string("tests/fixtures/expected.json")
+            .expect("tests/fixtures/expected.json — see golden.rs");
+        serde_json::from_str(&raw).expect("expected fixture")
+    });
+    let mut node = doc;
+    for key in path.split('.') {
+        node = node
+            .get(key)
+            .unwrap_or_else(|| panic!("expected.json has no `{path}` (missing `{key}`)"));
+    }
+    node.as_i64()
+        .unwrap_or_else(|| panic!("`{path}` is not an integer"))
+}
+
+/// The expected net of one 2026 category, by name.
+fn expected_category(name: &str) -> i64 {
+    static EXPECTED: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    let doc = EXPECTED.get_or_init(|| {
+        let raw = std::fs::read_to_string("tests/fixtures/expected.json")
+            .expect("tests/fixtures/expected.json — see golden.rs");
+        serde_json::from_str(&raw).expect("expected fixture")
+    });
+    doc["y2026"]["categoryNets"]
+        .as_array()
+        .expect("categoryNets")
+        .iter()
+        .find(|r| r[0].as_str() == Some(name))
+        .unwrap_or_else(|| panic!("expected.json has no category `{name}`"))[1]
+        .as_i64()
+        .expect("integer")
+}
+
 /// Skips when the workbooks are absent, because they carry personal financial data
-/// and are deliberately not in the repository.
+/// and are deliberately not in the repository. `expected.json` is absent for the
+/// same reason, so it gates the test too.
 #[tokio::test]
 async fn importing_the_real_workbooks_reproduces_the_acceptance_numbers() {
-    let (Ok(_), Ok(_)) = (
+    let (Ok(_), Ok(_), Ok(_)) = (
         std::fs::metadata("../konten_2026_auswertung.xlsx"),
         std::fs::metadata("../konten.ods"),
+        std::fs::metadata("tests/fixtures/expected.json"),
     ) else {
-        eprintln!("SKIP: source workbooks not present");
+        eprintln!("SKIP: source workbooks or expected.json not present");
         return;
     };
     let mut app = app!();
@@ -738,27 +778,38 @@ async fn importing_the_real_workbooks_reproduces_the_acceptance_numbers() {
     app.send(
         "PUT",
         "/years/2026",
-        Some(json!({"year":2026,"openingBalanceCents":4_000_000})),
+        Some(json!({"year":2026,"openingBalanceCents":expected("y2026.openingCents")})),
     )
     .await;
 
     let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
-    assert_eq!(d["incomeCents"], 3_600_000, "Einnahmen 36.000,00");
-    assert_eq!(d["expenseCents"], 2_700_000, "Ausgaben 27.000,00");
-    assert_eq!(d["balanceCents"], 900_000, "Bilanz 9.000,00");
+    assert_eq!(d["incomeCents"], expected("y2026.incomeCents"), "Einnahmen");
     assert_eq!(
-        d["closingBalanceCents"], 4_900_000,
-        "Bilanz gesamt 49.000,00"
+        d["expenseCents"],
+        expected("y2026.expenseCents"),
+        "Ausgaben"
     );
-    assert_eq!(d["taxRelevantCount"], 20);
+    assert_eq!(d["balanceCents"], expected("y2026.saldoCents"), "Bilanz");
+    assert_eq!(
+        d["closingBalanceCents"],
+        expected("y2026.closingCents"),
+        "Bilanz gesamt"
+    );
+    assert_eq!(d["taxRelevantCount"], expected("y2026.taxCount"));
     assert_eq!(d["uncategorizedCount"], 0);
-    assert_eq!(d["monthsWithData"], 9);
-    assert_eq!(d["averageExpensePerMonthCents"], 300_000);
-    assert_eq!(d["fixedCostsPerMonthCents"], 90_000);
+    assert_eq!(d["monthsWithData"], expected("y2026.monthsWithData"));
+    assert_eq!(
+        d["averageExpensePerMonthCents"],
+        expected("y2026.averageExpensePerMonth")
+    );
+    assert_eq!(
+        d["fixedCostsPerMonthCents"],
+        expected("y2026.fixedCostsPerMonth")
+    );
 
-    // The three rows carrying a "Kategorie manuell" override must land in
-    // Dienstreisen, not in the category their comment's rule would choose. Getting
-    // this wrong moves 860,00 into Reisen & Urlaub and is invisible in the totals.
+    // The rows carrying a "Kategorie manuell" override must land in Dienstreisen,
+    // not in the category their comment's rule would choose. Getting this wrong
+    // moves their net into Reisen & Urlaub and is invisible in the totals.
     let (_, analysis) = app
         .send("GET", "/analysis/categories?year=2026", None)
         .await;
@@ -774,19 +825,26 @@ async fn importing_the_real_workbooks_reproduces_the_acceptance_numbers() {
         })
         .collect();
     assert_eq!(
-        net["Dienstreisen"], 5_500,
+        net["Dienstreisen"],
+        expected_category("Dienstreisen"),
         "manuelle Zuordnung wurde angewandt"
     );
-    assert_eq!(net["Reisen & Urlaub"], 240_000);
-    assert_eq!(net["Miete"], 480_000);
-    assert_eq!(net["Sport"], 46_000);
-    assert_eq!(net["Sparen & Anlage"], 648_000);
+    assert_eq!(net["Reisen & Urlaub"], expected_category("Reisen & Urlaub"));
+    assert_eq!(net["Miete"], expected_category("Miete"));
+    assert_eq!(net["Sport"], expected_category("Sport"));
+    assert_eq!(net["Sparen & Anlage"], expected_category("Sparen & Anlage"));
 
     // June's variable costs are negative because of a reimbursement — the single
     // best regression test for netting surviving the whole stack.
     let (_, months) = app.send("GET", "/overview/months?year=2026", None).await;
-    assert_eq!(months["months"][5]["variableCostsNetCents"], -30_000);
-    assert_eq!(months["months"][8]["cumulativeCents"], 900_000);
+    assert_eq!(
+        months["months"][5]["variableCostsNetCents"],
+        expected("y2026.juneVariableNetCents")
+    );
+    assert_eq!(
+        months["months"][8]["cumulativeCents"],
+        expected("y2026.saldoCents")
+    );
 
     // The legacy sheet: month-only rows recovered from saldo markers, the three
     // blocks that disagree with their own marker recorded rather than adjusted.
@@ -794,10 +852,17 @@ async fn importing_the_real_workbooks_reproduces_the_acceptance_numbers() {
     let (_, preview) = app
         .send("GET", &format!("/imports/{legacy_id}"), None)
         .await;
-    assert_eq!(preview["counts"]["dataRows"], 1404);
+    assert_eq!(
+        preview["counts"]["dataRows"],
+        expected("legacy.bookingCount")
+    );
     assert_eq!(preview["counts"]["transfer"], 4, "nur die Kontoumbuchungen");
-    assert_eq!(preview["markerTotalCents"], 4_000_000, "Marker = Vortrag");
-    assert_eq!(preview["rowTotalCents"], 4_485_541);
+    assert_eq!(
+        preview["markerTotalCents"],
+        expected("legacy.markerTotalCents"),
+        "Marker = Vortrag"
+    );
+    assert_eq!(preview["rowTotalCents"], expected("legacy.rowTotalCents"));
     assert_eq!(preview["blocks"].as_array().unwrap().len(), 31);
     let mismatched: Vec<_> = preview["blocks"]
         .as_array()
@@ -1935,10 +2000,7 @@ async fn the_export_round_trip_preserves_every_figure() {
         theirs["openingBalanceCents"], 4000000,
         "der Vortrag reist mit"
     );
-    assert_eq!(
-        theirs["balanceCents"], 781750,
-        "1.191.000 ein − 173.510 aus"
-    );
+    assert_eq!(theirs["balanceCents"], 781750, "955.000 ein − 173.250 aus");
     assert_eq!(theirs["bookingCount"], 8, "der Entwurf zählt nicht mit");
     assert_eq!(theirs["taxRelevantCount"], 2);
 
@@ -2046,14 +2108,17 @@ async fn recurring_templates_and_receipts_are_tenant_scoped() {
 /// The same round trip, against the real 2026 workbook, asserting the acceptance
 /// numbers come back out the other side.
 ///
-/// The synthetic round-trip above proves the mechanism; this one proves it on 474
-/// real bookings with 192 rules, three manual overrides and the netting that makes
-/// Miete read 4.800,00. Skips when the workbook is absent — it carries personal
-/// financial data and is deliberately not in the repository.
+/// The synthetic round-trip above proves the mechanism; this one proves it on the
+/// real ledger, with its rule table, its manual overrides and the netting they
+/// depend on. Skips when the workbook is absent — it carries personal financial
+/// data and is deliberately not in the repository, and neither is `expected.json`.
 #[tokio::test]
 async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
-    let Ok(_) = std::fs::metadata("../konten_2026_auswertung.xlsx") else {
-        eprintln!("SKIP: source workbook not present");
+    let (Ok(_), Ok(_)) = (
+        std::fs::metadata("../konten_2026_auswertung.xlsx"),
+        std::fs::metadata("tests/fixtures/expected.json"),
+    ) else {
+        eprintln!("SKIP: source workbook or expected.json not present");
         return;
     };
     let mut app = app!();
@@ -2101,35 +2166,66 @@ async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
     app.send(
         "PUT",
         "/years/2026",
-        Some(json!({"year": 2026, "openingBalanceCents": 4000000})),
+        Some(json!({"year": 2026, "openingBalanceCents": expected("y2026.openingCents")})),
     )
     .await;
 
     let (_, mine) = app.send("GET", "/dashboard?year=2026", None).await;
-    assert_eq!(mine["balanceCents"], 900000, "Bilanz 2026");
-    assert_eq!(mine["closingBalanceCents"], 4900000, "Bilanz gesamt");
+    assert_eq!(
+        mine["balanceCents"],
+        expected("y2026.saldoCents"),
+        "Bilanz 2026"
+    );
+    assert_eq!(
+        mine["closingBalanceCents"],
+        expected("y2026.closingCents"),
+        "Bilanz gesamt"
+    );
 
     let (_, _, bytes) = app.get_raw("/exports/bookings.json").await;
     let document: Value = serde_json::from_slice(&bytes).expect("export json");
-    assert_eq!(document["bookings"].as_array().unwrap().len(), 474);
+    assert_eq!(
+        document["bookings"].as_array().unwrap().len() as i64,
+        expected("y2026.bookingCount")
+    );
 
     let other = app.create_second_user("wiederhergestellt").await;
     let (status, restored) = app
         .send_as(Some(&other), "POST", "/exports/restore", Some(document))
         .await;
     assert_eq!(status, StatusCode::CREATED, "{restored}");
-    assert_eq!(restored["bookingsCreated"], 474);
+    assert_eq!(restored["bookingsCreated"], expected("y2026.bookingCount"));
     assert_eq!(restored["ruleLinksDowngraded"], 0);
 
     let (_, theirs) = app
         .send_as(Some(&other), "GET", "/dashboard?year=2026", None)
         .await;
-    assert_eq!(theirs["incomeCents"], 3600000, "Einnahmen");
-    assert_eq!(theirs["expenseCents"], 2700000, "Ausgaben");
-    assert_eq!(theirs["balanceCents"], 900000, "Bilanz");
-    assert_eq!(theirs["openingBalanceCents"], 4000000, "Vortrag");
-    assert_eq!(theirs["closingBalanceCents"], 4900000, "Bilanz gesamt");
-    assert_eq!(theirs["taxRelevantCount"], 20);
+    assert_eq!(
+        theirs["incomeCents"],
+        expected("y2026.incomeCents"),
+        "Einnahmen"
+    );
+    assert_eq!(
+        theirs["expenseCents"],
+        expected("y2026.expenseCents"),
+        "Ausgaben"
+    );
+    assert_eq!(
+        theirs["balanceCents"],
+        expected("y2026.saldoCents"),
+        "Bilanz"
+    );
+    assert_eq!(
+        theirs["openingBalanceCents"],
+        expected("y2026.openingCents"),
+        "Vortrag"
+    );
+    assert_eq!(
+        theirs["closingBalanceCents"],
+        expected("y2026.closingCents"),
+        "Bilanz gesamt"
+    );
+    assert_eq!(theirs["taxRelevantCount"], expected("y2026.taxCount"));
     assert_eq!(theirs["uncategorizedCount"], 0);
 
     for path in [
@@ -2158,7 +2254,10 @@ async fn the_round_trip_reproduces_the_2026_acceptance_numbers() {
         .iter()
         .find(|m| m["month"] == 6)
         .expect("Juni");
-    assert_eq!(juni["variableCostsNetCents"], -30000);
+    assert_eq!(
+        juni["variableCostsNetCents"],
+        expected("y2026.juneVariableNetCents")
+    );
 }
 
 /// A ledger is read from the end: the bookings someone is most likely to be fixing

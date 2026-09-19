@@ -86,7 +86,7 @@ export function SettingsPage() {
  * Years and the opening balance.
  *
  * The carry-over is a **configured** value, not a derived one: the legacy sheet's
- * own month markers add up to 250,00 € more than its rows do, and the project's
+ * own month markers can add up to more than its rows do, and the project's
  * standing decision is to import the rows unchanged rather than invent correction
  * bookings. So a gap here is an explanation, not an error state.
  */

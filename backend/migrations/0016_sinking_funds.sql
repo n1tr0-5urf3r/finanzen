@@ -1,9 +1,9 @@
 -- Rücklagen: the annual and quarterly lumps, accrued monthly.
 --
--- The real ledger has Kfz-Versicherung 307,00 in Juli, Nebenkosten 1.440,00 in
--- August, vServer 60,00, GEZ 48,00 quarterly. Each lands in one month, so that month
--- looks terrible and the other eleven look better than they are — the monthly saldo
--- is telling the truth about a month and lying about a year.
+-- A household ledger carries lumps like a yearly car insurance, an annual service
+-- charge, a server bill and a quarterly broadcasting fee. Each lands in one month,
+-- so that month looks terrible and the other eleven look better than they are — the
+-- monthly saldo is telling the truth about a month and lying about a year.
 --
 -- A fund states what a known lump costs per year and when it falls due. Nothing here
 -- books anything: this table is an EXPECTATION, and the bookings it is compared

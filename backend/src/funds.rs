@@ -1,9 +1,9 @@
 //! Rücklagen — the annual and quarterly lumps, accrued monthly.
 //!
-//! The ledger's spikes are real: Kfz-Versicherung 307,00 lands in Juli, Nebenkosten
-//! 1.440,00 in August. The monthly saldo tells the truth about each month and, by
-//! doing so, lies about the year — eleven months look better than they are and one
-//! looks like a disaster.
+//! A ledger's spikes are real: a car insurance lands in one month, a service charge
+//! in another. The monthly saldo tells the truth about each month and, by doing so,
+//! lies about the year — eleven months look better than they are and one looks like
+//! a disaster.
 //!
 //! A fund states what a known lump costs per year and when it arrives. It books
 //! NOTHING: it is an expectation, measured against the ordinary bookings already in
@@ -40,7 +40,7 @@ pub fn monthly_accrual(annual_cents: i64) -> i64 {
 ///
 /// Computed from the ANNUAL amount rather than by multiplying the monthly one, and
 /// that is the whole point: 307,00 ÷ 12 rounds to 25,58, and twelve of those is
-/// 306,96 — three cents the fund never had and the bill will not accept. Taking the
+/// 306,96 — four cents the fund never had and the bill will not accept. Taking the
 /// proportion of the annual figure instead makes month 12 come back to the annual
 /// amount exactly, for every input.
 pub fn accrued_through(annual_cents: i64, month: u8) -> i64 {
@@ -418,11 +418,11 @@ mod tests {
     #[test]
     fn twelve_months_of_accrual_come_back_to_the_year_exactly() {
         for annual in [
-            144_000, // Nebenkosten 1.440,00 — divides evenly
-            30_700,  // Kfz-Versicherung 307,00 — does not
-            6_000,   // vServer 60,00
-            4_800,   // GEZ 48,00
-            500,     // Domain 5,00
+            144_000, // a yearly service charge — divides evenly
+            30_700,  // a yearly car insurance — does not
+            6_000,   // a monthly server bill, annualised
+            4_800,   // a quarterly broadcasting fee, annualised
+            500,     // a domain, 5,00 a year
             1,       // one cent a year: the degenerate case
             99_999_999,
         ] {
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn the_monthly_figure_is_the_annual_one_divided_by_twelve() {
         assert_eq!(monthly_accrual(144_000), 12_000);
-        // 307,00 / 12 = 28,6275 → 25,58, and twelve of THOSE would be 306,96.
+        // 307,00 / 12 = 25,5833 → 25,58, and twelve of THOSE would be 306,96.
         assert_eq!(monthly_accrual(30_700), 2_558);
         assert_ne!(monthly_accrual(30_700) * 12, 30_700);
     }

@@ -43,9 +43,9 @@ const OVERVIEW: MonthlyOverview = {
     month(3, { incomeCents: 1040000, expenseCents: 280000, balanceCents: 760000, cumulativeCents: 830000, bookingCount: 54 }),
     month(4, { incomeCents: 300000, expenseCents: 400000, balanceCents: -100000, cumulativeCents: 730000, bookingCount: 52 }),
     month(5, { incomeCents: 300000, expenseCents: 380000, balanceCents: -80000, cumulativeCents: 650000, bookingCount: 52 }),
-    // The netting artefact: Juni's variable costs are NEGATIVE because a 1.000,00 €
-    // refund landed in Dienstreisen. Any implementation that clamps or takes an
-    // absolute value fails right here.
+    // The netting artefact: Juni's variable costs are NEGATIVE because a refund
+    // landed in Dienstreisen. Any implementation that clamps or takes an absolute
+    // value fails right here.
     month(6, { incomeCents: 500000, expenseCents: 300000, balanceCents: 200000, cumulativeCents: 850000, bookingCount: 45, variableCostsNetCents: -30000 }),
     month(7, { incomeCents: 300000, expenseCents: 310000, balanceCents: -10000, cumulativeCents: 840000, bookingCount: 74 }),
     month(8, { incomeCents: 260000, expenseCents: 300000, balanceCents: -40000, cumulativeCents: 800000, bookingCount: 61 }),

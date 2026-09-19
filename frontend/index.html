@@ -2,25 +2,27 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <!-- Deliberately WITHOUT `viewport-fit=cover`. Cover lays the page out edge to
-         edge, behind the browser's own chrome, so `bottom: 0` for a fixed element
-         means the bottom of the DISPLAY rather than the bottom of what the page
-         has been given — and every time Firefox's toolbar slides away, the
-         compensation for that difference is the offset you see on the navigation
-         bar. Without it the viewport is the visible content area, which is what
-         the bar should be measured against. It is also the one structural
-         difference between this document and coffee-tracker's, whose identical
-         floating navigation does not drift. -->
-    <!-- `interactive-widget=resizes-content` makes the soft keyboard SHRINK the
-         viewport instead of overlapping it. Without it a bottom sheet — the
-         category picker in Quick Add — keeps its full height when the keyboard
-         opens, so the matches you are typing towards end up behind it and have to
-         be scrolled for. With it, `dvh` and `bottom: 0` mean what they say while
-         the keyboard is up. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
-    />
+    <!-- The viewport line is EXACTLY coffee-tracker's, and that is the point.
+         It is the one declaration that decides what `position: fixed` is measured
+         against, and coffee-tracker has the same floating bottom navigation on the
+         same phones without the drift this app kept reporting.
+
+         No `viewport-fit=cover`: cover lays the page out edge to edge, behind the
+         browser's own chrome, so `bottom` for a fixed element means the bottom of
+         the DISPLAY rather than the bottom of what the page has been given.
+
+         No `interactive-widget` either, and THAT is the part six previous attempts
+         missed — the last of them removed `viewport-fit=cover` and recorded in
+         this very comment that the two documents were now identical, while this
+         key sat in the same tag, unexamined. It is not cosmetic. Gecko carries a
+         separate code path for viewport handling while the dynamic toolbar is
+         moving once `interactive-widget` is present; the default path keeps the
+         initial containing block static through the whole toolbar animation
+         (bug 1586144), which is precisely the property a bottom-anchored fixed
+         element needs. Setting the key opts out of it, for a keyboard behaviour
+         that is now handled where it belongs — in the one sheet that wanted it,
+         see `--keyboard-inset` in quickadd.css. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#14181b" />
     <link rel="icon" type="image/png" href="/fi.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />

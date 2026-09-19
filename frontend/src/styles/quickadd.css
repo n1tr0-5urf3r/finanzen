@@ -118,15 +118,21 @@
 .quick__confirm:disabled { background: rgba(255,255,255,.12); color: var(--on-inverse-muted); }
 
 .sheet {
-  position: fixed; inset: auto 0 0 0; z-index: 50;
+  /* Lifted clear of the keyboard rather than hidden behind it: the search field
+     stays put at the top and the list below it is what shrinks and scrolls, so
+     what you are typing towards stays on screen.
+
+     The lift is `--keyboard-inset`, published by `useKeyboardInset` while a sheet
+     is open. It used to be free — `interactive-widget=resizes-content` shrank the
+     layout viewport around the keyboard, so `bottom: 0` already meant this — but
+     that key cost the app's bottom navigation its still containing block. The
+     height is `svh` for the same reason: one value, not one that re-resolves
+     while the browser's toolbar is moving. */
+  position: fixed; inset: auto 0 var(--keyboard-inset, 0px) 0; z-index: 50;
   background: var(--surface); color: var(--ink);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-  /* `dvh`, not `svh`: this is the one element that SHOULD follow the viewport as
-     it changes, because the change that matters is the keyboard opening under it
-     (see `interactive-widget=resizes-content` in index.html). The search field
-     stays put at the top and the list below it is what shrinks and scrolls, so
-     what you are typing towards stays on screen. */
-  max-height: 85dvh; display: flex; flex-direction: column; min-height: 0;
+  max-height: calc(85svh - var(--keyboard-inset, 0px));
+  display: flex; flex-direction: column; min-height: 0;
   box-shadow: var(--shadow-3);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

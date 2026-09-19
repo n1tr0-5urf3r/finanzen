@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { DataLabel } from '../../components/DataLabel';
 import { useT } from '../../lib/i18n';
+import { useKeyboardInset } from '../../lib/keyboard';
 import type { CommentSummary, Rule } from '../../lib/types';
 
 /**
@@ -21,6 +22,7 @@ export function CommentSheet({
   onClose: () => void;
 }) {
   const t = useT();
+  useKeyboardInset();
   const [query, setQuery] = useState('');
 
   const options = useMemo(() => {

@@ -377,7 +377,7 @@ pub struct YearChained {
     pub booking_count: i64,
     /// Set when a configured opening disagrees with the previous year's close.
     /// Surfaced in the UI rather than silently disagreeing with the spreadsheet
-    /// forever — for 2026 this is the 250,00 the legacy rows are short.
+    /// forever — typically the amount the legacy rows fall short of their markers.
     pub chain_gap_cents: Option<i64>,
 }
 
