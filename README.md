@@ -18,6 +18,17 @@
   <img alt="Deployment" src="https://img.shields.io/badge/deploy-Docker%20Compose-2496ed">
 </p>
 
+<div align="center">
+
+This repo is rather for my personal use for tracking finances. There are already dozens of other finance trackers out there. However, if you find mine useful, feel free to use it, or support me in the development:
+
+<a href="https://www.paypal.com/donate/?hosted_button_id=KXMYX49C6MLLN">
+  <img src="https://img.shields.io/badge/Support%20the%20project-Donate%20via%20PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal">
+</a>
+
+</div>
+
+
 ---
 
 The spreadsheet could do everything — two-layer categorisation, net arithmetic, a tax
