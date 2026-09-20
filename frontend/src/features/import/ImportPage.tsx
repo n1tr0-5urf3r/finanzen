@@ -95,6 +95,17 @@ export function ImportPage() {
           loading={batches.isLoading}
           selected={batchId}
           onSelect={(id) => setParam('stapel', id)}
+          onReview={(id) => {
+            setParams(
+              (prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('stapel', id);
+                next.set('ansicht', 'pruefliste');
+                return next;
+              },
+              { replace: true },
+            );
+          }}
         />
       ) : batchId && categories.data ? (
         // A statement is reviewed line by line and a workbook comment by comment.
@@ -123,11 +134,17 @@ function ImportTab({
   loading,
   selected,
   onSelect,
+  onReview,
 }: {
   batches: ImportBatchSummary[];
   loading: boolean;
   selected: string | null;
   onSelect: (id: string) => void;
+  /** A statement lands on its own review: uploading it books nothing, and the
+      work — a comment and a category per line — is all on that screen. Dropping
+      the user on a preview with a commit button would be offering the one action
+      that does nothing yet. */
+  onReview: (id: string) => void;
 }) {
   const t = useT();
   const client = useQueryClient();
@@ -143,7 +160,8 @@ function ImportTab({
       setProgress(null);
       client.invalidateQueries({ queryKey: qk.imports.list() });
       client.setQueryData(qk.imports.one(preview.id), preview);
-      onSelect(preview.id);
+      if (preview.source === 'csv_ing') onReview(preview.id);
+      else onSelect(preview.id);
       setNotice(null);
     },
     onError: () => setProgress(null),

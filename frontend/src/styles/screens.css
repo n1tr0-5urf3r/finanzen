@@ -306,3 +306,5 @@
 /* The reference text is one tap away; the toggle has to read as a control, not
    as more of the payee's name. */
 .statement__toggle { font-size: .75rem; }
+/* The two memories a reviewed line can leave behind, side by side. */
+.statement__remember { display: flex; flex-wrap: wrap; gap: .4rem 1rem; }

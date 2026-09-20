@@ -1052,6 +1052,9 @@ export interface StatementRow {
   suggestionScore: number | null;
   decision: 'pending' | 'accepted' | 'rejected';
   createRule: boolean;
+  /** Remember what this payee is called, for every future statement. Off by
+      default: PayPal is always the same payee and a different purchase. */
+  rememberPayee: boolean;
   duplicateBookingId: string | null;
   duplicateComment: string | null;
   duplicateBookedOn: string | null;

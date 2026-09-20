@@ -3176,7 +3176,8 @@ async fn a_bank_statement_is_reviewed_line_by_line_before_anything_is_booked() {
     app.setup_admin().await;
 
     // Something already in the ledger for the statement to collide with: the same
-    // amount, two days before the bank got round to booking it.
+    // amount, two days before the bank got round to booking it — the edge of the
+    // window on purpose, because that is the case the window exists for.
     let (status, _) = app
         .send(
             "POST",

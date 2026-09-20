@@ -8,9 +8,9 @@ import { Banner, Button, EmptyState, ErrorState, LoadingState, StatusPill } from
 import { api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { qk } from '../../lib/queryKeys';
+import { invalidateAfterBookingChange, invalidateAfterTaxonomyChange, qk } from '../../lib/queryKeys';
 import { sortedByName } from '../../lib/categories';
-import type { Category, StatementRow, StatementRowPage } from '../../lib/types';
+import type { Category, CommitResult, StatementRow, StatementRowPage } from '../../lib/types';
 
 type Filter = '' | 'pending' | 'accepted' | 'rejected' | 'duplicates';
 
@@ -61,6 +61,19 @@ export function StatementReview({
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: qk.imports.root });
+    },
+  });
+
+  // Committing belongs on this screen: it is the last step of the review, and the
+  // number on the button is the number of lines that will become bookings.
+  const [notice, setNotice] = useState<string | null>(null);
+  const commit = useMutation({
+    mutationFn: () => api<CommitResult>(`/imports/${batchId}/commit`, { method: 'POST' }),
+    onSuccess: (result) => {
+      invalidateAfterBookingChange(client, result.yearsTouched);
+      invalidateAfterTaxonomyChange(client);
+      void client.invalidateQueries({ queryKey: qk.imports.root });
+      setNotice(t('import.committed', { count: result.inserted }));
     },
   });
 
@@ -116,11 +129,21 @@ export function StatementReview({
             >
               {t('statement.acceptRuleMatches')}
             </Button>
+            <Button
+              type="button"
+              busy={commit.isPending}
+              disabled={accepted === 0}
+              onClick={() => commit.mutate()}
+            >
+              {t('statement.commit', { count: accepted })}
+            </Button>
           </div>
         )}
       </div>
 
       {applied && <Banner tone="info">{t('statement.applied')}</Banner>}
+      {notice && <Banner tone="info">{notice}</Banner>}
+      {commit.isError && <ErrorState error={commit.error} />}
       {bulk.isError && <ErrorState error={bulk.error} />}
       {patch.isError && <ErrorState error={patch.error} />}
 
@@ -282,14 +305,31 @@ function StatementLine({
 
       {!readOnly && (
         <footer className="statement__foot">
-          <label className="statement__rule">
-            <input
-              type="checkbox"
-              checked={row.createRule}
-              onChange={(e) => onChange({ createRule: e.target.checked })}
-            />
-            {t('statement.rememberRule')}
-          </label>
+          <div className="statement__remember">
+            <label className="statement__rule">
+              <input
+                type="checkbox"
+                checked={row.createRule}
+                onChange={(e) => onChange({ createRule: e.target.checked })}
+              />
+              {t('statement.rememberRule')}
+            </label>
+            {/* Two different memories, and the second one is off by default: a
+                payee is not always worth remembering. PayPal is always the same
+                payee and a different purchase every time. */}
+            {row.counterparty && (
+              <label className="statement__rule">
+                <input
+                  type="checkbox"
+                  checked={row.rememberPayee}
+                  onChange={(e) =>
+                    onChange({ rememberPayee: e.target.checked, comment: comment.trim() })
+                  }
+                />
+                {t('statement.rememberPayee')}
+              </label>
+            )}
+          </div>
           <div className="statement__decide">
             <Button
               type="button"

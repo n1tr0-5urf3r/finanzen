@@ -9143,6 +9143,13 @@
               "string",
               "null"
             ]
+          },
+          "rememberPayee": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Remember what this payee is called, for every future statement."
           }
         }
       },
@@ -9196,7 +9203,8 @@
           "amountCents",
           "comment",
           "decision",
-          "createRule"
+          "createRule",
+          "rememberPayee"
         ],
         "properties": {
           "amountCents": {
@@ -9277,6 +9285,9 @@
               "string",
               "null"
             ]
+          },
+          "rememberPayee": {
+            "type": "boolean"
           },
           "sourceRef": {
             "type": "string"

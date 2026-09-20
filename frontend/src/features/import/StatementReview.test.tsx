@@ -36,6 +36,7 @@ function row(over: Partial<StatementRow>): StatementRow {
     suggestionScore: 0.9,
     decision: 'pending',
     createRule: false,
+    rememberPayee: false,
     duplicateBookingId: null,
     duplicateComment: null,
     duplicateBookedOn: null,
@@ -148,6 +149,28 @@ describe('the bank statement review', () => {
       const patches = api.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'PATCH');
       const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
       expect(bodies.some((b) => b.comment === 'Supermarkt' && b.decision === 'accepted')).toBe(true);
+    });
+  });
+
+  /**
+   * Two memories, and the second is off by default on purpose: PayPal is always
+   * the same payee and a different purchase every time, so remembering it would
+   * rename every future PayPal line to whatever the last one happened to be.
+   */
+  it('offers to remember the payee, switched off', async () => {
+    const user = userEvent.setup();
+    renderReview();
+    await screen.findByText('VISA SUPERMARKT SAGT DANKE');
+
+    const remember = screen.getAllByLabelText('Empfänger immer so nennen')[0] as HTMLInputElement;
+    expect(remember.checked).toBe(false);
+
+    await user.click(remember);
+
+    await waitFor(() => {
+      const patches = api.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'PATCH');
+      const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+      expect(bodies.some((b) => b.rememberPayee === true)).toBe(true);
     });
   });
 });
