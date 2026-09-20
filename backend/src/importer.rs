@@ -1391,8 +1391,8 @@ pub async fn review_statement_row(
     // What a payee is called, remembered under the bank's own spelling — but only
     // for the lines that asked. Renaming `Studierendenwerk
     // Musterstadt-Beispielheim Anstalt des offentlichen Rechts` to `Mensaguthaben` is
-    // worth keeping; a payment provider is always its own legal entity and a
-    // different purchase every time, and remembering THAT would rename every
+    // worth keeping; a payment provider is always its own legal
+    // entity and a different purchase every time, and remembering THAT would rename every
     // future PayPal line to whatever the last one happened to be. Hence a switch
     // per line, off by default. The latest rename wins: a correction is a
     // correction, not a second opinion.
@@ -1525,4 +1525,133 @@ pub async fn bulk_statement_decision(
     Ok(Json(BulkDecisionResult {
         affected: affected as i64,
     }))
+}
+
+// ---------------------------------------------------- what a payee is called
+
+/// One remembered payee: the bank's spelling, and the name a person gave it.
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementPayee {
+    pub id: Uuid,
+    /// As the bank writes it. Ground-truth data, never translated or tidied.
+    pub payee: String,
+    pub comment: String,
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    /// How often this rename has been applied or reconfirmed.
+    pub hits: i32,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementPayeeInput {
+    pub comment: Option<String>,
+    pub category_id: Option<Uuid>,
+    /// `true` clears the category rather than leaving it where it is — `null` in
+    /// `categoryId` cannot say "remove it", since an omitted field is also null.
+    #[serde(default)]
+    pub clear_category: bool,
+}
+
+const SELECT_PAYEE: &str = "\
+    SELECT p.id, p.payee, p.comment, p.category_id, c.name AS category_name, p.hits, \
+           p.updated_at \
+      FROM statement_payees p LEFT JOIN categories c ON c.id = p.category_id";
+
+fn row_to_payee(r: &sqlx::postgres::PgRow) -> StatementPayee {
+    StatementPayee {
+        id: r.get("id"),
+        payee: r.get("payee"),
+        comment: r.get("comment"),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        hits: r.get("hits"),
+        updated_at: r.get("updated_at"),
+    }
+}
+
+/// Every payee whose name you have taught the app.
+#[utoipa::path(
+    get,
+    path = "/api/v1/statement-payees",
+    tag = "imports",
+    responses((status = 200, description = "Gemerkte Empfänger", body = Vec<StatementPayee>)),
+)]
+pub async fn payees(mut ctx: Ctx) -> Result<Json<Vec<StatementPayee>>> {
+    let rows = sqlx::query(&format!("{SELECT_PAYEE} ORDER BY lower(p.payee)"))
+        .fetch_all(ctx.tenant.conn())
+        .await?;
+    let out = rows.iter().map(row_to_payee).collect();
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+/// Corrects a remembered name without waiting for the next statement.
+#[utoipa::path(
+    patch,
+    path = "/api/v1/statement-payees/{id}",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = StatementPayeeInput,
+    responses((status = 200, description = "Gemerkter Empfänger", body = StatementPayee), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
+pub async fn update_payee(
+    mut ctx: Ctx,
+    Path(id): Path<Uuid>,
+    Json(body): Json<StatementPayeeInput>,
+) -> Result<Json<StatementPayee>> {
+    if let Some(comment) = &body.comment
+        && comment.trim().is_empty()
+    {
+        return Err(AppError::Validation(
+            "Der Kommentar darf nicht leer sein".into(),
+        ));
+    }
+    let affected = sqlx::query(
+        "UPDATE statement_payees SET comment = COALESCE($2, comment), \
+                category_id = CASE WHEN $4 THEN NULL ELSE COALESCE($3, category_id) END, \
+                updated_at = now() \
+          WHERE id = $1",
+    )
+    .bind(id)
+    .bind(body.comment.as_ref().map(|c| c.trim().to_string()))
+    .bind(body.category_id)
+    .bind(body.clear_category)
+    .execute(ctx.tenant.conn())
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Empfänger".into()));
+    }
+
+    let row = sqlx::query(&format!("{SELECT_PAYEE} WHERE p.id = $1"))
+        .bind(id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+    let out = row_to_payee(&row);
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+/// Forgets a payee. The next statement asks about it again, which is the point.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/statement-payees/{id}",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    responses((status = 204, description = "Vergessen"), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
+pub async fn forget_payee(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
+    let affected = sqlx::query("DELETE FROM statement_payees WHERE id = $1")
+        .bind(id)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Empfänger".into()));
+    }
+    ctx.tenant.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }

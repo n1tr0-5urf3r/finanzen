@@ -308,3 +308,19 @@
 .statement__toggle { font-size: .75rem; }
 /* The two memories a reviewed line can leave behind, side by side. */
 .statement__remember { display: flex; flex-wrap: wrap; gap: .4rem 1rem; }
+
+/* ── remembered payees ──────────────────────────────────────────────────────
+   One card per payee: the bank's spelling above, your name for it below. Same
+   shape as a statement line, because it IS one, kept. */
+.payees { display: grid; gap: .6rem; }
+.payee {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: .75rem .85rem;
+}
+.payee__bank { margin: 0 0 .4rem; font-size: .82rem; color: var(--muted); word-break: break-word; }
+.payee__fields { display: grid; gap: .5rem .75rem; }
+@media (min-width: 680px) { .payee__fields { grid-template-columns: 1fr 1fr; } }
+.payee__foot {
+  display: flex; flex-wrap: wrap; gap: .5rem .9rem;
+  align-items: center; justify-content: space-between; margin-top: .6rem;
+}

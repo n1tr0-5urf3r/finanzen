@@ -169,6 +169,11 @@ pub fn router(state: AppState) -> Router {
         .route("/imports", get(importer::list).post(importer::upload))
         .route("/imports/{id}", get(importer::get))
         .route("/imports/{id}/commit", post(importer::commit))
+        .route("/statement-payees", get(importer::payees))
+        .route(
+            "/statement-payees/{id}",
+            axum::routing::patch(importer::update_payee).delete(importer::forget_payee),
+        )
         .route("/imports/{id}/statement", get(importer::statement_rows))
         .route(
             "/imports/{id}/statement/bulk",

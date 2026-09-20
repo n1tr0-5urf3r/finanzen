@@ -1035,6 +1035,18 @@ export interface ImportBatchSummary {
   appliedAt: string | null;
 }
 
+/** A payee whose name the user has taught the app. */
+export interface StatementPayee {
+  id: string;
+  /** As the bank writes it: the key a future statement matches on. */
+  payee: string;
+  comment: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  hits: number;
+  updatedAt: string;
+}
+
 /** One staged bank-statement line, as the review screen sees it. */
 export interface StatementRow {
   id: string;

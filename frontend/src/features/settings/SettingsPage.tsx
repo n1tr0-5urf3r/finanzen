@@ -23,12 +23,22 @@ import { useTheme, type ThemePreference } from '../../lib/theme';
 import type { MessageKey } from '../../lib/messages/de';
 import type { KoStatus, KoSyncResult, User, Year } from '../../lib/types';
 import { useMaskAmount, useMaskedFieldClass } from '../../lib/privacy';
+import { PayeeList } from './PayeeList';
 
-type Tab = 'jahre' | 'vorlagen' | 'kitchenowl' | 'export' | 'darstellung' | 'konto' | 'benutzer';
+type Tab =
+  | 'jahre'
+  | 'vorlagen'
+  | 'empfaenger'
+  | 'kitchenowl'
+  | 'export'
+  | 'darstellung'
+  | 'konto'
+  | 'benutzer';
 
 const TABS: [Tab, MessageKey][] = [
   ['jahre', 'settings.tabYears'],
   ['vorlagen', 'settings.tabRecurring'],
+  ['empfaenger', 'settings.tabPayees'],
   ['kitchenowl', 'settings.tabKitchenOwl'],
   ['export', 'settings.tabExport'],
   ['darstellung', 'settings.tabAppearance'],
@@ -73,6 +83,7 @@ export function SettingsPage() {
 
       {tab === 'jahre' && <YearsSection />}
       {tab === 'vorlagen' && <RecurringSection />}
+      {tab === 'empfaenger' && <PayeeList />}
       {tab === 'kitchenowl' && <KitchenOwlSection />}
       {tab === 'export' && <ExportSection />}
       {tab === 'darstellung' && <AppearanceSection />}

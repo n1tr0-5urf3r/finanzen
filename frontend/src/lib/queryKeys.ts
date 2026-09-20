@@ -17,6 +17,8 @@ export const qk = {
     categories: () => ['taxonomy', 'categories'] as const,
     types: () => ['taxonomy', 'types'] as const,
     rules: () => ['taxonomy', 'rules'] as const,
+    /** What each bank payee is called, taught by statement reviews. */
+    payees: () => ['taxonomy', 'payees'] as const,
   },
   bookings: {
     root: ['bookings'] as const,

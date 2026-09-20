@@ -3488,6 +3488,117 @@
         }
       }
     },
+    "/api/v1/statement-payees": {
+      "get": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "Every payee whose name you have taught the app.",
+        "operationId": "payees",
+        "responses": {
+          "200": {
+            "description": "Gemerkte Empfänger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatementPayee"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statement-payees/{id}": {
+      "delete": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "Forgets a payee. The next statement asks about it again, which is the point.",
+        "operationId": "forget_payee",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Vergessen"
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "Corrects a remembered name without waiting for the next statement.",
+        "operationId": "update_payee",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatementPayeeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Gemerkter Empfänger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementPayee"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tax": {
       "get": {
         "tags": [
@@ -9106,6 +9217,74 @@
           "sortOrder": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "StatementPayee": {
+        "type": "object",
+        "description": "One remembered payee: the bank's spelling, and the name a person gave it.",
+        "required": [
+          "id",
+          "payee",
+          "comment",
+          "hits",
+          "updatedAt"
+        ],
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "hits": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How often this rename has been applied or reconfirmed."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payee": {
+            "type": "string",
+            "description": "As the bank writes it. Ground-truth data, never translated or tidied."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StatementPayeeInput": {
+        "type": "object",
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "clearCategory": {
+            "type": "boolean",
+            "description": "`true` clears the category rather than leaving it where it is — `null` in\n`categoryId` cannot say \"remove it\", since an omitted field is also null."
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
