@@ -257,3 +257,52 @@
   gap: .5rem; flex-wrap: wrap; min-width: 0;
 }
 .anomalies__figures { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+
+/* ── the bank statement review ───────────────────────────────────────────────
+   One card per line, because no two lines of a statement are alike and every one
+   of them gets a decision. The bank's own words sit above the fields that
+   interpret them, so the evidence is never further away than the guess. */
+.statement__bar {
+  display: flex; flex-wrap: wrap; gap: .6rem 1rem;
+  align-items: center; justify-content: space-between; margin-bottom: .75rem;
+}
+.statement__progress { margin: 0; font-size: .85rem; }
+.statement__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.statement__rows { display: grid; gap: .6rem; }
+.statement__row {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: .75rem .85rem;
+}
+/* Decided lines recede; the open ones are the work. */
+.statement__row--accepted { border-color: var(--income); }
+.statement__row--rejected { opacity: .55; }
+.statement__row--duplicate { border-left: 3px solid var(--warn, var(--type-variabel)); }
+.statement__head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .75rem;
+  margin-bottom: .35rem;
+}
+.statement__date { font-size: .8rem; color: var(--muted); }
+.statement__amount { font-weight: 650; }
+.statement__party { margin: 0 0 .1rem; font-size: .9rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+.statement__purpose {
+  margin: .2rem 0 .5rem; font-size: .78rem; color: var(--muted);
+  word-break: break-word;
+}
+.statement__fields { display: grid; gap: .5rem .75rem; }
+@media (min-width: 680px) { .statement__fields { grid-template-columns: 1fr 1fr; } }
+.statement__chip { margin: .4rem 0 0; }
+.statement__foot {
+  display: flex; flex-wrap: wrap; gap: .5rem .9rem;
+  align-items: center; justify-content: space-between; margin-top: .6rem;
+}
+.statement__rule { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; }
+.statement__rule input { accent-color: var(--accent); }
+.statement__decide { display: flex; gap: .5rem; }
+/* The payee a statement carried, under the comment a person chose. */
+.booking-row__party {
+  display: block; font-size: .72rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22rem;
+}
+/* The reference text is one tap away; the toggle has to read as a control, not
+   as more of the payee's name. */
+.statement__toggle { font-size: .75rem; }

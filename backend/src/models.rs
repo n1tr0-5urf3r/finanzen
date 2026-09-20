@@ -129,6 +129,11 @@ pub struct Booking {
     /// `expense - income`, so a category that earned money nets negative.
     pub net_cents: i64,
     pub comment: String,
+    /// Who the money was with, and what the bank wrote on the line. Both come from
+    /// a statement import and are `null` for everything else: they are what a bank
+    /// export knows and a hand-kept sheet never did.
+    pub counterparty: Option<String>,
+    pub purpose: Option<String>,
     pub tax_relevant: bool,
     /// `null` means no rule matched and no override was set. Never silently folded
     /// into the real `Sonstiges` category.

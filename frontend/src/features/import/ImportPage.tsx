@@ -27,6 +27,7 @@ import type {
 } from '../../lib/types';
 
 import { ReviewQueue } from './ReviewQueue';
+import { StatementReview } from './StatementReview';
 import { sortedByName } from '../../lib/categories';
 
 type Tab = 'import' | 'pruefliste';
@@ -47,6 +48,7 @@ export function ImportPage() {
   });
 
   const batchId = batchParam ?? batches.data?.[0]?.id ?? null;
+  const selectedBatch = asList<ImportBatchSummary>(batches.data).find((b) => b.id === batchId);
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -68,7 +70,10 @@ export function ImportPage() {
         {(
           [
             ['import', 'import.tabImport'],
-            ['pruefliste', 'import.tabReview'],
+            [
+              'pruefliste',
+              selectedBatch?.source === 'csv_ing' ? 'import.tabStatement' : 'import.tabReview',
+            ],
           ] as [Tab, MessageKey][]
         ).map(([value, labelKey]) => (
           <button
@@ -92,7 +97,18 @@ export function ImportPage() {
           onSelect={(id) => setParam('stapel', id)}
         />
       ) : batchId && categories.data ? (
-        <ReviewQueue batchId={batchId} categories={sortedByName(categories.data)} />
+        // A statement is reviewed line by line and a workbook comment by comment.
+        // Which screen you get is a property of the batch, not a second tab to
+        // choose between: the file already decided.
+        selectedBatch?.source === 'csv_ing' ? (
+          <StatementReview
+            batchId={batchId}
+            categories={categories.data}
+            applied={selectedBatch.status === 'applied'}
+          />
+        ) : (
+          <ReviewQueue batchId={batchId} categories={sortedByName(categories.data)} />
+        )
       ) : categories.isLoading || batches.isLoading ? (
         <LoadingState />
       ) : (
@@ -177,7 +193,7 @@ function ImportTab({
           ref={input}
           id="import-file"
           type="file"
-          accept=".xlsx,.ods"
+          accept=".xlsx,.ods,.csv"
           className="sr-only"
           onChange={(e) => {
             pick(e.target.files?.[0]);

@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod auth;
+pub mod bank;
 pub mod bookings;
 pub mod calc;
 pub mod categories;
@@ -168,6 +169,15 @@ pub fn router(state: AppState) -> Router {
         .route("/imports", get(importer::list).post(importer::upload))
         .route("/imports/{id}", get(importer::get))
         .route("/imports/{id}/commit", post(importer::commit))
+        .route("/imports/{id}/statement", get(importer::statement_rows))
+        .route(
+            "/imports/{id}/statement/bulk",
+            post(importer::bulk_statement_decision),
+        )
+        .route(
+            "/imports/{id}/statement/{row_id}",
+            axum::routing::patch(importer::review_statement_row),
+        )
         .route(
             "/imports/{id}/review",
             get(importer::review).post(importer::resolve),

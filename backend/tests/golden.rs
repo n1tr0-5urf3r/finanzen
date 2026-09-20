@@ -1169,3 +1169,62 @@ fn month_block_workbook_refuses_a_broken_sequence() {
     assert!(message.contains("Monatsfolge"), "{message}");
     assert!(message.contains("Dezember"), "{message}");
 }
+
+// ------------------------------------------------------------ bank statements
+
+/// The ING `Umsatzanzeige` export, read from a Latin-1 fixture with invented
+/// account details and the real file's every quirk.
+#[test]
+fn ing_statement_reads_the_shape_a_bank_exports() {
+    let bytes = std::fs::read("tests/fixtures/ing_statement.csv").expect("fixture");
+    let statement = finanzen::bank::read_ing_csv(&bytes).unwrap();
+
+    // The header block is not a table — two columns, three columns and a
+    // paragraph — and is read as loose pairs.
+    assert_eq!(statement.meta.bank.as_deref(), Some("ING"));
+    assert_eq!(statement.meta.account_name.as_deref(), Some("Girokonto"));
+    assert_eq!(statement.meta.balance_cents, Some(51240));
+    assert_eq!(
+        statement.meta.period.as_deref(),
+        Some("10.02.2026 - 10.03.2026")
+    );
+
+    assert_eq!(statement.rows.len(), 4);
+    let first = &statement.rows[0];
+    assert_eq!(
+        first.booked_on,
+        chrono::NaiveDate::from_ymd_opt(2026, 3, 9).unwrap()
+    );
+    assert_eq!(first.amount_cents, 385);
+    // The SIGN is the direction; `Lastschrift` is the mechanism and says nothing.
+    assert_eq!(first.kind, "expense");
+    assert_eq!(first.balance_cents, Some(51240));
+    assert_eq!(first.source_ref, "csv!zeile:15");
+    // Latin-1 survived: the payee and the column names both carry umlauts.
+    assert!(first.purpose.contains("KAUFUMSATZ"));
+
+    // A Gutschrift is money in, and the thousands separator in its balance is not
+    // a decimal point.
+    let credit = &statement.rows[2];
+    assert_eq!(credit.kind, "income");
+    assert_eq!(credit.amount_cents, 14230);
+    assert_eq!(credit.balance_cents, Some(123645));
+    // The exporter wraps a purpose mid-word. It is kept exactly as written.
+    assert!(credit.purpose.contains("Hambur g"));
+
+    // The suggestion is a starting point for the review, not a decision: the card
+    // prefix goes and the shouting is softened.
+    assert_eq!(
+        finanzen::bank::suggest_comment(first),
+        "Supermarkt Sagt Danke"
+    );
+    // ...and a name that already has its own spelling keeps it.
+    assert!(finanzen::bank::suggest_comment(&statement.rows[3]).starts_with("Studierendenwerk"));
+}
+
+/// A file that is not a statement is refused by the one line that identifies one.
+#[test]
+fn a_file_without_a_statement_header_is_refused() {
+    let err = finanzen::bank::read_ing_csv(b"name,amount\nLaden,3.85\n").unwrap_err();
+    assert!(err.to_string().contains("Kopfzeile"), "{err}");
+}

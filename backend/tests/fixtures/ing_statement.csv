@@ -1,0 +1,18 @@
+Umsatzanzeige;Datei erstellt am: 10.03.2026 08:00
+
+IBAN;DE00 0000 0000 0000 0000 00
+Kontoname;Girokonto
+Bank;ING
+Kunde;Demo Kundin
+Zeitraum;10.02.2026 - 10.03.2026
+Saldo;512,40;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in Ihrem Internetbanking angezeigt werden.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+09.03.2026;09.03.2026;VISA SUPERMARKT SAGT DANKE;Lastschrift;NR XXXX 0000 MUSTERSTADT DE KAUFUMSATZ 07.03 3.85 000001 Google Pay;512,40;EUR;-3,85;EUR
+09.03.2026;09.03.2026;VISA TANKSTELLE;Lastschrift;NR XXXX 0000 MUSTERSTADT DE KAUFUMSATZ 07.03 58.20 000002;516,25;EUR;-58,20;EUR
+09.03.2026;09.03.2026;UNIVERSITAETSKASSE MUSTERSTADT;Gutschrift;R/G 00000000 v. 01.03.2026/RK Hambur g 1.2.-3.2.26-;1.236,45;EUR;142,30;EUR
+06.03.2026;06.03.2026;Studierendenwerk Musterstadt-Beispielheim Anstalt des offentlichen Rechts;Lastschrift;ELV 00 Mensa Musterstra000000000 05.03.26 12.00 0000-0 EC-Aufwertun g;1.094,15;EUR;-15,00;EUR

@@ -171,6 +171,54 @@ pub async fn upload(
     }
 
     let lower = file_name.to_lowercase();
+
+    // A bank statement takes a different path from here: its rows are not
+    // bookings yet. Every line is reviewed by hand — the comment a statement
+    // gives you is a card terminal's idea of a shop name — so it stages and
+    // returns, and the preview counts what is waiting rather than what is ready.
+    if lower.ends_with(".csv") {
+        let statement = crate::bank::read_ing_csv(&bytes)?;
+        if statement.rows.len() > state.config.import_max_rows {
+            return Err(AppError::Validation(format!(
+                "Die Datei enthält {} Zeilen (Grenze: {})",
+                statement.rows.len(),
+                state.config.import_max_rows
+            )));
+        }
+        let batch_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO import_batches (id, user_id, source, filename, sha256, sheet, row_count, \
+                                         stats) \
+             VALUES ($1, $2, 'csv_ing', $3, $4, $5, $6, $7)",
+        )
+        .bind(batch_id)
+        .bind(ctx.tenant.user_id())
+        .bind(&file_name)
+        .bind(&sha)
+        .bind(
+            statement
+                .meta
+                .account_name
+                .clone()
+                .unwrap_or_else(|| "Kontoauszug".to_string()),
+        )
+        .bind(statement.rows.len() as i32)
+        .bind(serde_json::json!({
+            "iban": statement.meta.iban,
+            "bank": statement.meta.bank,
+            "accountName": statement.meta.account_name,
+            "period": statement.meta.period,
+            "balanceCents": statement.meta.balance_cents,
+        }))
+        .execute(ctx.tenant.conn())
+        .await?;
+
+        stage_statement(&mut ctx, batch_id, &statement).await?;
+        let preview = load_preview(&mut ctx, batch_id).await?;
+        ctx.tenant.commit().await?;
+        return Ok((StatusCode::CREATED, Json(preview)));
+    }
+
     let (source, sheet, bookings, blocks, marker_total, row_total) = if lower.ends_with(".ods") {
         let legacy = sheets::read_ods_legacy(&bytes, "2023-2025", 2023, 6)?;
         (
@@ -224,7 +272,7 @@ pub async fn upload(
         }
     } else {
         return Err(AppError::Validation(
-            "Nur .xlsx und .ods werden unterstützt".into(),
+            "Nur .xlsx, .ods und .csv werden unterstützt".into(),
         ));
     };
 
@@ -673,21 +721,53 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
 
     // Imported rows are month-only: the source genuinely has no day, and inventing
     // one would make the "has a real date" signal meaningless.
+    // A reviewed statement line can leave a rule behind, so the same shop is
+    // never typed twice. Written before the bookings, so the rule that classifies
+    // future imports exists in the same transaction as the ones it came from, and
+    // an existing rule is never overwritten — the user's own table wins.
+    sqlx::query(
+        "INSERT INTO category_rules (id, user_id, pattern, category_id, source) \
+         SELECT DISTINCT ON (lower(btrim(ir.comment))) gen_random_uuid(), ir.user_id, \
+                btrim(ir.comment), COALESCE(ir.decided_category_id, ir.suggested_category_id), \
+                'review' \
+           FROM import_rows ir \
+          WHERE ir.batch_id = $1 AND ir.create_rule AND ir.decision = 'accepted' \
+            AND COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
+            AND btrim(ir.comment) <> '' \
+          ORDER BY lower(btrim(ir.comment)), ir.source_ref \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(id)
+    .execute(ctx.tenant.conn())
+    .await?;
+
+    // A statement line carries a real date and the bank's own two fields, and it
+    // is only booked once somebody has accepted it: a row nobody looked at is not
+    // a booking, which is the whole point of reviewing a statement by hand. A
+    // workbook row has no date and no decision to make, so it books unless it was
+    // rejected — the two paths differ in exactly that, and in nothing else.
     let inserted = sqlx::query(
-        "INSERT INTO bookings (id, user_id, period_year, period_month, kind, amount_cents, \
-                               comment, tax_relevant, category_id, category_source, \
+        "INSERT INTO bookings (id, user_id, period_year, period_month, booked_on, kind, \
+                               amount_cents, comment, counterparty, purpose, tax_relevant, \
+                               category_id, category_source, \
                                resolved_rule_id, origin, import_row_id, import_fingerprint) \
-         SELECT gen_random_uuid(), ir.user_id, ir.period_year, ir.period_month, ir.kind, \
-                ir.amount_cents, ir.comment, ir.tax_relevant, \
-                COALESCE(ir.decided_category_id, r.category_id), \
-                CASE WHEN ir.decided_category_id IS NOT NULL THEN 'manual' \
+         SELECT gen_random_uuid(), ir.user_id, ir.period_year, ir.period_month, ir.booked_on, \
+                ir.kind, ir.amount_cents, ir.comment, ir.counterparty, ir.purpose, \
+                ir.tax_relevant, \
+                COALESCE(ir.decided_category_id, ir.suggested_category_id, r.category_id), \
+                CASE WHEN COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
+                       THEN 'manual' \
                      WHEN r.category_id IS NULL THEN 'unresolved' ELSE 'rule' END, \
-                CASE WHEN ir.decided_category_id IS NOT NULL OR r.category_id IS NULL \
+                CASE WHEN COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
+                       OR r.category_id IS NULL \
                      THEN NULL ELSE r.id END, \
-                'legacy_month_only', ir.id, ir.fingerprint \
+                CASE WHEN ir.booked_on IS NULL THEN 'legacy_month_only' ELSE 'bank_csv' END, \
+                ir.id, ir.fingerprint \
            FROM import_rows ir \
            LEFT JOIN category_rules r ON r.match_key = lower(btrim(ir.comment)) \
-          WHERE ir.batch_id = $1 AND ir.decision <> 'rejected' \
+          WHERE ir.batch_id = $1 \
+            AND CASE WHEN ir.booked_on IS NULL THEN ir.decision <> 'rejected' \
+                     ELSE ir.decision = 'accepted' END \
          ON CONFLICT (user_id, import_fingerprint) WHERE import_fingerprint IS NOT NULL \
          DO NOTHING",
     )
@@ -910,5 +990,461 @@ pub async fn resolve(
         skipped,
         rules_created,
         remaining_open,
+    }))
+}
+
+// ------------------------------------------------------- bank statements (CSV)
+
+/// One staged statement line, as the review screen sees it.
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementRowView {
+    pub id: Uuid,
+    pub source_ref: String,
+    pub booked_on: chrono::NaiveDate,
+    pub kind: String,
+    pub amount_cents: i64,
+    pub counterparty: Option<String>,
+    pub purpose: Option<String>,
+    /// What the comment will be. Starts as a suggestion from the payee and is the
+    /// field the review exists to correct.
+    pub comment: String,
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    /// Where that category came from: `rule`, `suggestion`, `manual`, or none.
+    pub category_source: Option<String>,
+    pub suggestion_score: Option<f32>,
+    /// `pending`, `accepted` (reviewed, will be booked) or `rejected` (will not).
+    pub decision: String,
+    pub create_rule: bool,
+    /// The booking this line looks like it already is.
+    pub duplicate_booking_id: Option<Uuid>,
+    pub duplicate_comment: Option<String>,
+    pub duplicate_booked_on: Option<chrono::NaiveDate>,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementRowPage {
+    pub items: Vec<StatementRowView>,
+    pub total: i64,
+    pub pending: i64,
+    pub accepted: i64,
+    pub rejected: i64,
+    pub duplicates: i64,
+}
+
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementRowInput {
+    pub comment: Option<String>,
+    pub category_id: Option<Uuid>,
+    pub kind: Option<String>,
+    /// `accepted` or `rejected`; omitted leaves the decision where it is.
+    pub decision: Option<String>,
+    pub create_rule: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct StatementRowQuery {
+    /// `pending`, `accepted`, `rejected`, `duplicates` or nothing for all of them.
+    pub filter: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+}
+
+/// Stages a bank statement: one row per line, each with a suggested comment, a
+/// suggested category and — the point of the exercise — a flag when the ledger
+/// already seems to hold it.
+async fn stage_statement(
+    ctx: &mut Ctx,
+    batch_id: Uuid,
+    statement: &crate::bank::Statement,
+) -> Result<()> {
+    let rules = known_rules(ctx.tenant.conn()).await?;
+
+    for row in &statement.rows {
+        let comment = crate::bank::suggest_comment(row);
+        // Three chances at a category, in descending confidence: an exact rule on
+        // the suggested comment, then the same rule table against the payee and
+        // the bank's own purpose text, which is where `SUPERMARKT` hides inside
+        // forty characters of card-terminal noise.
+        let key = comment.trim().to_lowercase();
+        let exact = rules.iter().find(|r| r.match_key == key);
+        // `exact` is the schema's word for "a rule matched outright"; the fuzzier
+        // tiers keep the suggester's own names. The API translates both into the
+        // two words the review screen needs — a rule, or a guess.
+        let (category_id, source, score) = match exact {
+            Some(rule) => (Some(rule.category_id), Some("exact"), Some(1.0_f32)),
+            None => {
+                // The payee and the bank's own purpose text join the haystack:
+                // `SUPERMARKT` hides inside forty characters of card-terminal noise,
+                // and the containment tier is exactly what finds it there.
+                let haystack = format!("{} {} {}", comment, row.counterparty, row.purpose);
+                let (hits, _weak, ambiguous) = suggest::suggest(&haystack, &rules, 0.92);
+                match hits.first() {
+                    // Two rules claiming a line with equal strength is a question
+                    // for the reviewer, not a default to be nudged into place.
+                    Some(hit) if !ambiguous => (
+                        Some(hit.category_id),
+                        Some(match hit.tier {
+                            "token" => "token",
+                            "prefix" => "prefix",
+                            _ => "fuzzy",
+                        }),
+                        Some(hit.confidence as f32),
+                    ),
+                    _ => (None, None, None),
+                }
+            }
+        };
+
+        // Does the ledger already hold this? Same direction, same amount, and a
+        // date within a few days: a card payment is booked by the shop on one day
+        // and by the bank on another, and the hand-entered booking carries the
+        // first. Never acted on automatically — a bank really does charge 3,90 €
+        // at the same shop twice in a week.
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM bookings \
+              WHERE kind = $1 AND amount_cents = $2 \
+                AND status = 'confirmed' \
+                AND (booked_on BETWEEN $3::date - 4 AND $3::date + 4 \
+                     OR (booked_on IS NULL \
+                         AND period_year = EXTRACT(YEAR FROM $3::date)::smallint \
+                         AND period_month = EXTRACT(MONTH FROM $3::date)::smallint)) \
+              ORDER BY abs(COALESCE(booked_on, $3::date) - $3::date), created_at \
+              LIMIT 1",
+        )
+        .bind(row.kind)
+        .bind(row.amount_cents)
+        .bind(row.booked_on)
+        .fetch_optional(ctx.tenant.conn())
+        .await?;
+
+        // The statement line's own identity: the account states a running balance
+        // after every line, which distinguishes two identical charges on one day.
+        let fingerprint = {
+            let mut hasher = Sha256::new();
+            hasher.update(format!(
+                "csv|{}|{}|{}|{}|{}",
+                row.booked_on,
+                row.kind,
+                row.amount_cents,
+                row.counterparty.trim().to_lowercase(),
+                row.balance_cents.unwrap_or_default()
+            ));
+            hex::encode(hasher.finalize())
+        };
+
+        sqlx::query(
+            "INSERT INTO import_rows (id, user_id, batch_id, source_ref, raw, period_year, \
+                                      period_month, booked_on, kind, amount_cents, comment, \
+                                      counterparty, purpose, suggested_category_id, \
+                                      suggestion_kind, suggestion_score, duplicate_booking_id, \
+                                      status, fingerprint) \
+             VALUES ($1,$2,$3,$4,$5,$6::smallint,$7::smallint,$8,$9,$10,$11,$12,$13,$14,$15,$16,\
+                     $17,'new',$18) \
+             ON CONFLICT (batch_id, source_ref) DO NOTHING",
+        )
+        .bind(Uuid::new_v4())
+        .bind(ctx.tenant.user_id())
+        .bind(batch_id)
+        .bind(&row.source_ref)
+        .bind(serde_json::json!({
+            "bookedOn": row.booked_on,
+            "valueDate": row.value_date,
+            "counterparty": row.counterparty,
+            "bookingText": row.booking_text,
+            "purpose": row.purpose,
+            "amountCents": row.amount_cents,
+            "balanceCents": row.balance_cents,
+        }))
+        .bind(
+            row.booked_on
+                .format("%Y")
+                .to_string()
+                .parse::<i16>()
+                .unwrap_or(0),
+        )
+        .bind(
+            row.booked_on
+                .format("%m")
+                .to_string()
+                .parse::<i16>()
+                .unwrap_or(1),
+        )
+        .bind(row.booked_on)
+        .bind(row.kind)
+        .bind(row.amount_cents)
+        .bind(&comment)
+        .bind(&row.counterparty)
+        .bind(&row.purpose)
+        .bind(category_id)
+        .bind(source)
+        .bind(score)
+        .bind(duplicate)
+        .bind(&fingerprint)
+        .execute(ctx.tenant.conn())
+        .await?;
+    }
+    Ok(())
+}
+
+/// The staged lines of a statement import, for the review screen.
+#[utoipa::path(
+    get,
+    path = "/api/v1/imports/{id}/statement",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id"), StatementRowQuery),
+    responses((status = 200, description = "Gebuchte Zeilen des Kontoauszugs", body = StatementRowPage)),
+)]
+pub async fn statement_rows(
+    mut ctx: Ctx,
+    Path(id): Path<Uuid>,
+    Query(q): Query<StatementRowQuery>,
+) -> Result<Json<StatementRowPage>> {
+    let page = q.page.unwrap_or(0).max(0);
+    let page_size = q.page_size.unwrap_or(50).clamp(1, 200);
+    let filter = q.filter.unwrap_or_default();
+
+    let counts = sqlx::query(
+        "SELECT count(*)::bigint AS total, \
+                count(*) FILTER (WHERE decision = 'pending')::bigint AS pending, \
+                count(*) FILTER (WHERE decision = 'accepted')::bigint AS accepted, \
+                count(*) FILTER (WHERE decision = 'rejected')::bigint AS rejected, \
+                count(*) FILTER (WHERE duplicate_booking_id IS NOT NULL)::bigint AS dupes \
+           FROM import_rows WHERE batch_id = $1",
+    )
+    .bind(id)
+    .fetch_one(ctx.tenant.conn())
+    .await?;
+
+    let rows = sqlx::query(
+        "SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
+                ir.counterparty, ir.purpose, ir.decision, ir.create_rule, \
+                CASE WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
+                     WHEN ir.suggestion_kind IS NULL THEN NULL ELSE 'suggestion' END \
+                  AS suggestion_kind, \
+                ir.suggestion_score, ir.duplicate_booking_id, \
+                COALESCE(ir.decided_category_id, ir.suggested_category_id) AS category_id, \
+                c.name AS category_name, b.comment AS dup_comment, b.booked_on AS dup_booked_on \
+           FROM import_rows ir \
+           LEFT JOIN categories c \
+                  ON c.id = COALESCE(ir.decided_category_id, ir.suggested_category_id) \
+           LEFT JOIN bookings b ON b.id = ir.duplicate_booking_id \
+          WHERE ir.batch_id = $1 \
+            AND ($2 = '' \
+                 OR ($2 = 'duplicates' AND ir.duplicate_booking_id IS NOT NULL) \
+                 OR ir.decision = $2) \
+          ORDER BY ir.booked_on DESC, ir.source_ref \
+          LIMIT $3 OFFSET $4",
+    )
+    .bind(id)
+    .bind(&filter)
+    .bind(page_size)
+    .bind(page * page_size)
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+
+    let items = rows
+        .iter()
+        .map(|r| StatementRowView {
+            id: r.get("id"),
+            source_ref: r.get("source_ref"),
+            booked_on: r.get("booked_on"),
+            kind: r.get("kind"),
+            amount_cents: r.get("amount_cents"),
+            counterparty: r.get("counterparty"),
+            purpose: r.get("purpose"),
+            comment: r.get::<Option<String>, _>("comment").unwrap_or_default(),
+            category_id: r.get("category_id"),
+            category_name: r.get("category_name"),
+            category_source: r.get("suggestion_kind"),
+            suggestion_score: r.get("suggestion_score"),
+            decision: r.get("decision"),
+            create_rule: r.get("create_rule"),
+            duplicate_booking_id: r.get("duplicate_booking_id"),
+            duplicate_comment: r.get("dup_comment"),
+            duplicate_booked_on: r.get("dup_booked_on"),
+        })
+        .collect();
+
+    let out = StatementRowPage {
+        items,
+        total: counts.get("total"),
+        pending: counts.get("pending"),
+        accepted: counts.get("accepted"),
+        rejected: counts.get("rejected"),
+        duplicates: counts.get("dupes"),
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}
+
+/// Records one line's review: its comment, its category, and whether it is booked.
+#[utoipa::path(
+    patch,
+    path = "/api/v1/imports/{id}/statement/{rowId}",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id"), ("rowId" = Uuid, Path, description = "Zeilen-Id")),
+    request_body = StatementRowInput,
+    responses((status = 200, description = "Zeile aktualisiert", body = StatementRowView), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+)]
+pub async fn review_statement_row(
+    mut ctx: Ctx,
+    Path((id, row_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<StatementRowInput>,
+) -> Result<Json<StatementRowView>> {
+    if let Some(decision) = &body.decision
+        && !matches!(decision.as_str(), "pending" | "accepted" | "rejected")
+    {
+        return Err(AppError::Validation(format!(
+            "Unbekannte Entscheidung '{decision}'"
+        )));
+    }
+    if let Some(kind) = &body.kind
+        && !matches!(kind.as_str(), "income" | "expense" | "transfer")
+    {
+        return Err(AppError::Validation(format!("Unbekannte Art '{kind}'")));
+    }
+    if let Some(comment) = &body.comment
+        && comment.trim().is_empty()
+    {
+        return Err(AppError::Validation(
+            "Der Kommentar darf nicht leer sein".into(),
+        ));
+    }
+
+    let affected = sqlx::query(
+        "UPDATE import_rows SET \
+             comment = COALESCE($3, comment), \
+             decided_category_id = COALESCE($4, decided_category_id), \
+             kind = COALESCE($5, kind), \
+             decision = COALESCE($6, decision), \
+             create_rule = COALESCE($7, create_rule) \
+           WHERE batch_id = $1 AND id = $2",
+    )
+    .bind(id)
+    .bind(row_id)
+    .bind(body.comment.as_ref().map(|c| c.trim().to_string()))
+    .bind(body.category_id)
+    .bind(body.kind.as_deref())
+    .bind(body.decision.as_deref())
+    .bind(body.create_rule)
+    .execute(ctx.tenant.conn())
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Importzeile".into()));
+    }
+
+    let r = sqlx::query(
+        "SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
+                ir.counterparty, ir.purpose, ir.decision, ir.create_rule, \
+                CASE WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
+                     WHEN ir.suggestion_kind IS NULL THEN NULL ELSE 'suggestion' END \
+                  AS suggestion_kind, \
+                ir.suggestion_score, ir.duplicate_booking_id, \
+                COALESCE(ir.decided_category_id, ir.suggested_category_id) AS category_id, \
+                c.name AS category_name, b.comment AS dup_comment, b.booked_on AS dup_booked_on \
+           FROM import_rows ir \
+           LEFT JOIN categories c \
+                  ON c.id = COALESCE(ir.decided_category_id, ir.suggested_category_id) \
+           LEFT JOIN bookings b ON b.id = ir.duplicate_booking_id \
+          WHERE ir.id = $1",
+    )
+    .bind(row_id)
+    .fetch_one(ctx.tenant.conn())
+    .await?;
+
+    let view = StatementRowView {
+        id: r.get("id"),
+        source_ref: r.get("source_ref"),
+        booked_on: r.get("booked_on"),
+        kind: r.get("kind"),
+        amount_cents: r.get("amount_cents"),
+        counterparty: r.get("counterparty"),
+        purpose: r.get("purpose"),
+        comment: r.get::<Option<String>, _>("comment").unwrap_or_default(),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        category_source: r.get("suggestion_kind"),
+        suggestion_score: r.get("suggestion_score"),
+        decision: r.get("decision"),
+        create_rule: r.get("create_rule"),
+        duplicate_booking_id: r.get("duplicate_booking_id"),
+        duplicate_comment: r.get("dup_comment"),
+        duplicate_booked_on: r.get("dup_booked_on"),
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(view))
+}
+
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkDecisionInput {
+    /// Which lines: `duplicates` or `pendingWithCategory`.
+    pub scope: String,
+    pub decision: String,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkDecisionResult {
+    pub affected: i64,
+}
+
+/// The two decisions worth making in bulk: drop everything the ledger already has,
+/// and accept everything a rule matched outright.
+#[utoipa::path(
+    post,
+    path = "/api/v1/imports/{id}/statement/bulk",
+    tag = "imports",
+    params(("id" = Uuid, Path, description = "Datensatz-Id")),
+    request_body = BulkDecisionInput,
+    responses((status = 200, description = "Entscheidungen übernommen", body = BulkDecisionResult)),
+)]
+pub async fn bulk_statement_decision(
+    mut ctx: Ctx,
+    Path(id): Path<Uuid>,
+    Json(body): Json<BulkDecisionInput>,
+) -> Result<Json<BulkDecisionResult>> {
+    if !matches!(body.decision.as_str(), "accepted" | "rejected" | "pending") {
+        return Err(AppError::Validation("Unbekannte Entscheidung".into()));
+    }
+    let affected = match body.scope.as_str() {
+        "duplicates" => sqlx::query(
+            "UPDATE import_rows SET decision = $2 \
+                  WHERE batch_id = $1 AND duplicate_booking_id IS NOT NULL \
+                    AND decision = 'pending'",
+        )
+        .bind(id)
+        .bind(&body.decision)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected(),
+        // Only the exact rule matches, never the fuzzy ones: a suggestion the user
+        // has not looked at is a guess, and this button would bulk-apply guesses.
+        "ruleMatches" => sqlx::query(
+            "UPDATE import_rows SET decision = $2 \
+                  WHERE batch_id = $1 AND decision = 'pending' \
+                    AND duplicate_booking_id IS NULL \
+                    AND suggestion_kind = 'exact'",
+        )
+        .bind(id)
+        .bind(&body.decision)
+        .execute(ctx.tenant.conn())
+        .await?
+        .rows_affected(),
+        other => {
+            return Err(AppError::Validation(format!(
+                "Unbekannter Bereich '{other}'"
+            )));
+        }
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(BulkDecisionResult {
+        affected: affected as i64,
     }))
 }

@@ -3162,3 +3162,127 @@ async fn a_booking_created_today_carries_today() {
         .await;
     assert_eq!(exact["bookedOn"], "2026-01-17");
 }
+
+/// A bank statement, end to end: upload, review, commit — and the two things that
+/// make this import different from a workbook.
+///
+/// Nothing is booked by uploading. A statement line is evidence of a payment, not
+/// a decision about what it was: the comment a bank gives you is a card
+/// terminal's name for a shop. So every line waits for a person, and the commit
+/// takes only the accepted ones.
+#[tokio::test]
+async fn a_bank_statement_is_reviewed_line_by_line_before_anything_is_booked() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    // Something already in the ledger for the statement to collide with: the same
+    // amount, two days before the bank got round to booking it.
+    let (status, _) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(
+                json!({"year": 2026, "month": 9, "kind": "expense", "amountCents": 6430,
+                        "comment": "tanken", "bookedOn": "2026-09-16"}),
+            ),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let statement = "Umsatzanzeige;Datei erstellt am: 10.03.2026 08:00\n\n\
+         IBAN;DE00 0000 0000 0000 0000 00\nKontoname;Girokonto\nBank;ING\n\
+         Saldo;512,40;EUR\n\n\
+         Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;\
+         Saldo;Währung;Betrag;Währung\n\
+         18.09.2026;18.09.2026;VISA TANKSTELLE NORD;Lastschrift;NR XXXX KAUFUMSATZ;512,40;EUR;\
+         -64,30;EUR\n\
+         17.09.2026;17.09.2026;MUSTER GMBH;Gutschrift;Lohn September;766,17;EUR;3186,00;EUR\n";
+    let (status, preview) = app
+        .upload_bytes("/imports", "auszug.csv", "text/csv", statement.as_bytes())
+        .await;
+    assert!(status.is_success(), "upload failed: {preview}");
+    let import_id = preview["id"].as_str().expect("import id").to_string();
+    assert_eq!(preview["source"].as_str(), Some("csv_ing"));
+
+    // Uploading booked nothing at all.
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(bookings["total"].as_i64(), Some(1));
+
+    let (_, rows) = app
+        .send("GET", &format!("/imports/{import_id}/statement"), None)
+        .await;
+    assert_eq!(rows["total"].as_i64(), Some(2));
+    assert_eq!(rows["pending"].as_i64(), Some(2));
+    // The line the ledger may already hold is flagged, and only flagged: a bank
+    // really does charge the same amount at the same shop twice in a week.
+    assert_eq!(rows["duplicates"].as_i64(), Some(1));
+
+    let items = rows["items"].as_array().expect("items").clone();
+    let flagged = items
+        .iter()
+        .find(|r| r["duplicateBookingId"].is_string())
+        .expect("the duplicate");
+    assert_eq!(flagged["duplicateComment"].as_str(), Some("tanken"));
+    // The suggested comment is the payee without the card-network shouting.
+    assert_eq!(flagged["comment"].as_str(), Some("Tankstelle Nord"));
+    let salary = items
+        .iter()
+        .find(|r| r["kind"] == "income")
+        .expect("the credit");
+    // The SIGN decided that, not the word `Gutschrift`.
+    assert_eq!(salary["amountCents"].as_i64(), Some(318_600));
+
+    // Set the duplicate aside, and review the credit by hand into a category.
+    let (status, bulk) = app
+        .send(
+            "POST",
+            &format!("/imports/{import_id}/statement/bulk"),
+            Some(json!({"scope": "duplicates", "decision": "rejected"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bulk["affected"].as_i64(), Some(1));
+
+    let gehalt = app.category_id("Gehalt").await;
+    let (status, _) = app
+        .send(
+            "PATCH",
+            &format!(
+                "/imports/{import_id}/statement/{}",
+                salary["id"].as_str().unwrap()
+            ),
+            Some(json!({"comment": "Gehalt September", "categoryId": gehalt,
+                        "decision": "accepted", "createRule": true})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, result) = app
+        .send("POST", &format!("/imports/{import_id}/commit"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(result["inserted"].as_i64(), Some(1));
+
+    // One booking, carrying the statement's own date and the bank's own words.
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    let booked = bookings["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .find(|b| b["comment"] == "Gehalt September")
+        .expect("the booked credit");
+    assert_eq!(booked["bookedOn"].as_str(), Some("2026-09-17"));
+    assert_eq!(booked["counterparty"].as_str(), Some("MUSTER GMBH"));
+    assert_eq!(booked["purpose"].as_str(), Some("Lohn September"));
+    assert_eq!(booked["categoryName"].as_str(), Some("Gehalt"));
+    // ...and the review left a rule behind, so the same payer is never typed twice.
+    let (_, rules) = app.send("GET", "/rules", None).await;
+    assert!(
+        rules
+            .as_array()
+            .expect("rules")
+            .iter()
+            .any(|r| r["comment"] == "Gehalt September"),
+        "the accepted line should have written its rule"
+    );
+}

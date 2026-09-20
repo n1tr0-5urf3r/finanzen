@@ -26,6 +26,8 @@ const BOOKING: Booking = {
   amountCents: 1907,
   netCents: 1907,
   comment: 'Kaufland',
+  counterparty: null,
+  purpose: null,
   taxRelevant: false,
   categoryId: 'c1',
   categoryName: 'Lebensmittel',

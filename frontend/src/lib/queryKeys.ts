@@ -97,6 +97,8 @@ export const qk = {
     list: () => ['imports', 'list'] as const,
     one: (id: string) => ['imports', 'one', id] as const,
     review: (id: string) => ['imports', 'review', id] as const,
+    statement: (id: string, filter: string) =>
+      ['imports', 'statement', id, filter] as const,
   },
 } as const;
 

@@ -57,8 +57,14 @@ always render de-DE.
 - **Rules and overrides** — a rule table maps comments; a manual assignment on one
   booking wins. Editing a rule recategorises the past and reports how many bookings
   moved.
-- **Import .xlsx / .ods** — preview before committing, then a review queue for
-  comments no rule knows, sorted by frequency, one keystroke per decision.
+- **Import .xlsx / .ods / .csv** — preview before committing, then a review queue
+  for comments no rule knows, sorted by frequency, one keystroke per decision.
+- **Bank statements** — an ING `Umsatzanzeige` export, read line by line. The payee
+  and the bank's reference text stay on the booking. Nothing is booked by
+  uploading: every line is reviewed by hand, because the comment a bank gives you
+  is a card terminal's name for a shop. Each arrives with a suggested comment, a
+  suggested category, and a flag when the ledger looks like it already holds it —
+  a statement overlaps whatever you typed in yourself, and that is the normal case.
 - **Tax** — flag bookings, attach receipt photos, export CSV or PDF.
 - **Recurring templates** — the fixed monthly items in two taps. Amounts marked as
   estimates materialise as drafts, never as confirmed bookings.

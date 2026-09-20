@@ -1993,6 +1993,181 @@
         }
       }
     },
+    "/api/v1/imports/{id}/statement": {
+      "get": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "The staged lines of a statement import, for the review screen.",
+        "operationId": "statement_rows",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "`pending`, `accepted`, `rejected`, `duplicates` or nothing for all of them.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gebuchte Zeilen des Kontoauszugs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementRowPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports/{id}/statement/bulk": {
+      "post": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "The two decisions worth making in bulk: drop everything the ledger already has,\nand accept everything a rule matched outright.",
+        "operationId": "bulk_statement_decision",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Entscheidungen übernommen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDecisionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/imports/{id}/statement/{rowId}": {
+      "patch": {
+        "tags": [
+          "imports"
+        ],
+        "summary": "Records one line's review: its comment, its category, and whether it is booked.",
+        "operationId": "review_statement_row",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Datensatz-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "rowId",
+            "in": "path",
+            "description": "Zeilen-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatementRowInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Zeile aktualisiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementRowView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/analysis/categories": {
       "get": {
         "tags": [
@@ -3738,6 +3913,13 @@
           "comment": {
             "type": "string"
           },
+          "counterparty": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who the money was with, and what the bank wrote on the line. Both come from\na statement import and are `null` for everything else: they are what a bank\nexport knows and a hand-kept sheet never did."
+          },
           "externalId": {
             "type": [
               "string",
@@ -3776,6 +3958,12 @@
           },
           "origin": {
             "type": "string"
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "shared": {
             "type": "boolean"
@@ -3899,6 +4087,34 @@
             "format": "int64"
           },
           "uncategorizedCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BulkDecisionInput": {
+        "type": "object",
+        "required": [
+          "scope",
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Which lines: `duplicates` or `pendingWithCategory`."
+          }
+        }
+      },
+      "BulkDecisionResult": {
+        "type": "object",
+        "required": [
+          "affected"
+        ],
+        "properties": {
+          "affected": {
             "type": "integer",
             "format": "int64"
           }
@@ -8890,6 +9106,187 @@
           "sortOrder": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "StatementRowInput": {
+        "type": "object",
+        "properties": {
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createRule": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`accepted` or `rejected`; omitted leaves the decision where it is."
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StatementRowPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "pending",
+          "accepted",
+          "rejected",
+          "duplicates"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicates": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatementRowView"
+            }
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rejected": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "StatementRowView": {
+        "type": "object",
+        "description": "One staged statement line, as the review screen sees it.",
+        "required": [
+          "id",
+          "sourceRef",
+          "bookedOn",
+          "kind",
+          "amountCents",
+          "comment",
+          "decision",
+          "createRule"
+        ],
+        "properties": {
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bookedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categorySource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where that category came from: `rule`, `suggestion`, `manual`, or none."
+          },
+          "comment": {
+            "type": "string",
+            "description": "What the comment will be. Starts as a suggestion from the payee and is the\nfield the review exists to correct."
+          },
+          "counterparty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createRule": {
+            "type": "boolean"
+          },
+          "decision": {
+            "type": "string",
+            "description": "`pending`, `accepted` (reviewed, will be booked) or `rejected` (will not)."
+          },
+          "duplicateBookedOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "duplicateBookingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The booking this line looks like it already is."
+          },
+          "duplicateComment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "suggestionScore": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
           }
         }
       },

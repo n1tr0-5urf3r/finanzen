@@ -281,6 +281,18 @@ export function BookingsPage() {
                       </td>
                       <td className="booking-row__open" onClick={() => setEditing(b)}>
                         <DataLabel>{b.comment}</DataLabel>
+                        {/* What the bank called it, under what you called it: the
+                            comment is yours, the payee is the evidence. */}
+                        {b.counterparty && (
+                          <span
+                            className="booking-row__party"
+                            title={b.purpose ?? undefined}
+                            lang="de"
+                            translate="no"
+                          >
+                            {b.counterparty}
+                          </span>
+                        )}
                         {b.kind === 'transfer' && (
                           <ArrowLeftRight
                             size={13}

@@ -34,6 +34,9 @@ export interface Booking {
   /** expense − income, so a category that earned money is negative. */
   netCents: number;
   comment: string;
+  /** From a bank statement; null for everything a person typed or a sheet held. */
+  counterparty: string | null;
+  purpose: string | null;
   taxRelevant: boolean;
   categoryId: string | null;
   categoryName: string | null;
@@ -1030,6 +1033,37 @@ export interface ImportBatchSummary {
   rowCount: number;
   createdAt: string;
   appliedAt: string | null;
+}
+
+/** One staged bank-statement line, as the review screen sees it. */
+export interface StatementRow {
+  id: string;
+  sourceRef: string;
+  bookedOn: string;
+  kind: 'income' | 'expense' | 'transfer';
+  amountCents: number;
+  counterparty: string | null;
+  purpose: string | null;
+  comment: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** `rule` for an exact match, `suggestion` for a guess, null for neither. */
+  categorySource: string | null;
+  suggestionScore: number | null;
+  decision: 'pending' | 'accepted' | 'rejected';
+  createRule: boolean;
+  duplicateBookingId: string | null;
+  duplicateComment: string | null;
+  duplicateBookedOn: string | null;
+}
+
+export interface StatementRowPage {
+  items: StatementRow[];
+  total: number;
+  pending: number;
+  accepted: number;
+  rejected: number;
+  duplicates: number;
 }
 
 export interface CommitResult {

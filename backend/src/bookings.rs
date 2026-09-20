@@ -21,7 +21,8 @@ use crate::{
 
 pub(crate) const SELECT_BOOKING: &str = "\
     SELECT b.id, b.period_year, b.period_month, b.booked_on, b.kind, b.amount_cents, \
-           b.net_cents, b.comment, b.tax_relevant, b.category_id, c.name AS category_name, \
+           b.net_cents, b.comment, b.counterparty, b.purpose, b.tax_relevant, \
+           b.category_id, c.name AS category_name, \
            t.label AS category_type, b.category_source, b.shared, b.external_source, \
            b.external_id, b.status, b.origin, \
            EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
@@ -42,6 +43,8 @@ pub(crate) fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
         amount_cents: r.get("amount_cents"),
         net_cents: r.get("net_cents"),
         comment: r.get("comment"),
+        counterparty: r.get("counterparty"),
+        purpose: r.get("purpose"),
         tax_relevant: r.get("tax_relevant"),
         category_id: r.get("category_id"),
         category_name: r.get("category_name"),

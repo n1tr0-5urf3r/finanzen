@@ -24,6 +24,8 @@ const booking = (over: Record<string, unknown>) => ({
   amountCents: 2_500,
   netCents: 2_500,
   comment: 'Hofladen Brinkmann',
+  counterparty: null,
+  purpose: null,
   taxRelevant: false,
   categoryId: 'haus',
   categoryName: 'Haus & Garten',
