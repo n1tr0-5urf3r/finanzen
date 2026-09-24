@@ -259,18 +259,50 @@ fn validate(body: &BookingInput) -> Result<()> {
 }
 
 pub(crate) async fn assert_year_unlocked(conn: &mut PgConnection, year: i32) -> Result<()> {
-    let locked: Option<bool> = sqlx::query_scalar(
-        "SELECT tax_locked_at IS NOT NULL FROM fiscal_years WHERE year = $1::smallint",
-    )
-    .bind(year)
-    .fetch_optional(&mut *conn)
-    .await?;
-    if locked == Some(true) {
-        return Err(AppError::Conflict(format!(
-            "Das Jahr {year} ist für die Steuer gesperrt"
-        )));
+    assert_years_unlocked(conn, &[year]).await
+}
+
+/// Refuses any change that would touch a year locked for tax.
+///
+/// A locked year is a filed return: its bookings are what was declared. The lock
+/// used to be checked only when a booking was created, confirmed, or edited INTO a
+/// year — so deleting one, bulk-editing, importing into the year, or moving a
+/// booking OUT of it all went straight through. Every write that changes what a
+/// year contains asks this first, with every year it touches.
+pub(crate) async fn assert_years_unlocked(conn: &mut PgConnection, years: &[i32]) -> Result<()> {
+    if years.is_empty() {
+        return Ok(());
     }
-    Ok(())
+    let locked: Vec<i16> = sqlx::query_scalar(
+        "SELECT year FROM fiscal_years \
+          WHERE tax_locked_at IS NOT NULL AND year = ANY($1::int[]) ORDER BY year",
+    )
+    .bind(years)
+    .fetch_all(&mut *conn)
+    .await?;
+    match locked.as_slice() {
+        [] => Ok(()),
+        [year] => Err(AppError::Conflict(format!(
+            "Das Jahr {year} ist für die Steuer gesperrt"
+        ))),
+        many => Err(AppError::Conflict(format!(
+            "Die Jahre {} sind für die Steuer gesperrt",
+            many.iter()
+                .map(|y| y.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
+/// The years the given bookings currently sit in.
+pub(crate) async fn years_of(conn: &mut PgConnection, ids: &[Uuid]) -> Result<Vec<i32>> {
+    Ok(
+        sqlx::query_scalar("SELECT DISTINCT period_year::int FROM bookings WHERE id = ANY($1)")
+            .bind(ids)
+            .fetch_all(&mut *conn)
+            .await?,
+    )
 }
 
 /// Resolves the category for a new or edited booking: an explicit `categoryId` is a
@@ -444,13 +476,22 @@ pub async fn update(
     Json(body): Json<BookingInput>,
 ) -> Result<Json<Booking>> {
     validate(&body)?;
-    assert_year_unlocked(ctx.tenant.conn(), body.year).await?;
+    // Both ends of a move: taking a booking OUT of a locked year changes that
+    // year as surely as putting one in.
+    let mut touched = years_of(ctx.tenant.conn(), &[id]).await?;
+    touched.push(body.year);
+    assert_years_unlocked(ctx.tenant.conn(), &touched).await?;
 
     let resolved = if body.clear_category_override {
         resolve_category(ctx.tenant.conn(), &body.comment, None).await?
     } else {
         resolve_category(ctx.tenant.conn(), &body.comment, body.category_id).await?
     };
+    // The same rule that forces `to ING` to be a transfer on the way in forces it
+    // on an edit: before, renaming a booking to such a comment kept whatever kind
+    // it had, so the same words meant a transfer or an expense depending on
+    // whether they were typed at creation or later.
+    let kind = resolved.kind_override.unwrap_or(body.kind);
 
     // ...and an edit can move a booking into a year that has no row yet, exactly
     // like a new booking can.
@@ -478,7 +519,7 @@ pub async fn update(
     .bind(body.year)
     .bind(body.month as i16)
     .bind(body.booked_on)
-    .bind(body.kind.as_db())
+    .bind(kind.as_db())
     .bind(body.amount_cents)
     .bind(body.comment.trim())
     .bind(body.tax_relevant)
@@ -559,6 +600,8 @@ pub async fn confirm(
     responses((status = 204, description = "Gelöscht"), (status = 409, description = "Mit KitchenOwl verknüpft — erst die Verknüpfung lösen", body = crate::error::ErrorBody)),
 )]
 pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
+    let years = years_of(ctx.tenant.conn(), &[id]).await?;
+    assert_years_unlocked(ctx.tenant.conn(), &years).await?;
     let linked: Option<String> =
         sqlx::query_scalar("SELECT external_source FROM bookings WHERE id = $1")
             .bind(id)
@@ -633,6 +676,10 @@ pub async fn bulk(mut ctx: Ctx, Json(body): Json<BulkRequest>) -> Result<Json<Bu
             "Genau eine Änderung pro Massenaktion angeben".into(),
         ));
     }
+    // Every bulk action changes what its years contain — including the tax flag,
+    // which is the very thing a filed return is about.
+    let years = years_of(ctx.tenant.conn(), &body.booking_ids).await?;
+    assert_years_unlocked(ctx.tenant.conn(), &years).await?;
 
     let affected = if body.delete == Some(true) {
         sqlx::query("DELETE FROM bookings WHERE id = ANY($1) AND external_source IS NULL")

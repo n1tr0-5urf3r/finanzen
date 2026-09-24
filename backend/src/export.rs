@@ -31,11 +31,14 @@ use crate::{
     locale::{format_de, month_name_de},
     models::{
         BookingKind, CategorySource, ExportBooking, ExportCategory, ExportCategoryType,
-        ExportDocument, ExportRule, ExportTemplate, ExportYear, Period, RestoreResult,
+        ExportDocument, ExportPayee, ExportRule, ExportTemplate, ExportYear, Period, RestoreResult,
     },
 };
 
-const FORMAT_VERSION: i32 = 1;
+/// 2 adds the bank statement fields of a booking and the remembered payees. Both
+/// are additive, so a version 1 document still restores — without them, which is
+/// all it ever had.
+const FORMAT_VERSION: i32 = 2;
 
 // --------------------------------------------------------- content disposition
 
@@ -616,7 +619,7 @@ async fn build_document(ctx: &mut Ctx, year: Option<i32>) -> Result<ExportDocume
     // items waiting for their real amount.
     let mut sql = String::from(
         "SELECT b.period_year, b.period_month, b.booked_on, b.kind, b.amount_cents, b.comment, \
-                b.tax_relevant, c.name AS category_name, b.category_source, b.status, b.origin, \
+                b.counterparty, b.purpose, b.tax_relevant, c.name AS category_name, b.category_source, b.status, b.origin, \
                 b.shared, b.external_source, b.external_id, b.import_fingerprint, \
                 rt.name AS template_name, \
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
@@ -645,6 +648,8 @@ async fn build_document(ctx: &mut Ctx, year: Option<i32>) -> Result<ExportDocume
                 .unwrap_or(BookingKind::Expense),
             amount_cents: r.get("amount_cents"),
             comment: r.get("comment"),
+            counterparty: r.get("counterparty"),
+            purpose: r.get("purpose"),
             tax_relevant: r.get("tax_relevant"),
             category_name: r.get("category_name"),
             category_source: CategorySource::parse(r.get::<String, _>("category_source").as_str()),
@@ -659,6 +664,24 @@ async fn build_document(ctx: &mut Ctx, year: Option<i32>) -> Result<ExportDocume
         })
         .collect();
 
+    // The payees are an account's knowledge, not a year's, so a one-year export
+    // carries them too: restoring that year into a fresh account should still
+    // recognise the payees its bookings came from.
+    let statement_payees = sqlx::query(
+        "SELECT p.payee, p.comment, c.name AS category_name \
+           FROM statement_payees p LEFT JOIN categories c ON c.id = p.category_id \
+          ORDER BY lower(p.payee)",
+    )
+    .fetch_all(ctx.tenant.conn())
+    .await?
+    .iter()
+    .map(|r| ExportPayee {
+        payee: r.get("payee"),
+        comment: r.get("comment"),
+        category_name: r.get("category_name"),
+    })
+    .collect();
+
     Ok(ExportDocument {
         format_version: FORMAT_VERSION,
         exported_at: Utc::now(),
@@ -670,6 +693,7 @@ async fn build_document(ctx: &mut Ctx, year: Option<i32>) -> Result<ExportDocume
         years,
         recurring_templates: templates,
         bookings,
+        statement_payees,
     })
 }
 
@@ -810,7 +834,7 @@ pub async fn restore(
     mut ctx: Ctx,
     Json(doc): Json<ExportDocument>,
 ) -> Result<(StatusCode, Json<RestoreResult>)> {
-    if doc.format_version != FORMAT_VERSION {
+    if !(1..=FORMAT_VERSION).contains(&doc.format_version) {
         return Err(AppError::Unprocessable(format!(
             "Unbekannte Exportversion {} (erwartet {FORMAT_VERSION})",
             doc.format_version
@@ -833,6 +857,7 @@ pub async fn restore(
         templates_created: 0,
         bookings_created: 0,
         rule_links_downgraded: 0,
+        payees_created: 0,
         warnings: Vec::new(),
     };
 
@@ -1006,9 +1031,9 @@ pub async fn restore(
             "INSERT INTO bookings (id, user_id, period_year, period_month, booked_on, kind, \
                     amount_cents, comment, tax_relevant, category_id, category_source, \
                     resolved_rule_id, status, origin, shared, external_source, external_id, \
-                    import_fingerprint, template_id) \
+                    import_fingerprint, template_id, counterparty, purpose) \
              VALUES ($1,$2,$3::smallint,$4::smallint,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,\
-                     $16,$17,$18,$19)",
+                     $16,$17,$18,$19,$20,$21)",
         )
         .bind(Uuid::new_v4())
         .bind(ctx.tenant.user_id())
@@ -1033,6 +1058,8 @@ pub async fn restore(
                 .as_ref()
                 .and_then(|n| template_ids.get(n).copied()),
         )
+        .bind(&b.counterparty)
+        .bind(&b.purpose)
         .execute(ctx.tenant.conn())
         .await
         .map_err(|e| {
@@ -1042,6 +1069,25 @@ pub async fn restore(
             )
         })?;
         result.bookings_created += 1;
+    }
+
+    for p in &doc.statement_payees {
+        let category_id = p
+            .category_name
+            .as_ref()
+            .and_then(|n| category_ids.get(&n.to_lowercase()).copied());
+        sqlx::query(
+            "INSERT INTO statement_payees (id, user_id, payee, comment, category_id) \
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, payee_key) DO NOTHING",
+        )
+        .bind(Uuid::new_v4())
+        .bind(ctx.tenant.user_id())
+        .bind(&p.payee)
+        .bind(&p.comment)
+        .bind(category_id)
+        .execute(ctx.tenant.conn())
+        .await?;
+        result.payees_created += 1;
     }
 
     ctx.tenant.commit().await?;

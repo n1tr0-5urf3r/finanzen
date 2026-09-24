@@ -3772,7 +3772,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/YearInput"
+                "$ref": "#/components/schemas/YearUpdate"
               }
             }
           },
@@ -3780,7 +3780,7 @@
         },
         "responses": {
           "200": {
-            "description": "Vortrag gesetzt; er gilt damit als konfiguriert",
+            "description": "Jahr geändert; ein gesetzter Vortrag gilt damit als konfiguriert",
             "content": {
               "application/json": {
                 "schema": {
@@ -5001,6 +5001,13 @@
           "comment": {
             "type": "string"
           },
+          "counterparty": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "From a bank statement; absent from version 1 documents."
+          },
           "externalId": {
             "type": [
               "string",
@@ -5033,6 +5040,12 @@
           },
           "origin": {
             "type": "string"
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "shared": {
             "type": "boolean"
@@ -5168,6 +5181,13 @@
               "$ref": "#/components/schemas/ExportRule"
             }
           },
+          "statementPayees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportPayee"
+            },
+            "description": "What each bank payee is called, as taught by statement reviews. Absent from\nversion 1 documents, which restore with none."
+          },
           "year": {
             "type": [
               "integer",
@@ -5181,6 +5201,27 @@
             "items": {
               "$ref": "#/components/schemas/ExportYear"
             }
+          }
+        }
+      },
+      "ExportPayee": {
+        "type": "object",
+        "required": [
+          "payee",
+          "comment"
+        ],
+        "properties": {
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "payee": {
+            "type": "string"
           }
         }
       },
@@ -8751,6 +8792,7 @@
           "templatesCreated",
           "bookingsCreated",
           "ruleLinksDowngraded",
+          "payeesCreated",
           "warnings"
         ],
         "properties": {
@@ -8759,6 +8801,10 @@
             "format": "int64"
           },
           "categoriesCreated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "payeesCreated": {
             "type": "integer",
             "format": "int64"
           },
@@ -9340,6 +9386,7 @@
         "type": "object",
         "required": [
           "items",
+          "matching",
           "total",
           "pending",
           "accepted",
@@ -9360,6 +9407,11 @@
             "items": {
               "$ref": "#/components/schemas/StatementRowView"
             }
+          },
+          "matching": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Lines matching the current filter — what the pager counts, where `total`\nis the whole statement."
           },
           "pending": {
             "type": "integer",
@@ -9991,6 +10043,26 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "YearUpdate": {
+        "type": "object",
+        "description": "A change to an existing year. Everything is optional, and what is left out is\nleft alone — in particular the opening balance.\n\nLocking a year used to go through the same call as setting its opening, which\nalways marked the opening `configured`. Locking a DERIVED year therefore froze\nits opening at whatever the chain said that day, and every later correction to\nthe year before stopped flowing through: a carry-over gap appeared out of a\nclick that was only meant to lock the year.",
+        "properties": {
+          "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "openingBalanceCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Setting it makes the opening configured; leaving it out keeps it as it is."
           }
         }
       }

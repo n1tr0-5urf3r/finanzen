@@ -465,3 +465,61 @@ async fn rule_keys_collide_case_insensitively() {
         Some("23505")
     );
 }
+
+/// A failed statement aborts a Postgres transaction, and from then on its COMMIT
+/// silently becomes a ROLLBACK — no error, so the caller thinks it committed. The
+/// import commit logged a failing best-effort step and carried on, which undid
+/// every booking it had just written while the response reported them inserted.
+#[tokio::test]
+async fn a_failing_best_effort_step_cannot_undo_the_transaction_around_it() {
+    let Some(pool) = pool().await else {
+        eprintln!("SKIP: TEST_DATABASE_URL not set");
+        return;
+    };
+    let mut conn = pool.acquire().await.unwrap();
+    sqlx::query("CREATE TEMP TABLE written (n int)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    // The premise, shown: swallow the error without a savepoint, and the COMMIT
+    // "succeeds" having kept nothing.
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("INSERT INTO written VALUES (1)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let _ = sqlx::query("SELECT 1/0").execute(&mut *conn).await;
+    sqlx::query("COMMIT")
+        .execute(&mut *conn)
+        .await
+        .expect("commit reports no error");
+    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM written")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(kept, 0, "without a savepoint the whole transaction is gone");
+
+    // The fix: the same failing step inside `db::savepoint`.
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("INSERT INTO written VALUES (2)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let step = finanzen::db::savepoint(&mut conn, "best_effort", async |c| {
+        sqlx::query("SELECT 1/0").execute(c).await?;
+        Ok(())
+    })
+    .await;
+    assert!(step.is_err(), "the step itself still reports its failure");
+    sqlx::query("INSERT INTO written VALUES (3)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("COMMIT").execute(&mut *conn).await.unwrap();
+    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM written")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(kept, 2, "both writes around the failed step survive");
+}

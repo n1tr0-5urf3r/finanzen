@@ -7,7 +7,7 @@ use crate::{
     auth::Ctx,
     calc::{self, YearRaw},
     error::{AppError, Result},
-    models::{Year, YearInput},
+    models::{Year, YearInput, YearUpdate},
 };
 
 async fn load(ctx: &mut Ctx) -> Result<Vec<Year>> {
@@ -107,19 +107,24 @@ pub async fn create(mut ctx: Ctx, Json(body): Json<YearInput>) -> Result<(Status
     path = "/api/v1/years/{year}",
     tag = "years",
     params(("year" = i32, Path, description = "Kalenderjahr")),
-    request_body = YearInput,
-    responses((status = 200, description = "Vortrag gesetzt; er gilt damit als konfiguriert", body = Year), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
+    request_body = YearUpdate,
+    responses((status = 200, description = "Jahr geändert; ein gesetzter Vortrag gilt damit als konfiguriert", body = Year), (status = 404, description = "Nicht gefunden", body = crate::error::ErrorBody)),
 )]
 pub async fn update(
     mut ctx: Ctx,
     Path(year): Path<i32>,
-    Json(body): Json<YearInput>,
+    Json(body): Json<YearUpdate>,
 ) -> Result<Json<Year>> {
     // Editing the opening balance makes it configured by definition — the user has
-    // just asserted a number rather than inheriting one.
+    // just asserted a number rather than inheriting one. Not editing it keeps it
+    // whatever it was, derived included.
     let affected = sqlx::query(
-        "UPDATE fiscal_years SET opening_cents = $2, opening_source = 'configured', \
-                tax_locked_at = CASE WHEN $3 THEN COALESCE(tax_locked_at, now()) ELSE NULL END \
+        "UPDATE fiscal_years SET \
+                opening_cents = COALESCE($2, opening_cents), \
+                opening_source = CASE WHEN $2 IS NULL THEN opening_source ELSE 'configured' END, \
+                tax_locked_at = CASE WHEN $3 IS NULL THEN tax_locked_at \
+                                     WHEN $3 THEN COALESCE(tax_locked_at, now()) \
+                                     ELSE NULL END \
           WHERE year = $1::smallint",
     )
     .bind(year)

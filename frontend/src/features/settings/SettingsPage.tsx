@@ -108,6 +108,10 @@ function YearsSection() {
   const client = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
+  // The opening as the form showed it when it opened. Sending it back unchanged
+  // would make a derived opening configured — freezing it — so it is only sent
+  // when the user actually changed it.
+  const [initialCents, setInitialCents] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()));
   const [notice, setNotice] = useState<string | null>(null);
@@ -115,8 +119,8 @@ function YearsSection() {
   const years = useQuery({ queryKey: qk.years(), queryFn: () => api<Year[]>('/years') });
 
   const save = useMutation({
-    mutationFn: (body: { year: number; openingBalanceCents: number; locked: boolean }) =>
-      api<Year>(`/years/${body.year}`, { method: 'PUT', ...jsonBody(body) }),
+    mutationFn: ({ year, ...body }: { year: number; openingBalanceCents?: number; locked: boolean }) =>
+      api<Year>(`/years/${year}`, { method: 'PUT', ...jsonBody(body) }),
     onSuccess: (year) => {
       invalidateAfterYearChange(client, year.year);
       setEditing(null);
@@ -213,6 +217,7 @@ function YearsSection() {
                       onClick={() => {
                         setEditing(y.year);
                         setAmount((y.openingBalanceCents / 100).toFixed(2).replace('.', ','));
+                        setInitialCents(y.openingBalanceCents);
                         setLocked(y.locked);
                       }}
                     >
@@ -234,7 +239,11 @@ function YearsSection() {
             e.preventDefault();
             const cents = parseEuroInput(amount);
             if (cents === null) return;
-            save.mutate({ year: editing, openingBalanceCents: cents, locked });
+            save.mutate(
+              cents === initialCents
+                ? { year: editing, locked }
+                : { year: editing, openingBalanceCents: cents, locked },
+            );
           }}
         >
           <h3>{editing}</h3>

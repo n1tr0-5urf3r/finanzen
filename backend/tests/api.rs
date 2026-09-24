@@ -1823,7 +1823,8 @@ async fn the_json_export_keeps_cents_and_the_csv_export_does_not() {
 
     let (_, _, bytes) = app.get_raw("/exports/bookings.json?year=2026").await;
     let doc: Value = serde_json::from_slice(&bytes).expect("json");
-    assert_eq!(doc["formatVersion"], 1);
+    // 2 since the bank statement fields; a version 1 document still restores.
+    assert_eq!(doc["formatVersion"], 2);
     assert_eq!(doc["bookings"][0]["amountCents"], 110000);
 
     let (_, headers, bytes) = app.get_raw("/exports/bookings.csv?year=2026").await;
@@ -3591,4 +3592,286 @@ async fn an_unreviewed_workbook_suggestion_is_not_booked_as_a_choice() {
             );
         }
     }
+}
+
+impl TestApp {
+    async fn book(&self, year: i32, month: u8, cents: i64, comment: &str) -> String {
+        let (status, b) = self
+            .send(
+                "POST",
+                "/bookings",
+                Some(json!({"year": year, "month": month, "kind": "expense",
+                            "amountCents": cents, "comment": comment})),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{b}");
+        b["id"].as_str().unwrap().to_string()
+    }
+
+    async fn lock(&self, year: i32) {
+        let (status, body) = self
+            .send(
+                "PUT",
+                &format!("/years/{year}"),
+                Some(json!({"year": year, "locked": true})),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+}
+
+/// A year locked for tax is a filed return. The lock used to be checked only for a
+/// booking created, confirmed, or edited INTO the year — every other way of
+/// changing it went straight through.
+#[tokio::test]
+async fn a_locked_year_cannot_be_changed_by_any_route() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let filed = app.book(2025, 3, 4200, "Buch").await;
+    app.lock(2025).await;
+
+    let (status, _) = app
+        .send("DELETE", &format!("/bookings/{filed}"), None)
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "delete");
+
+    let (status, _) = app
+        .send(
+            "POST",
+            "/bookings/bulk",
+            Some(json!({"bookingIds": [filed], "setTaxRelevant": true})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "bulk");
+
+    // Moving it OUT of the locked year changes that year just as surely.
+    let (status, _) = app
+        .send(
+            "PUT",
+            &format!("/bookings/{filed}"),
+            Some(json!({"year": 2026, "month": 3, "kind": "expense",
+                        "amountCents": 4200, "comment": "Buch"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "move out");
+
+    // An import may not add to it either.
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.03.2025;17.03.2025;LADEN;Lastschrift;Kauf;700,00;EUR;-9,99;EUR",
+        ]))
+        .await;
+    app.review(&import, &rows[0], json!({"decision": "accepted"}))
+        .await;
+    let (status, _) = app
+        .send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "import");
+
+    // And the booking is exactly as filed.
+    let (_, bookings) = app.send("GET", "/bookings?year=2025", None).await;
+    assert_eq!(bookings["total"].as_i64(), Some(1));
+}
+
+/// Deleting a rule un-categorised its bookings in every year — including a filed
+/// one, which moved money between declared categories. In a locked year they keep
+/// their category now; everywhere else they fall back as before.
+#[tokio::test]
+async fn deleting_a_rule_leaves_a_locked_year_as_filed() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let food = app.category_id("Lebensmittel").await;
+    let (_, rule) = app
+        .send(
+            "POST",
+            "/rules",
+            Some(json!({"comment": "Testladen", "categoryId": food})),
+        )
+        .await;
+    app.book(2025, 3, 1000, "Testladen").await;
+    app.book(2026, 3, 1000, "Testladen").await;
+    app.lock(2025).await;
+
+    let (status, _) = app
+        .send(
+            "DELETE",
+            &format!("/rules/{}", rule["id"].as_str().unwrap()),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, filed) = app.send("GET", "/bookings?year=2025", None).await;
+    assert_eq!(
+        filed["items"][0]["categoryName"].as_str(),
+        Some("Lebensmittel")
+    );
+    assert_eq!(filed["items"][0]["categorySource"].as_str(), Some("manual"));
+    let (_, open) = app.send("GET", "/bookings?year=2026", None).await;
+    assert!(open["items"][0]["categoryId"].is_null());
+}
+
+/// Deleting a category moves its bookings to another — in a locked year that
+/// rewrites what was declared, so it is refused and says which year.
+#[tokio::test]
+async fn a_category_used_in_a_locked_year_cannot_be_moved_away() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let food = app.category_id("Lebensmittel").await;
+    let other = app.category_id("Sonstiges").await;
+    let id = app.book(2025, 3, 1000, "Einkauf").await;
+    app.send(
+        "POST",
+        "/bookings/bulk",
+        Some(json!({"bookingIds": [id], "setCategoryId": food})),
+    )
+    .await;
+    app.lock(2025).await;
+
+    let (status, body) = app
+        .send(
+            "DELETE",
+            &format!("/categories/{food}?reassignTo={other}"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("2025")
+    );
+}
+
+/// Locking a year went through the same call as setting its opening, which always
+/// made the opening `configured`. A derived year locked that way stopped following
+/// the year before it, and a carry-over gap appeared from a click that was only
+/// meant to lock it.
+#[tokio::test]
+async fn locking_a_derived_year_keeps_it_following_the_year_before() {
+    let mut app = app!();
+    app.setup_admin().await;
+    app.book(2025, 3, 1000, "Buch").await;
+    app.book(2026, 3, 1000, "Buch").await;
+    app.lock(2026).await;
+
+    let year = |years: &Value, y: i64| {
+        years
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["year"].as_i64() == Some(y))
+            .cloned()
+            .unwrap()
+    };
+    let (_, years) = app.send("GET", "/years", None).await;
+    let before = year(&years, 2026);
+    assert_eq!(before["openingSource"].as_str(), Some("derived"));
+    assert_eq!(before["locked"], true);
+
+    // A correction to 2025 still flows into 2026's opening.
+    app.book(2025, 4, 500, "Buch").await;
+    let (_, years) = app.send("GET", "/years", None).await;
+    let after = year(&years, 2026);
+    assert_eq!(
+        after["openingBalanceCents"].as_i64().unwrap(),
+        before["openingBalanceCents"].as_i64().unwrap() - 500
+    );
+    assert!(after["carryoverGapCents"].is_null(), "{after}");
+}
+
+/// The export is documented as the lossless backup, but it predated bank
+/// statements: a restored account came back without any booking's payee or
+/// reference, and without the payees the reviews had taught it.
+#[tokio::test]
+async fn the_export_carries_the_bank_fields_and_the_remembered_payees() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;STUDIERENDENWERK MUSTERSTADT;Lastschrift;Mensa Aufwertung;700,00;EUR;-15,00;EUR",
+        ]))
+        .await;
+    app.review(
+        &import,
+        &rows[0],
+        json!({"comment": "Mensaguthaben", "rememberPayee": true, "decision": "accepted"}),
+    )
+    .await;
+    app.send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+
+    let (_, _, bytes) = app.get_raw("/exports/bookings.json").await;
+    let document: Value = serde_json::from_slice(&bytes).expect("export json");
+
+    let other = app.create_second_user("zweitkonto").await;
+    let (status, restored) = app
+        .send_as(Some(&other), "POST", "/exports/restore", Some(document))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{restored}");
+    assert_eq!(restored["payeesCreated"].as_i64(), Some(1));
+
+    let (_, bookings) = app
+        .send_as(Some(&other), "GET", "/bookings?year=2026", None)
+        .await;
+    let booking = &bookings["items"][0];
+    assert_eq!(
+        booking["counterparty"].as_str(),
+        Some("STUDIERENDENWERK MUSTERSTADT")
+    );
+    assert_eq!(booking["purpose"].as_str(), Some("Mensa Aufwertung"));
+    let (_, payees) = app
+        .send_as(Some(&other), "GET", "/statement-payees", None)
+        .await;
+    assert_eq!(payees[0]["comment"].as_str(), Some("Mensaguthaben"));
+}
+
+/// Documents written before the bank fields existed still restore.
+#[tokio::test]
+async fn a_version_one_export_still_restores() {
+    let mut app = app!();
+    app.setup_admin().await;
+    app.book(2026, 3, 1000, "Buch").await;
+    let (_, _, bytes) = app.get_raw("/exports/bookings.json").await;
+    let mut document: Value = serde_json::from_slice(&bytes).expect("export json");
+    document["formatVersion"] = json!(1);
+    document.as_object_mut().unwrap().remove("statementPayees");
+    for b in document["bookings"].as_array_mut().unwrap() {
+        b.as_object_mut().unwrap().remove("counterparty");
+        b.as_object_mut().unwrap().remove("purpose");
+    }
+
+    let other = app.create_second_user("zweitkonto").await;
+    let (status, restored) = app
+        .send_as(Some(&other), "POST", "/exports/restore", Some(document))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{restored}");
+    assert_eq!(restored["bookingsCreated"].as_i64(), Some(1));
+}
+
+/// A rule that forces a kind forced it on the way in and not on an edit, so the
+/// same comment meant a transfer or an expense depending on when it was typed.
+#[tokio::test]
+async fn renaming_a_booking_to_a_transfer_comment_makes_it_a_transfer() {
+    let mut app = app!();
+    app.setup_admin().await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "to Tagesgeld", "kindOverride": "transfer"})),
+    )
+    .await;
+    let id = app.book(2026, 3, 50000, "Einkauf").await;
+
+    let (status, booking) = app
+        .send(
+            "PUT",
+            &format!("/bookings/{id}"),
+            Some(json!({"year": 2026, "month": 3, "kind": "expense",
+                        "amountCents": 50000, "comment": "to Tagesgeld"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{booking}");
+    assert_eq!(booking["kind"].as_str(), Some("transfer"));
 }

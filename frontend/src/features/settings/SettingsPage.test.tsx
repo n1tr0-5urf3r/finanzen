@@ -109,15 +109,35 @@ describe('settings', () => {
     await user.click(screen.getAllByRole('button', { name: 'Bearbeiten' })[1]);
     const input = await screen.findByLabelText('Vortrag');
     await user.clear(input);
-    await user.type(input, '40.000,00');
+    await user.type(input, '41.250,50');
     await user.click(screen.getByRole('button', { name: 'Speichern' }));
 
     expect(api).toHaveBeenCalledWith(
       '/years/2026',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ year: 2026, openingBalanceCents: 4000000, locked: false }),
+        body: JSON.stringify({ openingBalanceCents: 4125050, locked: false }),
       }),
+    );
+  });
+
+  /**
+   * Locking went out with the displayed opening attached, which the server takes
+   * as "set this opening" — and a derived year then stopped following the year
+   * before it. An opening that was not touched is not sent.
+   */
+  it('locks a year without freezing its opening balance', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('40.000,00 €');
+
+    await user.click(screen.getAllByRole('button', { name: 'Bearbeiten' })[1]);
+    await user.click(await screen.findByLabelText(/gesperrt/i));
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(api).toHaveBeenCalledWith(
+      '/years/2026',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ locked: true }) }),
     );
   });
 

@@ -694,7 +694,11 @@ pub struct CommitResult {
     params(("id" = Uuid, Path, description = "Datensatz-Id")),
     responses((status = 200, description = "Gebucht; erneutes Buchen ist wirkungslos", body = CommitResult)),
 )]
-pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitResult>> {
+pub async fn commit(
+    mut ctx: Ctx,
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CommitResult>> {
     let status: String = sqlx::query_scalar("SELECT status FROM import_batches WHERE id = $1")
         .bind(id)
         .fetch_optional(ctx.tenant.conn())
@@ -705,6 +709,23 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
             "Dieser Import wurde bereits übernommen".into(),
         ));
     }
+
+    // A locked year is a filed return, and an import must not add to it. Only the
+    // years that would actually receive a NEW booking count: re-importing a
+    // workbook that also covers a locked, already-imported year inserts nothing
+    // there, and refusing it outright would block the years that are open.
+    let receiving: Vec<i32> = sqlx::query_scalar(
+        "SELECT DISTINCT ir.period_year::int FROM import_rows ir \
+          WHERE ir.batch_id = $1 \
+            AND CASE WHEN ir.booked_on IS NULL THEN ir.decision <> 'rejected' \
+                     ELSE ir.decision = 'accepted' END \
+            AND NOT EXISTS (SELECT 1 FROM bookings b \
+                             WHERE b.import_fingerprint = ir.fingerprint)",
+    )
+    .bind(id)
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+    crate::bookings::assert_years_unlocked(ctx.tenant.conn(), &receiving).await?;
 
     // Years must exist before bookings reference them; the opening balance stays a
     // configured value the user sets, never derived from the imported rows.
@@ -818,8 +839,16 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
     // list they were born with — which is what happened when 459 drafts were
     // written seven minutes before the bookings arrived. In the same transaction,
     // so a rolled-back import cannot leave the suggestions talking about rows that
-    // no longer exist. A failure here must not fail the import, which is done.
-    if let Err(e) = crate::kitchenowl::matching::rescan_open(ctx.tenant.conn(), 0.80).await {
+    // no longer exist. A failure here must not fail the import, which is done —
+    // and without the savepoint it did worse than fail it: a database error left
+    // the transaction aborted, the COMMIT below quietly became a ROLLBACK, and the
+    // response still reported every booking as inserted.
+    let threshold = state.config.kitchenowl_duplicate_threshold;
+    if let Err(e) = crate::db::savepoint(ctx.tenant.conn(), "rescan_after_import", async |conn| {
+        crate::kitchenowl::matching::rescan_open(conn, threshold).await
+    })
+    .await
+    {
         tracing::warn!(error = %e, "Vorschläge konnten nach dem Import nicht neu berechnet werden");
     }
 
@@ -1048,6 +1077,9 @@ pub struct StatementRowView {
 #[serde(rename_all = "camelCase")]
 pub struct StatementRowPage {
     pub items: Vec<StatementRowView>,
+    /// Lines matching the current filter — what the pager counts, where `total`
+    /// is the whole statement.
+    pub matching: i64,
     pub total: i64,
     pub pending: i64,
     pub accepted: i64,
@@ -1364,9 +1396,21 @@ pub async fn statement_rows(
     .await?;
 
     let items = rows.iter().map(row_to_statement_view).collect();
+    let matching: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM import_rows ir \
+          WHERE ir.batch_id = $1 \
+            AND ($2 = '' \
+                 OR ($2 = 'duplicates' AND ir.duplicate_booking_id IS NOT NULL) \
+                 OR ir.decision = $2)",
+    )
+    .bind(id)
+    .bind(&filter)
+    .fetch_one(ctx.tenant.conn())
+    .await?;
 
     let out = StatementRowPage {
         items,
+        matching,
         total: counts.get("total"),
         pending: counts.get("pending"),
         accepted: counts.get("accepted"),

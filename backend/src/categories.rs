@@ -185,6 +185,17 @@ pub async fn delete(
         .await?;
 
     if in_use > 0 {
+        // Moving bookings to another category rewrites what a locked year
+        // declared, so it is refused there, naming the year. Unlocking it first
+        // is a deliberate act; doing it by deleting a category was not.
+        let years: Vec<i32> = sqlx::query_scalar(
+            "SELECT DISTINCT period_year::int FROM bookings WHERE category_id = $1",
+        )
+        .bind(id)
+        .fetch_all(ctx.tenant.conn())
+        .await?;
+        crate::bookings::assert_years_unlocked(ctx.tenant.conn(), &years).await?;
+
         let Some(target) = q.reassign_to else {
             // Refusing with the count lets the UI say "23 Buchungen betroffen"
             // instead of failing opaquely.

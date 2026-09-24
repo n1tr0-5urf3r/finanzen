@@ -14,6 +14,8 @@ import type { Category, CommitResult, StatementRow, StatementRowPage } from '../
 
 type Filter = '' | 'pending' | 'accepted' | 'rejected' | 'duplicates';
 
+const PAGE_SIZE = 100;
+
 /**
  * A bank statement, line by line.
  *
@@ -44,13 +46,19 @@ export function StatementReview({
   const t = useT();
   const client = useQueryClient();
   const [filter, setFilter] = useState<Filter>('pending');
+  // A year's export runs to several hundred lines; the list used to stop at the
+  // first 200 with nothing to say there were more.
+  const [page, setPage] = useState(0);
 
   const query = useQuery({
-    queryKey: qk.imports.statement(batchId, filter),
+    queryKey: qk.imports.statement(batchId, `${filter}:${page}`),
     queryFn: () =>
       api<StatementRowPage>(
-        `/imports/${batchId}/statement?pageSize=200${filter ? `&filter=${filter}` : ''}`,
+        `/imports/${batchId}/statement?pageSize=${PAGE_SIZE}&page=${page}${
+          filter ? `&filter=${filter}` : ''
+        }`,
       ),
+    placeholderData: (previous) => previous,
   });
 
   const patch = useMutation({
@@ -92,7 +100,8 @@ export function StatementReview({
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />;
   if (!query.data) return null;
 
-  const { items, total, pending, accepted, rejected, duplicates } = query.data;
+  const { items, matching, total, pending, accepted, rejected, duplicates } = query.data;
+  const pages = Math.max(1, Math.ceil(matching / PAGE_SIZE));
   const sorted = sortedByName(categories);
 
   const filters: [Filter, string, number][] = [
@@ -153,7 +162,10 @@ export function StatementReview({
             key={value || 'all'}
             type="button"
             aria-pressed={filter === value}
-            onClick={() => setFilter(value)}
+            onClick={() => {
+              setFilter(value);
+              setPage(0);
+            }}
           >
             {`${label} (${count})`}
           </button>
@@ -175,6 +187,29 @@ export function StatementReview({
             />
           ))}
         </div>
+      )}
+
+      {pages > 1 && (
+        // The bookings screen's pager, so the two lists page the same way.
+        <nav className="pager" aria-label={t('import.tabStatement')}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            ←
+          </Button>
+          <span>{t('bookings.page', { page: page + 1, pages })}</span>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={page + 1 >= pages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            →
+          </Button>
+        </nav>
       )}
     </section>
   );

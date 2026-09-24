@@ -141,6 +141,21 @@ pub async fn delete(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<StatusCode> {
     // Bookings that relied on this rule fall back to unresolved rather than keeping
     // a stale category — a rule is a convenience for entry, not a permanent claim
     // over history.
+    //
+    // Except in a year locked for tax. Its bookings are a filed return, and
+    // un-categorising them would move money between the categories that were
+    // declared. They keep the category they have and become manual — no longer
+    // tied to a rule that no longer exists, and frozen exactly as filed.
+    sqlx::query(
+        "UPDATE bookings SET category_source = 'manual', resolved_rule_id = NULL, \
+                updated_at = now() \
+          WHERE resolved_rule_id = $1 AND category_source = 'rule' \
+            AND period_year IN (SELECT year FROM fiscal_years \
+                                 WHERE tax_locked_at IS NOT NULL)",
+    )
+    .bind(id)
+    .execute(ctx.tenant.conn())
+    .await?;
     sqlx::query(
         "UPDATE bookings SET category_id = NULL, category_source = 'unresolved', \
                 resolved_rule_id = NULL, updated_at = now() \

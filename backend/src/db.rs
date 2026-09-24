@@ -83,3 +83,41 @@ async fn assert_rls_effective(pool: &PgPool, config: &Config) -> anyhow::Result<
     }
     Ok(())
 }
+
+/// Runs `work` so that its failure cannot take the surrounding transaction with it.
+///
+/// A failed statement puts a Postgres transaction into the aborted state, and
+/// from then on the `COMMIT` that ends it silently becomes a `ROLLBACK` — the
+/// server answers without an error, so the caller believes it committed. Logging
+/// the error of a best-effort step and carrying on is therefore not "best effort"
+/// at all: it quietly undoes everything the transaction did before it. A
+/// savepoint scopes the damage to the step that failed.
+///
+/// Returns whatever `work` returned, having rolled back to the savepoint if it
+/// failed.
+pub async fn savepoint<T, F>(
+    conn: &mut sqlx::PgConnection,
+    name: &str,
+    work: F,
+) -> crate::error::Result<T>
+where
+    F: AsyncFnOnce(&mut sqlx::PgConnection) -> crate::error::Result<T>,
+{
+    sqlx::query(&format!("SAVEPOINT {name}"))
+        .execute(&mut *conn)
+        .await?;
+    match work(&mut *conn).await {
+        Ok(value) => {
+            sqlx::query(&format!("RELEASE SAVEPOINT {name}"))
+                .execute(&mut *conn)
+                .await?;
+            Ok(value)
+        }
+        Err(e) => {
+            sqlx::query(&format!("ROLLBACK TO SAVEPOINT {name}"))
+                .execute(&mut *conn)
+                .await?;
+            Err(e)
+        }
+    }
+}

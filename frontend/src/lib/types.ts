@@ -1075,6 +1075,8 @@ export interface StatementRow {
 
 export interface StatementRowPage {
   items: StatementRow[];
+  /** Lines matching the current filter; `total` is the whole statement. */
+  matching: number;
   total: number;
   pending: number;
   accepted: number;

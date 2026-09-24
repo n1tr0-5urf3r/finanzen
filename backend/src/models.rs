@@ -690,6 +690,22 @@ pub struct YearInput {
     pub locked: bool,
 }
 
+/// A change to an existing year. Everything is optional, and what is left out is
+/// left alone — in particular the opening balance.
+///
+/// Locking a year used to go through the same call as setting its opening, which
+/// always marked the opening `configured`. Locking a DERIVED year therefore froze
+/// its opening at whatever the chain said that day, and every later correction to
+/// the year before stopped flowing through: a carry-over gap appeared out of a
+/// click that was only meant to lock the year.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct YearUpdate {
+    /// Setting it makes the opening configured; leaving it out keeps it as it is.
+    pub opening_balance_cents: Option<i64>,
+    pub locked: Option<bool>,
+}
+
 // ------------------------------------------------------------------ shared
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1024,6 +1040,18 @@ pub struct ExportDocument {
     pub years: Vec<ExportYear>,
     pub recurring_templates: Vec<ExportTemplate>,
     pub bookings: Vec<ExportBooking>,
+    /// What each bank payee is called, as taught by statement reviews. Absent from
+    /// version 1 documents, which restore with none.
+    #[serde(default)]
+    pub statement_payees: Vec<ExportPayee>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPayee {
+    pub payee: String,
+    pub comment: String,
+    pub category_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -1092,6 +1120,11 @@ pub struct ExportBooking {
     pub kind: BookingKind,
     pub amount_cents: i64,
     pub comment: String,
+    /// From a bank statement; absent from version 1 documents.
+    #[serde(default)]
+    pub counterparty: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     pub tax_relevant: bool,
     pub category_name: Option<String>,
     pub category_source: CategorySource,
@@ -1119,6 +1152,7 @@ pub struct RestoreResult {
     /// They are restored as manual overrides so the figure never moves; the count
     /// makes that visible instead of silent.
     pub rule_links_downgraded: i64,
+    pub payees_created: i64,
     pub warnings: Vec<String>,
 }
 

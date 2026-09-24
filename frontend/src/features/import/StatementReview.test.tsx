@@ -61,6 +61,7 @@ const PAGE: StatementRowPage = {
       duplicateBookedOn: '2026-09-16',
     }),
   ],
+  matching: 2,
   total: 2,
   pending: 2,
   accepted: 0,
@@ -172,5 +173,22 @@ describe('the bank statement review', () => {
       const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
       expect(bodies.some((b) => b.rememberPayee === true)).toBe(true);
     });
+  });
+
+  /** A year's export runs past a page; the list used to stop at 200 in silence. */
+  it('pages through a statement longer than one page', async () => {
+    const user = userEvent.setup();
+    api.mockImplementation((_path: string, init?: RequestInit) =>
+      Promise.resolve(
+        (init?.method ? row({}) : { ...PAGE, matching: 250, total: 250, pending: 250 }) as never,
+      ),
+    );
+    renderReview();
+    await screen.findByText('Seite 1 von 3');
+
+    await user.click(screen.getByRole('button', { name: '→' }));
+    await waitFor(() =>
+      expect(api.mock.calls.map(([p]) => String(p)).some((p) => p.includes('page=1'))).toBe(true),
+    );
   });
 });
