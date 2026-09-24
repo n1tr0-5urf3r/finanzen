@@ -113,7 +113,55 @@ describe('the push dialogue', () => {
     // different taxonomies and nothing maps one onto the other.
     expect(select.value).toBe('');
     expect(screen.getByRole('option', { name: 'ohne KitchenOwl-Kategorie' })).toBeInTheDocument();
-    expect(screen.getByText(/nie automatisch zugeordnet/)).toBeInTheDocument();
+    expect(screen.getByText(/schon abgelegt hat/)).toBeInTheDocument();
+  });
+
+  /**
+   * The dialogue opened with the category empty, so a Kaufland booking reached
+   * KitchenOwl uncategorised although the household had filed Kaufland under
+   * Wocheneinkauf every time so far. The tagging queue's suggestion fills it now.
+   */
+  it('files the expense where the household has filed the same name before', async () => {
+    api.mockImplementation((path: string) => {
+      if (path === '/kitchenowl/metadata') return Promise.resolve(METADATA);
+      if (path.startsWith('/kitchenowl/category-suggestion?name=Kaufland'))
+        return Promise.resolve({
+          koCategoryId: 1,
+          koCategoryName: 'Wocheneinkauf',
+          source: 'precedent',
+          timesSeen: 12,
+        });
+      return Promise.resolve(null);
+    });
+    open();
+    const select = (await screen.findByLabelText('KitchenOwl-Kategorie')) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe('1'));
+    expect(screen.getByText('Vorgeschlagen: bisher 12× so abgelegt.')).toBeInTheDocument();
+  });
+
+  /** A suggestion never overrules a category the user picked. */
+  it('leaves a category the user picked alone', async () => {
+    const user = userEvent.setup();
+    api.mockImplementation((path: string) => {
+      if (path === '/kitchenowl/metadata') return Promise.resolve(METADATA);
+      if (path.startsWith('/kitchenowl/category-suggestion'))
+        return Promise.resolve({
+          koCategoryId: 1,
+          koCategoryName: 'Wocheneinkauf',
+          source: 'precedent',
+          timesSeen: 12,
+        });
+      return Promise.resolve(null);
+    });
+    open();
+    const select = (await screen.findByLabelText('KitchenOwl-Kategorie')) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe('1'));
+
+    await user.selectOptions(select, '2');
+    // Renaming triggers a fresh suggestion; the user's pick must survive it.
+    await user.type(screen.getByLabelText('Name'), ' Nord');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(select.value).toBe('2');
   });
 
   it('sends the full booking amount and the chosen integer weights', async () => {

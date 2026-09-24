@@ -9,7 +9,7 @@ import { api, asList, jsonBody } from '../../lib/api';
 import { formatDate, parseEuroInput } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { invalidateAfterKitchenOwlChange, qk } from '../../lib/queryKeys';
-import type { Booking, KoMetadata, KoPushIntent } from '../../lib/types';
+import type { Booking, KoMetadata, KoPushIntent, KoTagSuggestion } from '../../lib/types';
 import { useMaskedFieldClass } from '../../lib/privacy';
 
 /**
@@ -58,6 +58,34 @@ export function PushDialog({
       `${booking.year}-${String(booking.month).padStart(2, '0')}-01`,
   );
   const [koCategoryId, setKoCategoryId] = useState('');
+  // The dialogue used to open with the category empty, so a Kaufland booking
+  // landed in KitchenOwl uncategorised although the household has filed Kaufland
+  // under Wocheneinkauf every time so far. The tagging queue's own suggestion now fills
+  // it — for as long as the user has not picked something themselves.
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [suggestFor, setSuggestFor] = useState(booking.comment);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSuggestFor(name), 300);
+    return () => window.clearTimeout(timer);
+  }, [name]);
+  const suggestion = useQuery({
+    queryKey: qk.kitchenowl.categorySuggestion(suggestFor.trim().toLowerCase()),
+    queryFn: () =>
+      api<KoTagSuggestion | null>(
+        `/kitchenowl/category-suggestion?name=${encodeURIComponent(suggestFor.trim())}`,
+      ),
+    enabled: suggestFor.trim() !== '',
+  });
+  useEffect(() => {
+    if (categoryTouched || !suggestion.isSuccess) return;
+    // An untouched select mirrors the suggestion, including "none": a name that
+    // changed to something unknown must not keep the last name's category.
+    setKoCategoryId(suggestion.data ? String(suggestion.data.koCategoryId) : '');
+  }, [suggestion.isSuccess, suggestion.data, categoryTouched]);
+  const suggested =
+    !categoryTouched && suggestion.data && String(suggestion.data.koCategoryId) === koCategoryId
+      ? suggestion.data
+      : null;
   const [paidBy, setPaidBy] = useState<number | null>(null);
   // Who is in the split and what weight they carry are two separate pieces of
   // state, and the weight is kept as TEXT. Coercing every keystroke to a number
@@ -215,7 +243,10 @@ export function PushDialog({
                 id="ko-category"
                 className="select"
                 value={koCategoryId}
-                onChange={(e) => setKoCategoryId(e.target.value)}
+                onChange={(e) => {
+                  setCategoryTouched(true);
+                  setKoCategoryId(e.target.value);
+                }}
               >
                 <option value="">{t('ko.noKoCategory')}</option>
                 {metadata.data.categories.map((category) => (
@@ -224,7 +255,17 @@ export function PushDialog({
                   </option>
                 ))}
               </select>
-              <small>{t('ko.koCategoryHint', { count: 32 })}</small>
+              {suggested ? (
+                <small>
+                  {suggested.source === 'precedent'
+                    ? t('ko.suggestedFromHistory', { count: suggested.timesSeen })
+                    : suggested.source === 'override'
+                      ? t('ko.suggestedFromOverride')
+                      : t('ko.suggestedFromRule')}
+                </small>
+              ) : (
+                <small>{t('ko.koCategoryHint', { count: 32 })}</small>
+              )}
             </div>
 
             <div className="field">

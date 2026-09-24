@@ -2403,6 +2403,46 @@
         }
       }
     },
+    "/api/v1/kitchenowl/category-suggestion": {
+      "get": {
+        "tags": [
+          "kitchenowl"
+        ],
+        "summary": "The KitchenOwl category an expense of this name would most likely be filed\nunder — for the push dialogue, which used to open with the category empty.",
+        "description": "Exactly the tagging queue's reasoning, so the two can never disagree: a\nstanding override first, then what this household has already filed the same\nname under (Kaufland: Wocheneinkauf, every time so far), then the personal rule table\nthrough the user's own category map. `null` when none of them knows — never a\nguess.",
+        "operationId": "category_suggestion",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The expense name as it will be sent, e.g. `Kaufland`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vorgeschlagene KitchenOwl-Kategorie, oder null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/KoTagSuggestion"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchenowl/drafts": {
       "get": {
         "tags": [

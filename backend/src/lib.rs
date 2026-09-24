@@ -208,6 +208,10 @@ pub fn router(state: AppState) -> Router {
             get(kitchenowl::analysis::series_subjects),
         )
         .route(
+            "/kitchenowl/category-suggestion",
+            get(kitchenowl::tagging::category_suggestion),
+        )
+        .route(
             "/kitchenowl/analysis/over-years",
             get(kitchenowl::analysis::over_years),
         )

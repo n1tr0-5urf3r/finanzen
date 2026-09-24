@@ -2472,3 +2472,68 @@ async fn a_rescan_finds_the_matches_that_appeared_after_the_drafts_did() {
     // ...and the draft is now flagged, which is what puts it in front of the user.
     assert_eq!(after["items"][0]["status"], "likely_duplicate");
 }
+
+/// The push dialogue opened with the category empty, so a booking pushed as
+/// "Kaufland" arrived uncategorised though the household had filed every earlier
+/// Kaufland under Wocheneinkauf. The suggestion is the tagging queue's own:
+/// whatever the household filed the SAME name under, most often — case and
+/// padding aside — and nothing at all for a name it has never seen.
+#[tokio::test]
+async fn a_push_is_offered_the_category_the_household_already_uses_for_that_name() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        expense(
+            1,
+            "Supermarkt",
+            19.07,
+            ms(2),
+            Some((1, "Wocheneinkauf")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            2,
+            "supermarkt ",
+            23.10,
+            ms(3),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(
+            3,
+            "Supermarkt",
+            8.40,
+            ms(4),
+            Some((2, "Essen gehen")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        expense(4, "Supermarkt", 5.00, ms(5), None, 1, &[(1, 1), (2, 1)]),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, body) = app.sync().await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, suggestion) = app
+        .send(
+            "GET",
+            "/kitchenowl/category-suggestion?name=SUPERMARKT",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    // Two of three filed ones say Wocheneinkauf; the uncategorised one says nothing.
+    assert_eq!(suggestion["koCategoryName"].as_str(), Some("Wocheneinkauf"));
+    assert_eq!(suggestion["source"].as_str(), Some("precedent"));
+    assert_eq!(suggestion["timesSeen"].as_i64(), Some(2));
+
+    let (_, unknown) = app
+        .send(
+            "GET",
+            "/kitchenowl/category-suggestion?name=Nie%20gesehen",
+            None,
+        )
+        .await;
+    assert!(unknown.is_null(), "never a guess: {unknown}");
+}

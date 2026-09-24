@@ -479,3 +479,41 @@ mod tests {
         assert!(suggest("hornbach", &precedents, &HashMap::new(), &no_categories).is_none());
     }
 }
+
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+pub struct SuggestionQuery {
+    /// The expense name as it will be sent, e.g. `Kaufland`.
+    pub name: String,
+}
+
+/// The KitchenOwl category an expense of this name would most likely be filed
+/// under — for the push dialogue, which used to open with the category empty.
+///
+/// Exactly the tagging queue's reasoning, so the two can never disagree: a
+/// standing override first, then what this household has already filed the same
+/// name under (Kaufland: Wocheneinkauf, every time so far), then the personal rule table
+/// through the user's own category map. `null` when none of them knows — never a
+/// guess.
+#[utoipa::path(
+    get,
+    path = "/api/v1/kitchenowl/category-suggestion",
+    tag = "kitchenowl",
+    params(SuggestionQuery),
+    responses((status = 200, description = "Vorgeschlagene KitchenOwl-Kategorie, oder null", body = Option<KoTagSuggestion>)),
+)]
+pub async fn category_suggestion(
+    mut ctx: Ctx,
+    axum::extract::Query(q): axum::extract::Query<SuggestionQuery>,
+) -> Result<Json<Option<KoTagSuggestion>>> {
+    let key = q.name.trim().to_lowercase();
+    let out = if key.is_empty() {
+        None
+    } else {
+        let precedents = precedents(ctx.tenant.conn()).await?;
+        let by_rule = rule_suggestions(ctx.tenant.conn()).await?;
+        let by_name = categories_by_name(ctx.tenant.conn()).await?;
+        suggest(&key, &precedents, &by_rule, &by_name)
+    };
+    ctx.tenant.commit().await?;
+    Ok(Json(out))
+}

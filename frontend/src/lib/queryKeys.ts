@@ -81,6 +81,7 @@ export const qk = {
     push: () => ['kitchenowl', 'push'] as const,
     settlement: () => ['kitchenowl', 'settlement'] as const,
     untagged: (year: number | null) => ['kitchenowl', 'untagged', year] as const,
+    categorySuggestion: (name: string) => ['kitchenowl', 'category-suggestion', name] as const,
     analysis: (year: number) => ['kitchenowl', 'analysis', year] as const,
     series: (year: number, mode: string, subject: string) =>
       ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,

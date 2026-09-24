@@ -529,8 +529,11 @@ export const en: Messages = {
   'ko.date': 'Date',
   'ko.koCategory': 'KitchenOwl category',
   'ko.noKoCategory': 'no KitchenOwl category',
+  'ko.suggestedFromHistory': 'Suggested: filed like this {count}× before.',
+  'ko.suggestedFromOverride': 'Suggested: a fixed mapping for this name.',
+  'ko.suggestedFromRule': 'Suggested: from your rule and the category mapping.',
   'ko.koCategoryHint':
-    'KitchenOwl’s own categories. They have nothing to do with your {count} categories and are never mapped automatically.',
+    'KitchenOwl’s own categories, separate from your {count}. The only suggestion is where the household has already filed the same name.',
   'ko.linked': 'Linked',
   'ko.linkedWith': 'Linked to “{comment}”',
   'ko.notLinked': 'Not linked',

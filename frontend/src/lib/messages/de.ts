@@ -563,8 +563,11 @@ export const de = {
   'ko.date': 'Datum',
   'ko.koCategory': 'KitchenOwl-Kategorie',
   'ko.noKoCategory': 'ohne KitchenOwl-Kategorie',
+  'ko.suggestedFromHistory': 'Vorgeschlagen: bisher {count}× so abgelegt.',
+  'ko.suggestedFromOverride': 'Vorgeschlagen: feste Zuordnung für diesen Namen.',
+  'ko.suggestedFromRule': 'Vorgeschlagen: aus deiner Regel und der Kategorie-Zuordnung.',
   'ko.koCategoryHint':
-    'Eigene Kategorien von KitchenOwl. Sie haben nichts mit deinen {count} Kategorien zu tun und werden nie automatisch zugeordnet.',
+    'Eigene Kategorien von KitchenOwl, unabhängig von deinen {count} Kategorien. Vorgeschlagen wird nur, worunter der Haushalt denselben Namen schon abgelegt hat.',
   'ko.linked': 'Verknüpft',
   'ko.linkedWith': 'Verknüpft mit „{comment}“',
   'ko.notLinked': 'Ohne Verknüpfung',
