@@ -154,6 +154,8 @@ export const de = {
   'analysis.byComment': 'Nach Kommentar',
   'analysis.byCategory': 'Nach Kategorie',
   'analysis.perActiveMonth': 'Ø je aktivem Monat',
+  'months.balanceChart': 'Saldo je Monat',
+  'months.balanceChartNote': 'Einnahmen minus Ausgaben. Nach oben: der Monat hat etwas übrig gelassen. Nach unten: er hat mehr gekostet, als hereinkam.',
   'months.withData': 'Monate mit Daten',
   'analysis.tabCategories': 'Nach Kategorie',
   'analysis.tabCompare': 'Jahresvergleich',

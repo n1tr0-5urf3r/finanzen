@@ -137,6 +137,8 @@ export const en: Messages = {
   'analysis.byComment': 'By comment',
   'analysis.byCategory': 'By category',
   'analysis.perActiveMonth': 'Avg. per active month',
+  'months.balanceChart': 'Balance per month',
+  'months.balanceChartNote': 'Income minus expenses. Up: the month left something over. Down: it cost more than came in.',
   'months.withData': 'Months with data',
   'analysis.tabCategories': 'By category',
   'analysis.tabCompare': 'Year on year',

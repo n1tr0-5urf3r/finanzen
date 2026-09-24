@@ -192,4 +192,23 @@ describe('the monthly overview', () => {
     // Nine points drawn, not twelve: October onward has no data to plot.
     expect(container.querySelectorAll('.chart__dot')).toHaveLength(9);
   });
+
+  /**
+   * The chart answers the question the screen is opened with — did this month end
+   * up or down — rather than showing the two figures that question is computed
+   * from. Those stay in the table, a row per month.
+   */
+  it('charts what each month came to, not what it came from', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Saldo je Monat');
+
+    expect(screen.queryByText('Einnahmen und Ausgaben je Monat')).toBeNull();
+
+    // One bar per month with bookings, drawn as a flow: a month that gained goes
+    // up, a month that cost more goes down.
+    const table = container.querySelector('.chart__data table') as HTMLElement;
+    const rows = [...table.querySelectorAll('tbody tr')].map((r) => r.textContent ?? '');
+    expect(rows[0]).toContain('Januar');
+    expect(rows.some((r) => /\+/.test(r))).toBe(true);
+  });
 });

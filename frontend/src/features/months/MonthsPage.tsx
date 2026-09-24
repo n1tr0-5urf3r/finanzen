@@ -1,12 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 
-import {
-  CumulativeLine,
-  MonthlyBars,
-  TypeBreakdown,
-  type BandPoint,
-} from '../../charts/MonthlyCharts';
+import { CumulativeLine, TypeBreakdown, type BandPoint } from '../../charts/MonthlyCharts';
+import { NetBars, type NetBar } from '../../charts/NetBars';
 import { DataLabel } from '../../components/DataLabel';
 import { FlowMoney, Money, ScopeNote } from '../../components/Money';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
@@ -112,6 +108,18 @@ function MonthsBody({
   const cumulative = (index: number) =>
     index <= lastWithData ? data.months[index].cumulativeCents : null;
 
+  // What each month came to, rather than the two figures it came from. The pair
+  // is still in the table below, a row per month; the chart answers the question
+  // the screen is opened with, which is whether a month ended up or down.
+  const bars: NetBar[] = data.months.map((m) => ({
+    label: m.monthName,
+    short: monthShort(m.month),
+    // NetBars draws the stored convention as a flow, so the saldo is negated on
+    // the way in: expense minus income goes down, and a month that gained goes up.
+    netCents: -m.balanceCents,
+    hasData: m.bookingCount > 0,
+  }));
+
   const points: BandPoint[] = data.months.map((m) => ({
     label: m.monthName,
     short: monthShort(m.month),
@@ -125,7 +133,7 @@ function MonthsBody({
     <>
       <div className="chart-grid chart-grid--pair" style={{ marginBottom: '1rem' }}>
           <div className="panel panel--pad">
-            <MonthlyBars points={points} />
+            <NetBars title={t('months.balanceChart')} note={t('months.balanceChartNote')} bars={bars} />
             <ScopeNote transfersIncluded={false} />
           </div>
           <div className="panel panel--pad">
