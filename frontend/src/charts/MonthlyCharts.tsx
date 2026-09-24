@@ -1,23 +1,17 @@
 import { ChartFrame, Gridlines, type ChartDatum } from './ChartFrame';
-import { bands, linearScale, niceTicks } from './scales';
+import { bands, linearScale } from './scales';
 import { DataLabel } from '../components/DataLabel';
 import { formatEuroCompact } from '../lib/format';
-import { useMaskAmount } from '../lib/privacy';
 import { useT } from '../lib/i18n';
+import { useNarrow } from '../lib/useNarrow';
 
-/**
- * A type label drawn inside the SVG is still ground-truth data, and browser page
- * translation will happily rewrite `<text>`. React's SVG typings carry no
- * `translate` prop, so the pair is spread in as attributes — the same contract
- * `<DataLabel>` gives every other data string in the app.
- */
-const DATA_TEXT: Record<string, string> = { lang: 'de', translate: 'no' };
 
 /* Wide enough for the axis labels these charts actually get. German has no short
    form for thousands — CLDR renders 28.000 as "28.000", not "28 Tsd." — so a
    yearly figure is eight or nine characters and a narrower gutter clips it
-   against the panel edge. */
-const LEFT = 76;
+   against the panel edge. At the phone's 22-unit text it needs half as much
+   again, so the gutter follows the font size. */
+const LEFT = { wide: 76, narrow: 118 };
 const RIGHT = 710;
 const TOP = 12;
 
@@ -56,13 +50,15 @@ export function MonthlyBars({
   title?: string;
 }) {
   const t = useT();
+  const narrow = useNarrow();
   const bottom = height - 26;
   const scale = linearScale(
     points.flatMap((p) => [p.incomeCents, p.expenseCents]),
     TOP,
     bottom,
   );
-  const band = bands(points.length, LEFT, RIGHT);
+  const left = LEFT[narrow ? 'narrow' : 'wide'];
+  const band = bands(points.length, left, RIGHT);
   const barWidth = Math.max(3, band.width / 2 - 4);
 
   const data: ChartDatum[] = points.map((p) => ({
@@ -81,7 +77,7 @@ export function MonthlyBars({
       <Gridlines
         ticks={scale.ticks}
         y={scale.y}
-        left={LEFT}
+        left={left}
         right={RIGHT}
         format={formatEuroCompact}
       />
@@ -130,13 +126,17 @@ export function CumulativeLine({
   height = 200,
   title,
   note,
+  tableOnPhone = true,
 }: {
   points: BandPoint[];
   height?: number;
   title?: string;
   note?: string;
+  /** See `ChartFrame`: off where the screen already lists every figure. */
+  tableOnPhone?: boolean;
 }) {
   const t = useT();
+  const left = LEFT[useNarrow() ? 'narrow' : 'wide'];
   const bottom = height - 26;
   // The server keeps the running value alive past the last month with data, so
   // the cut is made here rather than trusting `cumulativeCents` to be null.
@@ -150,7 +150,7 @@ export function CumulativeLine({
     TOP,
     bottom,
   );
-  const band = bands(points.length, LEFT, RIGHT);
+  const band = bands(points.length, left, RIGHT);
 
   const path = drawn
     .map(
@@ -171,6 +171,7 @@ export function CumulativeLine({
       title={title ?? t('chart.cumulative')}
       note={note ?? t('chart.stopsAtLastMonth')}
       columns={[t('months.cumulative')]}
+      tableOnPhone={tableOnPhone}
       valueBasis="flow"
       data={data}
       height={height}
@@ -178,7 +179,7 @@ export function CumulativeLine({
       <Gridlines
         ticks={scale.ticks}
         y={scale.y}
-        left={LEFT}
+        left={left}
         right={RIGHT}
         format={formatEuroCompact}
       />
@@ -201,103 +202,6 @@ export function CumulativeLine({
           textAnchor="middle"
         >
           {p.short}
-        </text>
-      ))}
-    </ChartFrame>
-  );
-}
-
-export interface TypeSlice {
-  /** A type label straight from the database. Data, so it is never translated. */
-  label: string;
-  typeCode: string;
-  netCents: number;
-}
-
-/**
- * Net per type, hanging off a zero line rather than growing from the left edge.
- *
- * A negative net is a credit, not a small cost, and a chart that clamps at zero or
- * takes an absolute value hides exactly the figure the user most needs to
- * question — Juni's −300,00 € variable costs being the live example.
- */
-export function TypeBreakdown({ slices }: { slices: TypeSlice[] }) {
-  const t = useT();
-  const maskAmount = useMaskAmount();
-  const rowHeight = 34;
-  // "Variable Kosten" is the widest label in the set and the month charts' 58-unit
-  // gutter cuts it in half. The viewBox is 720 units wide regardless of the
-  // rendered size, so this is measured in the same units as LEFT/RIGHT — and the
-  // gutter has to hold the label at the 22-unit type a phone renders it in.
-  const labelGutter = 150;
-  const height = Math.max(90, slices.length * rowHeight + 34);
-  // A horizontal chart needs the same nice, zero-containing domain, mapped along x.
-  const ticks = niceTicks(
-    Math.min(0, ...slices.map((s) => s.netCents)),
-    Math.max(0, ...slices.map((s) => s.netCents)),
-  );
-  const lo = ticks[0];
-  const hi = ticks[ticks.length - 1];
-  const span = hi - lo || 1;
-  const x = (v: number) => labelGutter + ((v - lo) / span) * (RIGHT - labelGutter);
-  const zeroX = x(0);
-
-  const data: ChartDatum[] = slices.map((s) => ({
-    label: <DataLabel>{s.label}</DataLabel>,
-    values: [s.netCents],
-  }));
-
-  return (
-    <ChartFrame
-      title={t('chart.byType')}
-      columns={[t('bookings.net')]}
-      // Stored expense-positive figures read as costs here: this chart ranks what
-      // each type cost, and a negative one is a type that brought money in.
-      valueBasis="cost"
-      data={data}
-      height={height}
-    >
-      <line
-        x1={zeroX}
-        x2={zeroX}
-        y1={4}
-        y2={slices.length * rowHeight + 4}
-        className="chart__baseline"
-      />
-      {slices.map((s, i) => {
-        const y = i * rowHeight + 8;
-        const left = Math.min(zeroX, x(s.netCents));
-        const width = Math.abs(x(s.netCents) - zeroX);
-        return (
-          <g key={s.typeCode}>
-            <rect
-              x={left}
-              y={y}
-              width={Math.max(1, width)}
-              height={rowHeight - 14}
-              className={`chart__bar chart__bar--type chart__bar--${s.typeCode}`}
-            />
-            <text
-              x={labelGutter - 8}
-              y={y + rowHeight / 2 - 3}
-              className="chart__tick chart__tick--label"
-              textAnchor="end"
-              {...DATA_TEXT}
-            >
-              {s.label}
-            </text>
-          </g>
-        );
-      })}
-      {ticks.map((tick) => (
-        <text
-          key={tick}
-          x={x(tick)}
-          y={slices.length * rowHeight + 20}
-          className="chart__tick"
-          textAnchor="middle"
-        >
-          {maskAmount(formatEuroCompact(tick))}
         </text>
       ))}
     </ChartFrame>

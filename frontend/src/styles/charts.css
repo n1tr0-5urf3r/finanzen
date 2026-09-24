@@ -154,3 +154,11 @@
    table's default `nowrap` on headers pushed the amount column off the side of a
    phone. Here they wrap instead; the amounts stay where they can be read. */
 .chart__data .data-table th[scope='row'] { white-space: normal; }
+/* A chart whose screen already lists every figure it draws keeps its table for a
+   screen reader and does not print it a second time on a phone. */
+@media (max-width: 559px) {
+  .chart__data.chart__data--sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+}

@@ -6,11 +6,29 @@ import { YearPicker } from "../../components/YearPicker";
 import { useT } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/messages/de";
 import { CompareTab } from "../compare/CompareTab";
+import { MonthsTab } from "../months/MonthsTab";
 import { CategoryTab } from "./CategoryTab";
 import { FlowPeriodPicker, FlowTab } from "./FlowTab";
 import { OverYearsTab } from "./OverYearsTab";
 
-type Tab = "kategorien" | "fluss" | "vergleich" | "jahre";
+type Tab = "kategorien" | "monate" | "fluss" | "vergleich" | "jahre";
+
+/**
+ * Five views, in two groups, because they answer two different kinds of
+ * question: what ONE year looked like, and how years compare. The split is drawn
+ * rather than labelled — two segmented groups side by side, which also wrap at
+ * the group boundary on a phone instead of mid-sentence.
+ */
+const ONE_YEAR: [Tab, MessageKey][] = [
+  ["kategorien", "analysis.tabCategories"],
+  ["monate", "analysis.tabMonths"],
+  ["fluss", "analysis.tabFlow"],
+];
+const ACROSS_YEARS: [Tab, MessageKey][] = [
+  ["vergleich", "analysis.tabCompare"],
+  ["jahre", "analysis.tabOverYears"],
+];
+const TABS: Tab[] = [...ONE_YEAR, ...ACROSS_YEARS].map(([value]) => value);
 
 /**
  * Everything that answers "where did the money go this year".
@@ -25,19 +43,21 @@ type Tab = "kategorien" | "fluss" | "vergleich" | "jahre";
  * The year lives in the URL and is shared by both tabs: switching from the
  * breakdown of 2024 to the comparison of 2024 should not send you back to today.
  */
+/** Each tab states its own convention; one subtitle for all would be wrong for most. */
+const SUBTITLE: Record<Tab, MessageKey> = {
+  kategorien: "analysis.intro",
+  monate: "months.intro",
+  fluss: "flow.intro",
+  vergleich: "compare.intro",
+  jahre: "overYears.intro",
+};
+
 export function AnalysisPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const year = Number(params.get("jahr")) || new Date().getFullYear();
   const view = params.get("ansicht");
-  const tab: Tab =
-    view === "vergleich"
-      ? "vergleich"
-      : view === "fluss"
-        ? "fluss"
-        : view === "jahre"
-          ? "jahre"
-          : "kategorien";
+  const tab: Tab = TABS.find((value) => value === view) ?? "kategorien";
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -58,38 +78,27 @@ export function AnalysisPage() {
         // Each tab states its own convention: the breakdown reads as a flow, the
         // comparison explains what it compares. One subtitle for both would be
         // wrong for one of them.
-        subtitle={
-          tab === "vergleich"
-            ? t("compare.intro")
-            : tab === "fluss"
-              ? t("flow.intro")
-              : tab === "jahre"
-                ? t("overYears.intro")
-                : t("analysis.intro")
-        }
+        subtitle={t(SUBTITLE[tab])}
       />
 
-      <div className="segmented tabs" role="tablist">
-        {(
-          [
-            ["kategorien", "analysis.tabCategories"],
-            ["fluss", "analysis.tabFlow"],
-            ["vergleich", "analysis.tabCompare"],
-            ["jahre", "analysis.tabOverYears"],
-          ] as [Tab, MessageKey][]
-        ).map(([value, labelKey]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-pressed={tab === value}
-            aria-selected={tab === value}
-            onClick={() =>
-              setParam("ansicht", value === "kategorien" ? null : value)
-            }
-          >
-            {t(labelKey)}
-          </button>
+      <div className="tabs tabs--split">
+        {[ONE_YEAR, ACROSS_YEARS].map((group) => (
+          <div key={group[0]![0]} className="segmented" role="tablist">
+            {group.map(([value, labelKey]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-pressed={tab === value}
+                aria-selected={tab === value}
+                onClick={() =>
+                  setParam("ansicht", value === "kategorien" ? null : value)
+                }
+              >
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
         ))}
       </div>
 
@@ -118,6 +127,7 @@ export function AnalysisPage() {
       {tab === "jahre" && <OverYearsTab />}
       {tab === "fluss" && <FlowTab year={year} />}
       {tab === "kategorien" && <CategoryTab year={year} />}
+      {tab === "monate" && <MonthsTab year={year} />}
     </>
   );
 }

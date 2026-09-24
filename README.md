@@ -80,8 +80,8 @@ always render de-DE.
 
 | | |
 |:--:|:--:|
-| <a href="docs/screenshots/dashboard.png"><img src="docs/screenshots/dashboard.png" alt="Dashboard"></a> | <a href="docs/screenshots/monate.png"><img src="docs/screenshots/monate.png" alt="Monthly overview"></a> |
-| **Dashboard** — savings paid in, beside income kept | **Monthly overview** — the line stops at the last month with data |
+| <a href="docs/screenshots/dashboard.png"><img src="docs/screenshots/dashboard.png" alt="Dashboard"></a> | <a href="docs/screenshots/monate.png"><img src="docs/screenshots/monate.png" alt="Months"></a> |
+| **Dashboard** — savings paid in, beside income kept | **Months** — what each month came to, and where it left the balance |
 | <a href="docs/screenshots/auswertung.png"><img src="docs/screenshots/auswertung.png" alt="Analysis"></a> | <a href="docs/screenshots/buchungen.png"><img src="docs/screenshots/buchungen.png" alt="Bookings"></a> |
 | **Analysis** — any category or comment across twelve months | **Bookings** — filter by year, text or category; edit in place |
 | <a href="docs/screenshots/geldfluss.png"><img src="docs/screenshots/geldfluss.png" alt="Money flow"></a> | <a href="docs/screenshots/haushalt-fluss.png"><img src="docs/screenshots/haushalt-fluss.png" alt="Household money flow"></a> |

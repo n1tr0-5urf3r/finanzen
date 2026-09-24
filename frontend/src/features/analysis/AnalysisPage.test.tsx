@@ -14,7 +14,7 @@ vi.mock('../../lib/api', async () => {
 });
 
 const { AnalysisPage } = await import('./AnalysisPage');
-const { CompareRedirect } = await import('../compare/CompareRedirect');
+const { AnalysisRedirect, CompareRedirect } = await import('../compare/CompareRedirect');
 
 function row(over: Partial<CategoryAnalysisRow>): CategoryAnalysisRow {
   return {
@@ -106,10 +106,32 @@ const COMPARISON = {
   previousYearHasData: true,
 };
 
+/** Enough of a year for the months tab to mount; its own suite tests the figures. */
+const MONTH = {
+  incomeCents: 0,
+  expenseCents: 0,
+  balanceCents: 0,
+  cumulativeCents: null,
+  savingsRate: null,
+  fixedCostsNetCents: 0,
+  variableCostsNetCents: 0,
+  savingsNetCents: 0,
+  otherNetCents: 0,
+  bookingCount: 0,
+  uncategorizedCount: 0,
+};
+const OVERVIEW = {
+  year: 2026,
+  months: Array.from({ length: 12 }, (_, i) => ({ ...MONTH, month: i + 1, monthName: `M${i + 1}` })),
+  total: { ...MONTH, month: 0, monthName: '', bookingCount: 1, incomeCents: 100, balanceCents: 100 },
+};
+
 beforeEach(() => {
   api.mockReset();
   api.mockImplementation((path: string) => {
     const p = String(path);
+    if (p.startsWith('/overview/months')) return Promise.resolve(OVERVIEW as never);
+    if (p.startsWith('/category-types')) return Promise.resolve([] as never);
     if (p.startsWith('/analysis/compare')) return Promise.resolve(COMPARISON as never);
     if (p.startsWith('/analysis/trailing')) return Promise.resolve({ months: [] } as never);
     return Promise.resolve(ANALYSIS as never);
@@ -250,6 +272,45 @@ describe('the category analysis', () => {
     );
   });
 
+  /**
+   * The months were the one report in the navigation that was not part of the
+   * analysis. They are a tab of it now, sharing its year — so a month-by-month
+   * look at 2024 is a click from the category breakdown of 2024, not a trip
+   * through the navigation and a second year picker.
+   */
+  it('shows the months as a tab of the same screen, with the same year', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Miete');
+
+    await user.click(screen.getByRole('tab', { name: 'Monate' }));
+
+    await waitFor(() =>
+      expect(api.mock.calls.map(([path]) => String(path))).toContain(
+        '/overview/months?year=2026',
+      ),
+    );
+    expect(screen.getByRole('tab', { name: 'Monate' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  /** Two kinds of question, two groups — the split is drawn, not labelled. */
+  it('groups the one-year views apart from the ones that compare years', async () => {
+    renderPage();
+    await screen.findAllByText('Miete');
+
+    const groups = screen.getAllByRole('tablist');
+    expect(groups).toHaveLength(2);
+    expect(within(groups[0]!).getAllByRole('tab').map((b) => b.textContent)).toEqual([
+      'Nach Kategorie',
+      'Monate',
+      'Geldfluss',
+    ]);
+    expect(within(groups[1]!).getAllByRole('tab').map((b) => b.textContent)).toEqual([
+      'Jahresvergleich',
+      'Über die Jahre',
+    ]);
+  });
+
   it('opens on the category breakdown when no tab is named', async () => {
     renderPage();
     await screen.findAllByText('Miete');
@@ -276,6 +337,20 @@ describe('the address the comparison used to live at', () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId('landed').textContent).toBe('?jahr=2024&ansicht=vergleich');
+  });
+});
+
+describe('the address the months used to live at', () => {
+  it('lands on the months tab of the analysis, keeping the year', () => {
+    render(
+      <MemoryRouter initialEntries={['/monate?jahr=2024']}>
+        <Routes>
+          <Route path="/monate" element={<AnalysisRedirect view="monate" />} />
+          <Route path="/auswertung" element={<Landed />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('landed').textContent).toBe('?jahr=2024&ansicht=monate');
   });
 });
 

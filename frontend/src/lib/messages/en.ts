@@ -163,6 +163,7 @@ export const en: Messages = {
   'overYears.subjectTitle': 'One subject, year by year',
   'overYears.subjectHint': 'A category or a type from year to year — rent, say, to see how far it has climbed.',
   'overYears.partialYears': 'Part years: {years}. Their totals cover fewer than twelve months and do not compare directly with full ones.',
+  'analysis.tabMonths': 'Months',
   'analysis.tabFlow': 'Money flow',
   'flow.intro': 'Where the money came from and where it went. The inflow side is already netted: the rent share, refunds and travel reimbursements sit in their own category rather than a second time on the left.',
   'flow.period': 'Period',

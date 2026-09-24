@@ -324,3 +324,8 @@
   display: flex; flex-wrap: wrap; gap: .5rem .9rem;
   align-items: center; justify-content: space-between; margin-top: .6rem;
 }
+
+/* Two groups of tabs side by side: what one year looked like, and how years
+   compare. The gap between them is the only label the split needs. */
+.tabs--split { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; }
+.tabs--split > .segmented { flex-wrap: wrap; }

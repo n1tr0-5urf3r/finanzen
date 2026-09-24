@@ -1,14 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 
-import { CumulativeLine, TypeBreakdown, type BandPoint } from '../../charts/MonthlyCharts';
+import { CumulativeLine, type BandPoint } from '../../charts/MonthlyCharts';
 import { NetBars, type NetBar } from '../../charts/NetBars';
 import { DataLabel } from '../../components/DataLabel';
 import { FlowMoney, Money, ScopeNote } from '../../components/Money';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
+import { EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
-import { YearPicker } from '../../components/YearPicker';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
 import type { CategoryTypeSummary, MonthlyOverview, MonthlyRow } from '../../lib/types';
@@ -28,10 +26,21 @@ const TYPE_COLUMNS: { code: string; pick: (m: MonthlyRow) => number }[] = [
   { code: 'sonstiges', pick: (m) => m.otherNetCents },
 ];
 
-export function MonthsPage() {
+/**
+ * One year, month by month: what each month came to, how the balance ran, and
+ * the months themselves in a table.
+ *
+ * It was a screen of its own, which made it the one report in the navigation
+ * that was not part of the analysis — and it answered a question that sits right
+ * beside "which categories" and "where did it flow": how did the year GO. So it
+ * is a tab of the analysis now, sharing its year and its filter bar.
+ *
+ * It lost a chart on the way in, deliberately. The per-type bars duplicated the
+ * money flow's type view and the table's per-type columns, and a tab that
+ * repeats its neighbours is how a screen becomes too much to read.
+ */
+export function MonthsTab({ year }: { year: number }) {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const year = Number(params.get('jahr')) || new Date().getFullYear();
 
   const overview = useQuery({
     queryKey: qk.derived.months(year),
@@ -47,27 +56,6 @@ export function MonthsPage() {
 
   return (
     <>
-      <PageHeader title={t('months.title', { year })} subtitle={t('months.intro')} />
-
-      <div
-        className="panel panel--pad filter-bar"
-      >
-        <div style={{ minWidth: '8rem' }}>
-          <YearPicker id="months-year" value={year} onChange={(next) =>
-            setParams(
-              (prev) => {
-                const p = new URLSearchParams(prev);
-                p.set('jahr', String(next));
-                return p;
-              },
-              { replace: true },
-            )} />
-        </div>
-        <p className="kpi__scope" style={{ margin: 0, maxWidth: '38rem' }}>
-          {t('months.perTypeNote')}
-        </p>
-      </div>
-
       {(overview.isLoading || types.isLoading) && <LoadingState />}
       {overview.isError && (
         <ErrorState error={overview.error} retry={() => overview.refetch()} />
@@ -131,25 +119,24 @@ function MonthsBody({
 
   return (
     <>
-      <div className="chart-grid chart-grid--pair" style={{ marginBottom: '1rem' }}>
-          <div className="panel panel--pad">
-            <NetBars title={t('months.balanceChart')} note={t('months.balanceChartNote')} bars={bars} />
-            <ScopeNote transfersIncluded={false} />
-          </div>
-          <div className="panel panel--pad">
-            <TypeBreakdown
-              slices={TYPE_COLUMNS.map((c) => ({
-                label: label(c.code),
-                typeCode: c.code,
-                netCents: c.pick(data.total),
-              }))}
-            />
-            <ScopeNote transfersIncluded={false} />
-          </div>
-      </div>
-      <div className="panel panel--pad" style={{ marginBottom: '1rem' }}>
-        <CumulativeLine points={points} />
-        <ScopeNote transfersIncluded />
+      {/* Two charts of equal standing, side by side: what each month came to,
+          and where that left the balance. */}
+      <div className="chart-grid chart-grid--even" style={{ marginBottom: '1rem' }}>
+        <div className="panel panel--pad">
+          {/* The month cards below carry every figure both charts show, so on a
+              phone the charts do not print their own tables above them too. */}
+          <NetBars
+            title={t('months.balanceChart')}
+            note={t('months.balanceChartNote')}
+            bars={bars}
+            tableOnPhone={false}
+          />
+          <ScopeNote transfersIncluded={false} />
+        </div>
+        <div className="panel panel--pad">
+          <CumulativeLine points={points} tableOnPhone={false} />
+          <ScopeNote transfersIncluded />
+        </div>
       </div>
 
       <div className="panel table-wrap screen-table">
@@ -255,6 +242,7 @@ function MonthsBody({
           </tfoot>
         </table>
       </div>
+      <p className="footnote">{t('months.perTypeNote')}</p>
 
       {/* Eleven columns cannot work one-handed, so the phone gets cards. */}
       <div className="screen-cards">

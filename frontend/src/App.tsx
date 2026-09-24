@@ -4,13 +4,12 @@ import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage, SetupPage } from './features/auth/AuthPages';
 import { AnalysisPage } from './features/analysis/AnalysisPage';
-import { CompareRedirect } from './features/compare/CompareRedirect';
+import { AnalysisRedirect, CompareRedirect } from './features/compare/CompareRedirect';
 import { BookingsPage } from './features/bookings/BookingsPage';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ImportPage } from './features/import/ImportPage';
 import { KitchenOwlPage } from './features/kitchenowl/KitchenOwlPage';
-import { MonthsPage } from './features/months/MonthsPage';
 import { QuickAddPage } from './features/quickadd/QuickAddPage';
 import { RecurringPage } from './features/recurring/RecurringPage';
 import { FundsPage } from './features/funds/FundsPage';
@@ -36,7 +35,8 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/buchungen" element={<BookingsPage />} />
           <Route path="/suche" element={<SearchPage />} />
-          <Route path="/monate" element={<MonthsPage />} />
+          {/* A tab of the analysis now; the old address keeps working. */}
+          <Route path="/monate" element={<AnalysisRedirect view="monate" />} />
           <Route path="/auswertung" element={<AnalysisPage />} />
           {/* Folded into /auswertung; the old address still works. */}
           <Route path="/vergleich" element={<CompareRedirect />} />

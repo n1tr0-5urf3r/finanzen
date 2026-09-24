@@ -180,6 +180,7 @@ export const de = {
   'overYears.subjectTitle': 'Verlauf über die Jahre',
   'overYears.subjectHint': 'Eine Kategorie oder ein Typ von Jahr zu Jahr — etwa Miete, um zu sehen, wie sie gestiegen ist.',
   'overYears.partialYears': 'Angebrochene Jahre: {years}. Ihre Summen umfassen weniger als zwölf Monate und sind mit vollen Jahren nicht direkt vergleichbar.',
+  'analysis.tabMonths': 'Monate',
   'analysis.tabFlow': 'Geldfluss',
   'flow.intro': 'Woher das Geld kam und wohin es ging. Die Einnahmenseite ist bereits verrechnet: Mietanteil, Erstattungen und Reisekosten-Rückzahlungen stehen in ihrer eigenen Kategorie und nicht noch einmal links.',
   'flow.period': 'Zeitraum',

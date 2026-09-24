@@ -27,6 +27,7 @@ export function ChartFrame({
   data,
   valueBasis = 'cost',
   height = 240,
+  tableOnPhone = true,
   children,
 }: {
   title: string;
@@ -50,6 +51,14 @@ export function ChartFrame({
    */
   valueBasis?: 'cost' | 'net' | 'flow' | 'gross';
   height?: number;
+  /**
+   * The data table becomes visible on a phone, because a chart alone is not a
+   * number you can read there. Unless the screen already lists every figure the
+   * chart shows — the months tab's cards do — in which case printing them twice
+   * is just a longer page. The table stays in the markup for a screen reader
+   * either way.
+   */
+  tableOnPhone?: boolean;
   children: ReactNode;
 }) {
   const t = useT();
@@ -73,7 +82,7 @@ export function ChartFrame({
           {children}
         </svg>
       </div>
-      <div className="chart__data">
+      <div className={tableOnPhone ? 'chart__data' : 'chart__data chart__data--sr'}>
         <table className="data-table">
           <caption>{t('chart.dataTable')}</caption>
           <thead>

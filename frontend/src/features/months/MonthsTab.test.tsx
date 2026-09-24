@@ -13,7 +13,7 @@ vi.mock('../../lib/api', async () => {
   return { ...actual, api: (...args: unknown[]) => api(...args) };
 });
 
-const { MonthsPage } = await import('./MonthsPage');
+const { MonthsTab } = await import('./MonthsTab');
 
 function month(m: number, over: Partial<MonthlyRow> = {}): MonthlyRow {
   return {
@@ -82,8 +82,8 @@ function renderPage(locale: 'de' | 'en' = 'de') {
   return render(
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale={locale}>
-        <MemoryRouter initialEntries={['/monate?jahr=2026']}>
-          <MonthsPage />
+        <MemoryRouter initialEntries={['/auswertung?ansicht=monate&jahr=2026']}>
+          <MonthsTab year={2026} />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,
