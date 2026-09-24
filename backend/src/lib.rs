@@ -32,7 +32,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{OriginalUri, Request, State},
+    extract::{DefaultBodyLimit, OriginalUri, Request, State},
     http::{Method, header},
     middleware::{self, Next},
     response::Response,
@@ -264,6 +264,16 @@ pub fn router(state: AppState) -> Router {
         // look like a rendering glitch instead of a 404.
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(state.clone(), csrf))
+        // axum caps every body at 2 MB unless told otherwise, and it applies to
+        // Multipart and Json alike — so `APP_MAX_UPLOAD_BYTES` (25 MB) was never
+        // reached: a phone photo of a receipt, a larger workbook or a full
+        // restore failed mid-upload with "could not parse multipart". The
+        // handlers still check the configured size themselves and say so in
+        // words; this only stops the framework from cutting them off first. The
+        // slack is for the multipart framing around the file.
+        .layer(DefaultBodyLimit::max(
+            state.config.max_upload_bytes.saturating_add(1024 * 1024),
+        ))
         .with_state(state.clone());
 
     // The SPA is served from the same origin as the API, so there is no CORS and no

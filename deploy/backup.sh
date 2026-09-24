@@ -24,10 +24,17 @@ DB="${POSTGRES_DB:-finanzen}"
 USER="${POSTGRES_USER:-postgres}"
 
 echo "→ database"
-# --clean --if-exists so the dump can be restored over an existing database;
-# --no-owner so it restores under whatever role does the restoring.
+# --clean --if-exists so the dump can be restored over an existing database.
+#
+# Ownership is KEPT, on purpose. Every table belongs to the application role —
+# it runs the migrations — and the app has no grants beyond that ownership. A
+# dump taken with --no-owner and restored as the superuser therefore came back
+# owned by postgres, and the app died on start with "permission denied for table
+# _sqlx_migrations": a backup that fails exactly when it is needed. Restoring
+# needs the role to exist, which deploy/init-app-role.sh guarantees on any fresh
+# data directory.
 docker compose exec -T postgres pg_dump -U "$USER" -d "$DB" \
-  --clean --if-exists --no-owner \
+  --clean --if-exists \
   | gzip > "$TARGET/finanzen_${STAMP}.sql.gz"
 
 echo "→ receipts"

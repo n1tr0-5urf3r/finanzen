@@ -250,7 +250,10 @@ impl Authenticator for LocalAuth {
 const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHR2YWx1ZQ$\
                           Kq0kY5Z0Z3l5bVZ0aGlzaXNub3RhcmVhbGhhc2g";
 
-fn validate_password(password: &str) -> Result<()> {
+/// Public so that account creation can refuse a bad password BEFORE it writes the
+/// account: the credential is stored in a second step, and a check that only runs
+/// there leaves a committed user with no password behind it.
+pub(crate) fn validate_password(password: &str) -> Result<()> {
     if password.chars().count() < MIN_PASSWORD_LEN {
         return Err(AppError::Validation(format!(
             "Das Passwort muss mindestens {MIN_PASSWORD_LEN} Zeichen lang sein"

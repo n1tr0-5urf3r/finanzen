@@ -149,6 +149,12 @@ deploy/backup.sh /srv/backups     # finanzen_<date>.sql.gz and receipts_<date>.t
 The script prints the restore command when it finishes. To copy the directory as
 it is, stop the stack first with `docker compose down`.
 
+`tools/backup-restore-check.sh` proves a backup restores into a database the app
+can actually use, on throwaway containers. Dumps taken **before 25.09.2026** were
+made with `--no-owner` and restore with every table owned by the superuser, so the
+app refuses to start; run `deploy/repair-restore-ownership.sql` once after
+restoring one of those.
+
 ## License
 
 Copyright © 2026 Fabian Ihle.

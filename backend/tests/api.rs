@@ -3287,3 +3287,75 @@ async fn a_bank_statement_is_reviewed_line_by_line_before_anything_is_booked() {
         "the accepted line should have written its rule"
     );
 }
+
+// ------------------------------------------------------------- review fixes
+
+/// A password refused at setup used to be refused AFTER the account was written:
+/// the first admin existed with no credential, setup would not run a second time,
+/// and the instance was locked until someone edited the database by hand.
+#[tokio::test]
+async fn a_short_password_at_setup_leaves_nothing_behind() {
+    let mut app = app!();
+    let (status, _) = app
+        .send(
+            "POST",
+            "/auth/setup",
+            Some(json!({"username": "fabi", "displayName": "Fabian", "password": "kurz"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Nothing was written, so setup is still available…
+    let (_, setup) = app.send("GET", "/auth/setup-status", None).await;
+    assert_eq!(setup["setupRequired"], true);
+    // …and a second attempt with a proper password simply works.
+    app.setup_admin().await;
+}
+
+/// The same trap on the admin's "create user": every retry of a refused password
+/// then failed with "name already taken".
+#[tokio::test]
+async fn a_short_password_for_a_new_user_can_be_retried() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    let (status, _) = app
+        .send(
+            "POST",
+            "/admin/users",
+            Some(json!({"username": "zweite", "displayName": "Zweite", "password": "kurz"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, body) = app
+        .send(
+            "POST",
+            "/admin/users",
+            Some(json!({"username": "zweite", "displayName": "Zweite",
+                        "password": "ein-langes-passwort"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+}
+
+/// axum caps a body at 2 MB by default, so the configured 25 MB upload limit was
+/// never reached: a 3 MB receipt photo died mid-upload as "could not parse
+/// multipart". A file over 2 MB must at least reach the handler — which then
+/// refuses this one for what it IS, not for its size.
+#[tokio::test]
+async fn an_upload_over_two_megabytes_reaches_the_handler() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    let bytes = vec![b'x'; 3 * 1024 * 1024];
+    let (status, body) = app
+        .upload_bytes("/imports", "gross.csv", "text/csv", &bytes)
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let message = body["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("Kopfzeile"),
+        "a 3 MB file should be read and refused as a statement, got: {message}"
+    );
+}

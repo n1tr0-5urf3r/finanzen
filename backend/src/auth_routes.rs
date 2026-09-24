@@ -70,6 +70,11 @@ pub async fn setup(
     if body.username.trim().is_empty() {
         return Err(AppError::Validation("Benutzername fehlt".into()));
     }
+    // Before anything is written. The account row is committed before the
+    // credential is stored, so a password refused only at that second step left a
+    // first admin with no password at all — and setup refuses to run twice. The
+    // instance was locked until someone edited the database by hand.
+    crate::auth::validate_password(&body.password)?;
     let pool = state.db.system().inner();
     let mut tx = pool.begin().await?;
     // Serialise concurrent first-run attempts. `SELECT count(*) ... FOR UPDATE` is
@@ -267,6 +272,9 @@ pub async fn create_user(
     if body.username.trim().is_empty() {
         return Err(AppError::Validation("Benutzername fehlt".into()));
     }
+    // Same reason as in `setup`: refused after the row is written, a short password
+    // left a user with no credential, and every retry then failed on the name.
+    crate::auth::validate_password(&body.password)?;
     let pool = state.db.system().inner();
     let id = Uuid::new_v4();
     let mut tx = pool.begin().await?;
