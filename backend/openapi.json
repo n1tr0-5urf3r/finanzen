@@ -9298,6 +9298,10 @@
             ],
             "format": "uuid"
           },
+          "clearCategory": {
+            "type": "boolean",
+            "description": "\"No category\", said explicitly. `categoryId: null` cannot say it, because\nan omitted field is null too and must leave the category alone."
+          },
           "comment": {
             "type": [
               "string",

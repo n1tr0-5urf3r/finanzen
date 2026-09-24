@@ -213,7 +213,13 @@ pub async fn upload(
         .execute(ctx.tenant.conn())
         .await?;
 
-        stage_statement(&mut ctx, batch_id, &statement).await?;
+        stage_statement(
+            &mut ctx,
+            batch_id,
+            &statement,
+            state.config.import_fuzzy_min_confidence,
+        )
+        .await?;
         let preview = load_preview(&mut ctx, batch_id).await?;
         ctx.tenant.commit().await?;
         return Ok((StatusCode::CREATED, Json(preview)));
@@ -732,6 +738,7 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
                 'review' \
            FROM import_rows ir \
           WHERE ir.batch_id = $1 AND ir.create_rule AND ir.decision = 'accepted' \
+            AND NOT ir.no_category \
             AND COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
             AND btrim(ir.comment) <> '' \
           ORDER BY lower(btrim(ir.comment)), ir.source_ref \
@@ -745,7 +752,16 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
     // is only booked once somebody has accepted it: a row nobody looked at is not
     // a booking, which is the whole point of reviewing a statement by hand. A
     // workbook row has no date and no decision to make, so it books unless it was
-    // rejected — the two paths differ in exactly that, and in nothing else.
+    // rejected.
+    //
+    // Which category a row is booked under, `pick.chosen`, differs between the two
+    // in one way that matters. A statement line was looked at with its suggestion
+    // on screen and accepted, so an accepted guess IS the user's choice. A
+    // workbook row's suggestion is only ever confirmed through the review queue,
+    // so only an explicit decision counts there — stated here rather than left to
+    // the fact that workbook rows happen not to carry a suggestion today. An exact rule match on either is left to the
+    // rule itself, so the booking stays retroactive with its rule. And a statement
+    // line marked "no category" is booked with none, rule or no rule.
     let inserted = sqlx::query(
         "INSERT INTO bookings (id, user_id, period_year, period_month, booked_on, kind, \
                                amount_cents, comment, counterparty, purpose, tax_relevant, \
@@ -754,17 +770,21 @@ pub async fn commit(mut ctx: Ctx, Path(id): Path<Uuid>) -> Result<Json<CommitRes
          SELECT gen_random_uuid(), ir.user_id, ir.period_year, ir.period_month, ir.booked_on, \
                 ir.kind, ir.amount_cents, ir.comment, ir.counterparty, ir.purpose, \
                 ir.tax_relevant, \
-                COALESCE(ir.decided_category_id, ir.suggested_category_id, r.category_id), \
-                CASE WHEN COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
-                       THEN 'manual' \
-                     WHEN r.category_id IS NULL THEN 'unresolved' ELSE 'rule' END, \
-                CASE WHEN COALESCE(ir.decided_category_id, ir.suggested_category_id) IS NOT NULL \
-                       OR r.category_id IS NULL \
-                     THEN NULL ELSE r.id END, \
+                COALESCE(pick.chosen, CASE WHEN ir.no_category THEN NULL ELSE r.category_id END), \
+                CASE WHEN pick.chosen IS NOT NULL THEN 'manual' \
+                     WHEN NOT ir.no_category AND r.category_id IS NOT NULL THEN 'rule' \
+                     ELSE 'unresolved' END, \
+                CASE WHEN pick.chosen IS NULL AND NOT ir.no_category THEN r.id END, \
                 CASE WHEN ir.booked_on IS NULL THEN 'legacy_month_only' ELSE 'bank_csv' END, \
                 ir.id, ir.fingerprint \
            FROM import_rows ir \
            LEFT JOIN category_rules r ON r.match_key = lower(btrim(ir.comment)) \
+           CROSS JOIN LATERAL (SELECT CASE \
+                  WHEN ir.booked_on IS NULL THEN ir.decided_category_id \
+                  WHEN ir.no_category THEN NULL \
+                  WHEN ir.decided_category_id IS NOT NULL THEN ir.decided_category_id \
+                  WHEN ir.suggestion_kind = 'exact' THEN NULL \
+                  ELSE ir.suggested_category_id END AS chosen) pick \
           WHERE ir.batch_id = $1 \
             AND CASE WHEN ir.booked_on IS NULL THEN ir.decision <> 'rejected' \
                      ELSE ir.decision = 'accepted' END \
@@ -1046,6 +1066,10 @@ pub struct StatementRowInput {
     pub create_rule: Option<bool>,
     /// Remember what this payee is called, for every future statement.
     pub remember_payee: Option<bool>,
+    /// "No category", said explicitly. `categoryId: null` cannot say it, because
+    /// an omitted field is null too and must leave the category alone.
+    #[serde(default)]
+    pub clear_category: bool,
 }
 
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
@@ -1060,12 +1084,57 @@ pub struct StatementRowQuery {
 /// Stages a bank statement: one row per line, each with a suggested comment, a
 /// suggested category and — the point of the exercise — a flag when the ledger
 /// already seems to hold it.
+/// The category a statement line suggests, and how sure that suggestion is.
+///
+/// Asked once when a line is staged and again whenever its comment is renamed, so
+/// both give the same answer for the same words. It only ever produces a
+/// SUGGESTION: what the user picks is stored apart from it and always wins.
+fn suggest_for_line(
+    rules: &[KnownRule],
+    fuzzy_min: f64,
+    comment: &str,
+    counterparty: &str,
+    purpose: &str,
+) -> (Option<Uuid>, Option<&'static str>, Option<f32>) {
+    // An exact rule on the comment first — `exact` is the schema's word for it.
+    let key = comment.trim().to_lowercase();
+    if let Some(rule) = rules.iter().find(|r| r.match_key == key) {
+        return (Some(rule.category_id), Some("exact"), Some(1.0));
+    }
+    // Then the rule table against the payee and the bank's own purpose text as
+    // well: `SUPERMARKT` hides inside forty characters of card-terminal noise, and
+    // the containment tier is exactly what finds it there.
+    let haystack = format!("{comment} {counterparty} {purpose}");
+    let (hits, _weak, ambiguous) = suggest::suggest(&haystack, rules, fuzzy_min);
+    match hits.first() {
+        // Two rules claiming a line with equal strength is a question for the
+        // reviewer, not a default to be nudged into place.
+        Some(hit) if !ambiguous => (
+            Some(hit.category_id),
+            Some(match hit.tier {
+                "token" => "token",
+                "prefix" => "prefix",
+                _ => "fuzzy",
+            }),
+            Some(hit.confidence as f32),
+        ),
+        _ => (None, None, None),
+    }
+}
+
 async fn stage_statement(
     ctx: &mut Ctx,
     batch_id: Uuid,
     statement: &crate::bank::Statement,
+    fuzzy_min: f64,
 ) -> Result<()> {
     let rules = known_rules(ctx.tenant.conn()).await?;
+    // Bookings this statement has already matched a line to. Two identical
+    // charges must not both point at one existing booking: setting "possible
+    // duplicates" aside would then reject the genuine second one as well.
+    let mut claimed: Vec<Uuid> = Vec::new();
+    // How often each line identity has been seen in this file; see below.
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for row in &statement.rows {
         // What this payee is called in the user's own words, if they have ever
@@ -1082,45 +1151,16 @@ async fn stage_statement(
             Some((remembered, _)) => remembered.clone(),
             None => crate::bank::suggest_comment(row),
         };
-        // Three chances at a category, in descending confidence: an exact rule on
-        // the suggested comment, then the same rule table against the payee and
-        // the bank's own purpose text, which is where `SUPERMARKT` hides inside
-        // forty characters of card-terminal noise.
-        let key = comment.trim().to_lowercase();
-        let exact = rules.iter().find(|r| r.match_key == key);
-        // `exact` is the schema's word for "a rule matched outright"; the fuzzier
-        // tiers keep the suggester's own names. The API translates both into the
-        // two words the review screen needs — a rule, or a guess.
-        let (category_id, source, score) = match exact {
-            Some(rule) => (Some(rule.category_id), Some("exact"), Some(1.0_f32)),
-            None => {
-                // The payee and the bank's own purpose text join the haystack:
-                // `SUPERMARKT` hides inside forty characters of card-terminal noise,
-                // and the containment tier is exactly what finds it there.
-                let haystack = format!("{} {} {}", comment, row.counterparty, row.purpose);
-                let (hits, _weak, ambiguous) = suggest::suggest(&haystack, &rules, 0.92);
-                match hits.first() {
-                    // Two rules claiming a line with equal strength is a question
-                    // for the reviewer, not a default to be nudged into place.
-                    Some(hit) if !ambiguous => (
-                        Some(hit.category_id),
-                        Some(match hit.tier {
-                            "token" => "token",
-                            "prefix" => "prefix",
-                            _ => "fuzzy",
-                        }),
-                        Some(hit.confidence as f32),
-                    ),
-                    // Nothing matched. The category this payee carried the last
-                    // time it was renamed beats nothing, and is marked as the
-                    // guess it is.
-                    _ => match remembered.as_ref().and_then(|(_, c)| *c) {
-                        Some(category_id) => (Some(category_id), Some("history"), Some(0.9)),
-                        None => (None, None, None),
-                    },
-                }
-            }
-        };
+        let (category_id, source, score) =
+            match suggest_for_line(&rules, fuzzy_min, &comment, &row.counterparty, &row.purpose) {
+                // Nothing matched. The category this payee carried the last time it
+                // was renamed beats nothing, and is marked as the guess it is.
+                (None, _, _) => match remembered.as_ref().and_then(|(_, c)| *c) {
+                    Some(category_id) => (Some(category_id), Some("history"), Some(0.9)),
+                    None => (None, None, None),
+                },
+                found => found,
+            };
 
         // Does the ledger already hold this? Same direction, same amount, and a
         // date within two days: a card payment is booked by the shop on one day
@@ -1137,29 +1177,46 @@ async fn stage_statement(
                      OR (booked_on IS NULL \
                          AND period_year = EXTRACT(YEAR FROM $3::date)::smallint \
                          AND period_month = EXTRACT(MONTH FROM $3::date)::smallint)) \
+                AND NOT (id = ANY($4)) \
               ORDER BY abs(COALESCE(booked_on, $3::date) - $3::date), created_at \
               LIMIT 1",
         )
         .bind(row.kind)
         .bind(row.amount_cents)
         .bind(row.booked_on)
+        .bind(&claimed)
         .fetch_optional(ctx.tenant.conn())
         .await?;
+        if let Some(id) = duplicate {
+            claimed.push(id);
+        }
 
-        // The statement line's own identity: the account states a running balance
-        // after every line, which distinguishes two identical charges on one day.
+        // The statement line's own identity. The running balance the bank states
+        // after every line tells two identical same-day charges apart — but only
+        // when there IS one, and a line without it would share its fingerprint
+        // with its twin and be dropped at commit as a duplicate of itself. So the
+        // n-th repeat within the file is numbered, the way the workbook path does
+        // it. The first occurrence keeps the plain form, so lines already booked
+        // from an earlier upload still recognise themselves.
+        let identity = format!(
+            "csv|{}|{}|{}|{}|{}",
+            row.booked_on,
+            row.kind,
+            row.amount_cents,
+            row.counterparty.trim().to_lowercase(),
+            row.balance_cents.unwrap_or_default()
+        );
+        let occurrence = seen.entry(identity.clone()).or_insert(0);
         let fingerprint = {
             let mut hasher = Sha256::new();
-            hasher.update(format!(
-                "csv|{}|{}|{}|{}|{}",
-                row.booked_on,
-                row.kind,
-                row.amount_cents,
-                row.counterparty.trim().to_lowercase(),
-                row.balance_cents.unwrap_or_default()
-            ));
+            if *occurrence == 0 {
+                hasher.update(&identity);
+            } else {
+                hasher.update(format!("{identity}|{occurrence}"));
+            }
             hex::encode(hasher.finalize())
         };
+        *occurrence += 1;
 
         sqlx::query(
             "INSERT INTO import_rows (id, user_id, batch_id, source_ref, raw, period_year, \
@@ -1215,6 +1272,52 @@ async fn stage_statement(
     Ok(())
 }
 
+/// What a staged statement line shows, defined once for the list and for the
+/// row returned after an edit.
+///
+/// The category a line carries is the user's explicit choice if there is one,
+/// then the suggestion — unless the user said "no category", which is a choice
+/// too and beats both. `categorySource` says which of those it is, because a rule
+/// match, a guess and a person's own pick must not look alike on the screen.
+const STATEMENT_ROW_SELECT: &str = "\
+    SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
+           ir.counterparty, ir.purpose, ir.decision, ir.create_rule, ir.remember_payee, \
+           CASE WHEN ir.no_category THEN NULL \
+                WHEN ir.decided_category_id IS NOT NULL THEN 'manual' \
+                WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
+                WHEN ir.suggestion_kind IS NULL THEN NULL ELSE 'suggestion' END \
+             AS category_source, \
+           ir.suggestion_score, ir.duplicate_booking_id, \
+           c.id AS category_id, c.name AS category_name, \
+           b.comment AS dup_comment, b.booked_on AS dup_booked_on \
+      FROM import_rows ir \
+      LEFT JOIN categories c ON c.id = CASE WHEN ir.no_category THEN NULL \
+                              ELSE COALESCE(ir.decided_category_id, ir.suggested_category_id) END \
+      LEFT JOIN bookings b ON b.id = ir.duplicate_booking_id";
+
+fn row_to_statement_view(r: &sqlx::postgres::PgRow) -> StatementRowView {
+    StatementRowView {
+        id: r.get("id"),
+        source_ref: r.get("source_ref"),
+        booked_on: r.get("booked_on"),
+        kind: r.get("kind"),
+        amount_cents: r.get("amount_cents"),
+        counterparty: r.get("counterparty"),
+        purpose: r.get("purpose"),
+        comment: r.get::<Option<String>, _>("comment").unwrap_or_default(),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        category_source: r.get("category_source"),
+        suggestion_score: r.get("suggestion_score"),
+        decision: r.get("decision"),
+        create_rule: r.get("create_rule"),
+        remember_payee: r.get("remember_payee"),
+        duplicate_booking_id: r.get("duplicate_booking_id"),
+        duplicate_comment: r.get("dup_comment"),
+        duplicate_booked_on: r.get("dup_booked_on"),
+    }
+}
+
 /// The staged lines of a statement import, for the review screen.
 #[utoipa::path(
     get,
@@ -1244,26 +1347,15 @@ pub async fn statement_rows(
     .fetch_one(ctx.tenant.conn())
     .await?;
 
-    let rows = sqlx::query(
-        "SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
-                ir.counterparty, ir.purpose, ir.decision, ir.create_rule, ir.remember_payee, \
-                CASE WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
-                     WHEN ir.suggestion_kind IS NULL THEN NULL ELSE 'suggestion' END \
-                  AS suggestion_kind, \
-                ir.suggestion_score, ir.duplicate_booking_id, \
-                COALESCE(ir.decided_category_id, ir.suggested_category_id) AS category_id, \
-                c.name AS category_name, b.comment AS dup_comment, b.booked_on AS dup_booked_on \
-           FROM import_rows ir \
-           LEFT JOIN categories c \
-                  ON c.id = COALESCE(ir.decided_category_id, ir.suggested_category_id) \
-           LEFT JOIN bookings b ON b.id = ir.duplicate_booking_id \
+    let rows = sqlx::query(&format!(
+        "{STATEMENT_ROW_SELECT} \
           WHERE ir.batch_id = $1 \
             AND ($2 = '' \
                  OR ($2 = 'duplicates' AND ir.duplicate_booking_id IS NOT NULL) \
                  OR ir.decision = $2) \
           ORDER BY ir.booked_on DESC, ir.source_ref \
-          LIMIT $3 OFFSET $4",
-    )
+          LIMIT $3 OFFSET $4"
+    ))
     .bind(id)
     .bind(&filter)
     .bind(page_size)
@@ -1271,29 +1363,7 @@ pub async fn statement_rows(
     .fetch_all(ctx.tenant.conn())
     .await?;
 
-    let items = rows
-        .iter()
-        .map(|r| StatementRowView {
-            id: r.get("id"),
-            source_ref: r.get("source_ref"),
-            booked_on: r.get("booked_on"),
-            kind: r.get("kind"),
-            amount_cents: r.get("amount_cents"),
-            counterparty: r.get("counterparty"),
-            purpose: r.get("purpose"),
-            comment: r.get::<Option<String>, _>("comment").unwrap_or_default(),
-            category_id: r.get("category_id"),
-            category_name: r.get("category_name"),
-            category_source: r.get("suggestion_kind"),
-            suggestion_score: r.get("suggestion_score"),
-            decision: r.get("decision"),
-            create_rule: r.get("create_rule"),
-            remember_payee: r.get("remember_payee"),
-            duplicate_booking_id: r.get("duplicate_booking_id"),
-            duplicate_comment: r.get("dup_comment"),
-            duplicate_booked_on: r.get("dup_booked_on"),
-        })
-        .collect();
+    let items = rows.iter().map(row_to_statement_view).collect();
 
     let out = StatementRowPage {
         items,
@@ -1318,6 +1388,7 @@ pub async fn statement_rows(
 )]
 pub async fn review_statement_row(
     mut ctx: Ctx,
+    axum::extract::State(state): axum::extract::State<AppState>,
     Path((id, row_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<StatementRowInput>,
 ) -> Result<Json<StatementRowView>> {
@@ -1341,66 +1412,87 @@ pub async fn review_statement_row(
         ));
     }
 
-    // Renaming a line is how a person tells the app what it was, so the rule table
-    // is asked again with the new words: typing `tanken` over `VISA JET
-    // TANKSTELLE` should pick Auto & Parken by itself, which is exactly what the
-    // rule table is for. It only fires when the same request does not name a
-    // category — an explicit choice is never overruled by a lookup — and only when
-    // a rule matches outright, so an edit cannot silently attach a guess.
-    let rule_hit: Option<(Uuid, Uuid)> = match (&body.comment, body.category_id) {
-        (Some(comment), None) => {
-            sqlx::query_as(
-                "SELECT id, category_id FROM category_rules \
-              WHERE match_key = lower(btrim($1)) AND category_id IS NOT NULL",
-            )
-            .bind(comment.trim())
-            .fetch_optional(ctx.tenant.conn())
-            .await?
-        }
-        _ => None,
+    // The line as it stands, to tell a rename from a re-send. Accept sends the
+    // comment every time; only a comment that actually CHANGED is a rename.
+    let current: Option<(Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT comment, counterparty, purpose FROM import_rows \
+          WHERE batch_id = $1 AND id = $2",
+    )
+    .bind(id)
+    .bind(row_id)
+    .fetch_optional(ctx.tenant.conn())
+    .await?;
+    let Some((old_comment, counterparty, purpose)) = current else {
+        return Err(AppError::NotFound("Importzeile".into()));
+    };
+    let new_comment = body.comment.as_deref().map(str::trim);
+    let renamed = new_comment.is_some_and(|c| c != old_comment.as_deref().unwrap_or("").trim());
+
+    // A rename is how a person says what a line actually was, so the suggester is
+    // asked again with the new words: `tanken` over `VISA TANKSTELLE NORD` picks
+    // Auto & Parken by itself. It only ever rewrites the SUGGESTION. What the user
+    // picked lives in its own column and is changed by nothing but another pick:
+    // before, a rename wrote the rule's category over an explicit choice, and
+    // because Accept re-sends the comment, so did every Accept.
+    let suggestion = if renamed {
+        let rules = known_rules(ctx.tenant.conn()).await?;
+        suggest_for_line(
+            &rules,
+            state.config.import_fuzzy_min_confidence,
+            new_comment.unwrap_or_default(),
+            counterparty.as_deref().unwrap_or_default(),
+            purpose.as_deref().unwrap_or_default(),
+        )
+    } else {
+        (None, None, None)
     };
 
-    let affected = sqlx::query(
+    sqlx::query(
         "UPDATE import_rows SET \
              comment = COALESCE($3, comment), \
-             decided_category_id = COALESCE($8, $4, decided_category_id), \
-             suggestion_kind = CASE WHEN $8::uuid IS NOT NULL THEN 'exact' ELSE suggestion_kind END, \
-             suggestion_score = CASE WHEN $8::uuid IS NOT NULL THEN 1.0 ELSE suggestion_score END, \
+             decided_category_id = CASE WHEN $8 THEN NULL \
+                                        ELSE COALESCE($4, decided_category_id) END, \
+             no_category = CASE WHEN $8 THEN true \
+                                WHEN $4::uuid IS NOT NULL THEN false \
+                                ELSE no_category END, \
+             suggested_category_id = CASE WHEN $9 THEN $10 ELSE suggested_category_id END, \
+             suggestion_kind = CASE WHEN $9 THEN $11 ELSE suggestion_kind END, \
+             suggestion_score = CASE WHEN $9 THEN $12 ELSE suggestion_score END, \
              kind = COALESCE($5, kind), \
              decision = COALESCE($6, decision), \
              create_rule = COALESCE($7, create_rule), \
-             remember_payee = COALESCE($9, remember_payee) \
+             remember_payee = COALESCE($13, remember_payee) \
            WHERE batch_id = $1 AND id = $2",
     )
     .bind(id)
     .bind(row_id)
-    .bind(body.comment.as_ref().map(|c| c.trim().to_string()))
+    .bind(new_comment.map(str::to_string))
     .bind(body.category_id)
     .bind(body.kind.as_deref())
     .bind(body.decision.as_deref())
     .bind(body.create_rule)
-    .bind(rule_hit.map(|(_, category_id)| category_id))
+    .bind(body.clear_category)
+    .bind(renamed)
+    .bind(suggestion.0)
+    .bind(suggestion.1)
+    .bind(suggestion.2)
     .bind(body.remember_payee)
     .execute(ctx.tenant.conn())
-    .await?
-    .rows_affected();
-    if affected == 0 {
-        return Err(AppError::NotFound("Importzeile".into()));
-    }
+    .await?;
 
     // What a payee is called, remembered under the bank's own spelling — but only
-    // for the lines that asked. Renaming `Studierendenwerk
-    // Musterstadt-Beispielheim Anstalt des offentlichen Rechts` to `Mensaguthaben` is
-    // worth keeping; a payment provider is always its own legal
-    // entity and a different purchase every time, and remembering THAT would rename every
-    // future PayPal line to whatever the last one happened to be. Hence a switch
-    // per line, off by default. The latest rename wins: a correction is a
-    // correction, not a second opinion.
+    // for the lines that asked. Renaming a student-union payee with a city and a
+    // legal form in its name to `Mensaguthaben` is worth keeping; a payment
+    // provider is always the same legal entity and a different purchase every
+    // time, and remembering THAT would rename every future line from it to
+    // whatever the last one happened to be. Hence a switch per line, off by
+    // default. The latest rename wins: a correction is a correction.
     if body.comment.is_some() || body.remember_payee == Some(true) {
         sqlx::query(
             "INSERT INTO statement_payees (id, user_id, payee, comment, category_id) \
              SELECT gen_random_uuid(), ir.user_id, ir.counterparty, btrim(ir.comment), \
-                    COALESCE(ir.decided_category_id, ir.suggested_category_id) \
+                    CASE WHEN ir.no_category THEN NULL \
+                         ELSE COALESCE(ir.decided_category_id, ir.suggested_category_id) END \
                FROM import_rows ir \
               WHERE ir.id = $1 AND ir.remember_payee \
                 AND btrim(COALESCE(ir.counterparty, '')) <> '' \
@@ -1416,45 +1508,11 @@ pub async fn review_statement_row(
         .await?;
     }
 
-    let r = sqlx::query(
-        "SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
-                ir.counterparty, ir.purpose, ir.decision, ir.create_rule, ir.remember_payee, \
-                CASE WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
-                     WHEN ir.suggestion_kind IS NULL THEN NULL ELSE 'suggestion' END \
-                  AS suggestion_kind, \
-                ir.suggestion_score, ir.duplicate_booking_id, \
-                COALESCE(ir.decided_category_id, ir.suggested_category_id) AS category_id, \
-                c.name AS category_name, b.comment AS dup_comment, b.booked_on AS dup_booked_on \
-           FROM import_rows ir \
-           LEFT JOIN categories c \
-                  ON c.id = COALESCE(ir.decided_category_id, ir.suggested_category_id) \
-           LEFT JOIN bookings b ON b.id = ir.duplicate_booking_id \
-          WHERE ir.id = $1",
-    )
-    .bind(row_id)
-    .fetch_one(ctx.tenant.conn())
-    .await?;
-
-    let view = StatementRowView {
-        id: r.get("id"),
-        source_ref: r.get("source_ref"),
-        booked_on: r.get("booked_on"),
-        kind: r.get("kind"),
-        amount_cents: r.get("amount_cents"),
-        counterparty: r.get("counterparty"),
-        purpose: r.get("purpose"),
-        comment: r.get::<Option<String>, _>("comment").unwrap_or_default(),
-        category_id: r.get("category_id"),
-        category_name: r.get("category_name"),
-        category_source: r.get("suggestion_kind"),
-        suggestion_score: r.get("suggestion_score"),
-        decision: r.get("decision"),
-        create_rule: r.get("create_rule"),
-        remember_payee: r.get("remember_payee"),
-        duplicate_booking_id: r.get("duplicate_booking_id"),
-        duplicate_comment: r.get("dup_comment"),
-        duplicate_booked_on: r.get("dup_booked_on"),
-    };
+    let r = sqlx::query(&format!("{STATEMENT_ROW_SELECT} WHERE ir.id = $1"))
+        .bind(row_id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+    let view = row_to_statement_view(&r);
     ctx.tenant.commit().await?;
     Ok(Json(view))
 }

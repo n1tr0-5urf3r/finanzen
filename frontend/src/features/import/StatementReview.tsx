@@ -281,7 +281,15 @@ function StatementLine({
             className="select"
             value={row.categoryId ?? ''}
             disabled={readOnly}
-            onChange={(e) => onChange({ categoryId: e.target.value || null })}
+            onChange={(e) =>
+              onChange(
+                e.target.value
+                  ? { categoryId: e.target.value }
+                  : // `categoryId: null` reads as "leave it alone" on the server,
+                    // which is why "no category" used to snap back to the guess.
+                    { clearCategory: true },
+              )
+            }
           >
             <option value="">{t('statement.noCategory')}</option>
             {categories.map((c) => (

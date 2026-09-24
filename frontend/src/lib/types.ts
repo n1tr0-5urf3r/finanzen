@@ -1059,8 +1059,9 @@ export interface StatementRow {
   comment: string;
   categoryId: string | null;
   categoryName: string | null;
-  /** `rule` for an exact match, `suggestion` for a guess, null for neither. */
-  categorySource: string | null;
+  /** `rule` for an exact match, `suggestion` for a guess, `manual` for the user's
+      own pick, null for no category at all. */
+  categorySource: 'rule' | 'suggestion' | 'manual' | null;
   suggestionScore: number | null;
   decision: 'pending' | 'accepted' | 'rejected';
   createRule: boolean;

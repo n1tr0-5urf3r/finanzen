@@ -3359,3 +3359,236 @@ async fn an_upload_over_two_megabytes_reaches_the_handler() {
         "a 3 MB file should be read and refused as a statement, got: {message}"
     );
 }
+
+/// A statement with a header and the given lines, in ING's shape.
+fn statement(lines: &[&str]) -> Vec<u8> {
+    let mut s = String::from(
+        "Umsatzanzeige;Datei erstellt am: 10.03.2026 08:00\n\nIBAN;DE00 0000 0000 0000 0000 00\n\
+         Bank;ING\n\nBuchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;\
+         Verwendungszweck;Saldo;Währung;Betrag;Währung\n",
+    );
+    for line in lines {
+        s.push_str(line);
+        s.push('\n');
+    }
+    s.into_bytes()
+}
+
+impl TestApp {
+    /// Uploads a statement and returns (import id, staged rows).
+    async fn stage_statement(&self, bytes: &[u8]) -> (String, Vec<Value>) {
+        let (status, preview) = self
+            .upload_bytes("/imports", "auszug.csv", "text/csv", bytes)
+            .await;
+        assert!(status.is_success(), "upload failed: {preview}");
+        let id = preview["id"].as_str().expect("import id").to_string();
+        let (_, rows) = self
+            .send("GET", &format!("/imports/{id}/statement"), None)
+            .await;
+        (id, rows["items"].as_array().expect("items").clone())
+    }
+
+    async fn review(&self, import: &str, row: &Value, body: Value) -> Value {
+        let (status, view) = self
+            .send(
+                "PATCH",
+                &format!(
+                    "/imports/{import}/statement/{}",
+                    row["id"].as_str().unwrap()
+                ),
+                Some(body),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{view}");
+        view
+    }
+}
+
+/// Accept re-sends the comment, and a rename re-asks the rule table — so every
+/// Accept used to write the rule's category over the one the user had just
+/// picked. What a person picks is changed by nothing but another pick.
+#[tokio::test]
+async fn accepting_a_statement_line_keeps_the_category_the_user_picked() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let auto = app.category_id("Auto & Parken").await;
+    let urlaub = app.category_id("Reisen & Urlaub").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Tankstelle Nord", "categoryId": auto})),
+    )
+    .await;
+
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;VISA TANKSTELLE NORD;Lastschrift;Kauf;700,00;EUR;-64,30;EUR",
+        ]))
+        .await;
+    let line = &rows[0];
+    assert_eq!(line["categoryId"].as_str(), Some(auto.to_string().as_str()));
+
+    app.review(&import, line, json!({"categoryId": urlaub}))
+        .await;
+    let view = app
+        .review(
+            &import,
+            line,
+            json!({"comment": "Tankstelle Nord", "decision": "accepted"}),
+        )
+        .await;
+    assert_eq!(
+        view["categoryId"].as_str(),
+        Some(urlaub.to_string().as_str())
+    );
+    assert_eq!(view["categorySource"].as_str(), Some("manual"));
+
+    app.send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(
+        bookings["items"][0]["categoryName"].as_str(),
+        Some("Reisen & Urlaub")
+    );
+}
+
+/// …and the feature that caused it still works: renaming a line to a comment a
+/// rule knows picks that rule's category by itself.
+#[tokio::test]
+async fn renaming_a_statement_line_still_applies_the_rule() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let auto = app.category_id("Auto & Parken").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "tanken", "categoryId": auto})),
+    )
+    .await;
+
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;VISA IRGENDWAS;Lastschrift;Kauf;700,00;EUR;-64,30;EUR",
+        ]))
+        .await;
+    let view = app
+        .review(&import, &rows[0], json!({"comment": "tanken"}))
+        .await;
+    assert_eq!(view["categoryId"].as_str(), Some(auto.to_string().as_str()));
+    assert_eq!(view["categorySource"].as_str(), Some("rule"));
+}
+
+/// "No category" sent `categoryId: null`, which means "leave it alone", so a wrong
+/// guess snapped straight back and was booked anyway.
+#[tokio::test]
+async fn no_category_on_a_statement_line_books_it_without_one() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let auto = app.category_id("Auto & Parken").await;
+    app.send(
+        "POST",
+        "/rules",
+        Some(json!({"comment": "Tankstelle Nord", "categoryId": auto})),
+    )
+    .await;
+
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;VISA TANKSTELLE NORD;Lastschrift;Kauf;700,00;EUR;-64,30;EUR",
+        ]))
+        .await;
+    let view = app
+        .review(&import, &rows[0], json!({"clearCategory": true}))
+        .await;
+    assert!(view["categoryId"].is_null(), "{view}");
+    app.review(&import, &rows[0], json!({"decision": "accepted"}))
+        .await;
+
+    app.send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    // …even though a rule matches its comment: the user said none.
+    assert!(bookings["items"][0]["categoryId"].is_null(), "{bookings}");
+}
+
+/// Two identical charges both pointed at one hand-entered booking, so setting the
+/// duplicates aside rejected the genuine second charge too.
+#[tokio::test]
+async fn one_existing_booking_is_the_duplicate_of_at_most_one_line() {
+    let mut app = app!();
+    app.setup_admin().await;
+    app.send(
+        "POST",
+        "/bookings",
+        Some(
+            json!({"year": 2026, "month": 9, "kind": "expense", "amountCents": 6430,
+                    "comment": "tanken", "bookedOn": "2026-09-16"}),
+        ),
+    )
+    .await;
+
+    let (_, rows) = app
+        .stage_statement(&statement(&[
+            "18.09.2026;18.09.2026;VISA TANKSTELLE;Lastschrift;Kauf;635,70;EUR;-64,30;EUR",
+            "17.09.2026;17.09.2026;VISA TANKSTELLE;Lastschrift;Kauf;700,00;EUR;-64,30;EUR",
+        ]))
+        .await;
+    let flagged = rows
+        .iter()
+        .filter(|r| r["duplicateBookingId"].is_string())
+        .count();
+    assert_eq!(flagged, 1, "{rows:?}");
+}
+
+/// A statement without a running balance gave two identical same-day charges the
+/// same fingerprint, and the commit dropped the second as a duplicate of itself.
+#[tokio::test]
+async fn two_identical_charges_without_a_balance_are_both_booked() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;BAECKEREI;Lastschrift;Kauf;;EUR;-3,90;EUR",
+            "17.09.2026;17.09.2026;BAECKEREI;Lastschrift;Kauf;;EUR;-3,90;EUR",
+        ]))
+        .await;
+    for row in &rows {
+        app.review(&import, row, json!({"decision": "accepted"}))
+            .await;
+    }
+    let (_, result) = app
+        .send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    assert_eq!(result["inserted"].as_i64(), Some(2), "{result}");
+}
+
+/// A guard, not a reproduction: a workbook's suggestions are only confirmed by the
+/// review queue, so an unreviewed one must never be booked as the user's choice.
+/// Workbook rows keep their suggestions in the queue today, so this holds; the
+/// commit query now says so explicitly, and this keeps it that way should a
+/// suggestion ever be staged on the row itself.
+#[tokio::test]
+async fn an_unreviewed_workbook_suggestion_is_not_booked_as_a_choice() {
+    let mut app = app!();
+    app.setup_admin().await;
+    let id = app
+        .upload_workbook("tests/fixtures/monthly_shape.xlsx")
+        .await;
+    let (status, _) = app
+        .send("POST", &format!("/imports/{id}/commit"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    for year in [2014, 2015] {
+        let (_, bookings) = app
+            .send("GET", &format!("/bookings?year={year}"), None)
+            .await;
+        for b in bookings["items"].as_array().expect("items") {
+            assert_ne!(
+                b["categorySource"].as_str(),
+                Some("manual"),
+                "booked as the user's choice without a review: {b}"
+            );
+        }
+    }
+}
