@@ -18,7 +18,8 @@
   --forest-400:#389553; --forest-300:#5bb877; --forest-200:#8dd5a2;
   --forest-100:#c0eacd; --forest-050:#e3f6e9;
 
-  /* sampled from fi.png: #00bae2 at the top, #0782be toward the bottom */
+  /* sampled from the first fi.png: #00bae2 at the top, #0782be toward the bottom.
+     The current logo's ring is the same hue a shade brighter (#00d2fd). */
   --cyan-700:#0782be; --cyan-600:#0096c4; --cyan-500:#00b8e3;
   --cyan-400:#4fd0f0; --cyan-200:#a6e9f8; --cyan-050:#e0f7fd;
 
