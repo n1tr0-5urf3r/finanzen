@@ -10,6 +10,9 @@
 //!
 //! - `GET /api/household` -> array. `member[].expense_balance` is a float with
 //!   IEEE-754 artifacts (`-142.26999999999217`) and is the only source of balances.
+//!   Being a sum of split shares it can also hold a genuine half cent
+//!   (`-344.7249999999914`, 2026-10-07), so it goes through
+//!   `locale::balance_cents_from_f64`, which rounds instead of refusing.
 //!   Member flags are `owner` / `admin`, not `is_owner` / `is_admin`.
 //! - `GET /api/user` -> the token's own user; its `id` is the member id to treat as
 //!   "me". There is no `is_me` flag on the member objects.
@@ -37,7 +40,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     error::{AppError, Result},
-    locale::cents_from_f64,
+    locale::{balance_cents_from_f64, cents_from_f64},
 };
 
 // ------------------------------------------------------------- raw shapes
@@ -382,7 +385,7 @@ fn hash_expense(e: &MirrorExpense) -> String {
 
 pub fn to_member(raw: &RawMember, me: i64) -> Result<(MirrorMember, bool)> {
     let balance_cents = match raw.expense_balance {
-        Some(v) => cents_from_f64(v)?,
+        Some(v) => balance_cents_from_f64(v)?,
         None => 0,
     };
     Ok((
@@ -630,6 +633,19 @@ mod tests {
         assert!(is_me);
         assert!(member.is_owner);
         assert!(!member.is_admin);
+    }
+
+    /// A balance is a sum of shares and may carry a half cent; that is not a
+    /// parse error, and refusing it stopped the whole metadata sync.
+    #[test]
+    fn a_half_cent_balance_does_not_stop_the_sync() {
+        let raw: RawMember = serde_json::from_str(
+            r#"{"id":2,"name":"Ada","username":"ada",
+                "expense_balance":-344.7249999999914,"owner":false,"admin":true}"#,
+        )
+        .unwrap();
+        let (member, _) = to_member(&raw, 1).unwrap();
+        assert_eq!(member.balance_cents, -34473);
     }
 
     #[test]

@@ -89,6 +89,24 @@ pub fn cents_from_f64(value: f64) -> Result<i64> {
     Ok(rounded as i64)
 }
 
+/// A KitchenOwl member balance in cents, which unlike an amount may be sub-cent.
+///
+/// A balance is a running sum of split shares, and a share of an odd amount is a
+/// half cent or worse: a 19,07 € expense split evenly leaves 9,535 € on each side
+/// (observed live: `-344.7249999999914`). [`cents_from_f64`] rightly rejects that
+/// for an amount, but here it is the true value, so it is rounded — half away from
+/// zero, like everything else. The artifact is snapped off first: taken as it
+/// stands, `-34472.49999999914` would round towards zero, the wrong way.
+pub fn balance_cents_from_f64(value: f64) -> Result<i64> {
+    if !value.is_finite() {
+        return Err(AppError::Validation(format!(
+            "Saldo ist keine endliche Zahl: {value}"
+        )));
+    }
+    let snapped = (value * 100.0 * 1e6).round() / 1e6;
+    Ok(snapped.round() as i64)
+}
+
 /// Parses a German-formatted amount: `1.234,56`, `1234,56`, `12,50 €`, `-3,99`.
 /// Also accepts a plain machine form (`1234.56`) so CSV round-trips work.
 pub fn cents_from_de_str(raw: &str) -> Result<i64> {
@@ -219,6 +237,18 @@ mod tests {
     fn rejects_genuine_sub_cent_precision() {
         assert!(cents_from_f64(1.005).is_err());
         assert!(cents_from_f64(f64::NAN).is_err());
+    }
+
+    #[allow(clippy::excessive_precision)]
+    #[test]
+    fn a_half_cent_balance_rounds_away_from_zero() {
+        // The value that stopped the metadata sync on 2026-10-07.
+        assert_eq!(balance_cents_from_f64(-344.7249999999914).unwrap(), -34473);
+        assert_eq!(balance_cents_from_f64(344.7250000000086).unwrap(), 34473);
+        assert_eq!(balance_cents_from_f64(-149.16999999999217).unwrap(), -14917);
+        assert_eq!(balance_cents_from_f64(3.3333333333).unwrap(), 333);
+        assert_eq!(balance_cents_from_f64(0.0).unwrap(), 0);
+        assert!(balance_cents_from_f64(f64::NAN).is_err());
     }
 
     #[test]
