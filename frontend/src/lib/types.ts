@@ -959,6 +959,18 @@ export interface KoPushIntent {
   updatedAt: string;
 }
 
+/** The push dialogue's choices: the body of `POST /bookings/{id}/kitchenowl`, and
+    what a statement line keeps until it is booked. */
+export interface KoPushChoices {
+  name: string | null;
+  description: string | null;
+  amountCents: number | null;
+  date: string | null;
+  koCategoryId: number | null;
+  paidById: number | null;
+  paidFor: { memberId: number; factor: number }[];
+}
+
 export interface KoSyncResult {
   started: boolean;
   expenses: KoSyncRun | null;
@@ -1071,6 +1083,8 @@ export interface StatementRow {
   duplicateBookingId: string | null;
   duplicateComment: string | null;
   duplicateBookedOn: string | null;
+  /** Sent to KitchenOwl as well once the line is booked, with these choices. */
+  koPush: KoPushChoices | null;
 }
 
 export interface StatementRowPage {
@@ -1089,6 +1103,8 @@ export interface CommitResult {
   skipped: number;
   yearsTouched: number[];
   uncategorizedRemaining: number;
+  /** Of the new bookings, how many were queued for KitchenOwl too. */
+  koQueued: number;
 }
 
 /**

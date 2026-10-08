@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { Send } from 'lucide-react';
 
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
@@ -8,9 +9,15 @@ import { Banner, Button, EmptyState, ErrorState, LoadingState, StatusPill } from
 import { api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { invalidateAfterBookingChange, invalidateAfterTaxonomyChange, qk } from '../../lib/queryKeys';
+import {
+  invalidateAfterBookingChange,
+  invalidateAfterKitchenOwlChange,
+  invalidateAfterTaxonomyChange,
+  qk,
+} from '../../lib/queryKeys';
 import { sortedByName } from '../../lib/categories';
-import type { Category, CommitResult, StatementRow, StatementRowPage } from '../../lib/types';
+import type { Category, CommitResult, KoStatus, StatementRow, StatementRowPage } from '../../lib/types';
+import { StagePushDialog } from '../kitchenowl/PushDialog';
 
 type Filter = '' | 'pending' | 'accepted' | 'rejected' | 'duplicates';
 
@@ -61,6 +68,25 @@ export function StatementReview({
     placeholderData: (previous) => previous,
   });
 
+  // The KitchenOwl option only appears where the server can actually send it.
+  const koStatus = useQuery({
+    queryKey: qk.kitchenowl.status(),
+    queryFn: () => api<KoStatus>('/kitchenowl/status'),
+    retry: false,
+  });
+  const koReady = koStatus.data?.configured === true;
+
+  // The push dialogue shows its own errors, so it saves through this rather than
+  // through `patch`, whose error banner sits at the top of the list.
+  const saveRow = async (id: string, body: Record<string, unknown>) => {
+    const saved = await api<StatementRow>(`/imports/${batchId}/statement/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    void client.invalidateQueries({ queryKey: qk.imports.root });
+    return saved;
+  };
+
   const patch = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api<StatementRow>(`/imports/${batchId}/statement/${id}`, {
@@ -81,7 +107,13 @@ export function StatementReview({
       invalidateAfterBookingChange(client, result.yearsTouched);
       invalidateAfterTaxonomyChange(client);
       void client.invalidateQueries({ queryKey: qk.imports.root });
-      setNotice(t('import.committed', { count: result.inserted }));
+      const committed = t('import.committed', { count: result.inserted });
+      if (result.koQueued > 0) {
+        invalidateAfterKitchenOwlChange(client);
+        setNotice(`${committed} ${t('import.committedKo', { count: result.koQueued })}`);
+      } else {
+        setNotice(committed);
+      }
     },
   });
 
@@ -183,7 +215,9 @@ export function StatementReview({
               categories={sorted}
               readOnly={applied}
               busy={patch.isPending}
+              koReady={koReady}
               onChange={(body) => patch.mutate({ id: row.id, body })}
+              onSave={(body) => saveRow(row.id, body)}
             />
           ))}
         </div>
@@ -220,17 +254,25 @@ function StatementLine({
   categories,
   readOnly,
   busy,
+  koReady,
   onChange,
+  onSave,
 }: {
   row: StatementRow;
   categories: Category[];
   readOnly: boolean;
   busy: boolean;
+  koReady: boolean;
   onChange: (body: Record<string, unknown>) => void;
+  onSave: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
   const t = useT();
   const [comment, setComment] = useState(row.comment);
   const [showPurpose, setShowPurpose] = useState(false);
+  const [staging, setStaging] = useState(false);
+  // A transfer moves money between your own accounts and is not a household
+  // expense; the server refuses to send one too.
+  const canStage = koReady && !readOnly && row.kind !== 'transfer';
 
   const category = categories.find((c) => c.id === row.categoryId) ?? null;
   const dirty = comment.trim() !== row.comment.trim();
@@ -266,6 +308,11 @@ function StatementLine({
         )}
         {row.decision === 'accepted' && <StatusPill tone="good">{t('statement.willBook')}</StatusPill>}
         {row.decision === 'rejected' && <StatusPill tone="neutral">{t('statement.wontBook')}</StatusPill>}
+        {row.koPush && (
+          <StatusPill tone="info">
+            {t('statement.koStaged', { name: row.koPush.name ?? row.comment })}
+          </StatusPill>
+        )}
       </header>
 
       {/* What the bank wrote, verbatim. It is the evidence; everything else on
@@ -374,6 +421,12 @@ function StatementLine({
             )}
           </div>
           <div className="statement__decide">
+            {canStage && (
+              <Button type="button" variant="secondary" onClick={() => setStaging(true)}>
+                <Send size={14} aria-hidden="true" />{' '}
+                {row.koPush ? t('statement.koEdit') : t('statement.alsoKitchenOwl')}
+              </Button>
+            )}
             <Button
               type="button"
               busy={busy}
@@ -398,6 +451,30 @@ function StatementLine({
             </Button>
           </div>
         </footer>
+      )}
+
+      {staging && (
+        <div className="dialog-shim">
+          <StagePushDialog
+            seed={{
+              name: comment.trim() || row.comment,
+              amountCents: row.amountCents,
+              date: row.bookedOn,
+            }}
+            initial={row.koPush}
+            // A push waits for the booking, so choosing one accepts the line — and
+            // with it the comment typed so far, as Accept does.
+            onSave={(choices) =>
+              onSave({
+                comment: comment.trim() || row.comment,
+                decision: 'accepted',
+                koPush: choices,
+              })
+            }
+            onRemove={() => onSave({ clearKoPush: true })}
+            onClose={() => setStaging(false)}
+          />
+        </div>
       )}
 
       {row.duplicateBookingId && (

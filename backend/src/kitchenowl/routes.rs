@@ -837,17 +837,7 @@ pub async fn push_booking(
     let payload = push::build_payload(
         ctx.tenant.conn(),
         booking_id,
-        input.name,
-        input.description,
-        input.amount_cents,
-        input.date,
-        input.ko_category_id,
-        input.paid_by_id,
-        input
-            .paid_for
-            .iter()
-            .map(|s| (s.member_id, s.factor))
-            .collect(),
+        &input,
         state.config.kitchenowl_push_marker_in_name,
     )
     .await?;

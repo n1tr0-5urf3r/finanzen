@@ -685,6 +685,8 @@ pub struct CommitResult {
     pub skipped: i64,
     pub years_touched: Vec<i32>,
     pub uncategorized_remaining: i64,
+    /// Bookings from this import queued for KitchenOwl as well.
+    pub ko_queued: i64,
 }
 
 #[utoipa::path(
@@ -817,6 +819,52 @@ pub async fn commit(
     .await?
     .rows_affected() as i64;
 
+    // The lines the review asked to send to KitchenOwl as well, now that they are
+    // bookings. Queued in this transaction, so the booking and its push intent
+    // arrive together or not at all, and checked again against the real booking:
+    // the household may have changed since the line was reviewed. A line that was
+    // not booked — a fingerprint that was already in the ledger — sends nothing,
+    // because there is no booking for it to be linked to.
+    let staged = sqlx::query(
+        "SELECT b.id AS booking_id, ir.comment, ir.ko_push \
+           FROM import_rows ir JOIN bookings b ON b.import_row_id = ir.id \
+          WHERE ir.batch_id = $1 AND ir.decision = 'accepted' AND ir.ko_push IS NOT NULL",
+    )
+    .bind(id)
+    .fetch_all(ctx.tenant.conn())
+    .await?;
+    if !staged.is_empty() && crate::kitchenowl::client::KoClient::from_state(&state).is_none() {
+        return Err(AppError::Integration(
+            "KitchenOwl ist auf diesem Server nicht konfiguriert".into(),
+        ));
+    }
+    for row in &staged {
+        let booking_id: Uuid = row.get("booking_id");
+        let comment: Option<String> = row.get("comment");
+        let choices: crate::models::KoPushRequest = serde_json::from_value(row.get("ko_push"))
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("KitchenOwl-Angaben nicht lesbar: {e}"))
+            })?;
+        // Which line it was, in the words the review screen showed it under.
+        let at_line =
+            |message: String| format!("„{}“: {message}", comment.as_deref().unwrap_or_default());
+        let payload = crate::kitchenowl::push::build_payload(
+            ctx.tenant.conn(),
+            booking_id,
+            &choices,
+            state.config.kitchenowl_push_marker_in_name,
+        )
+        .await
+        .map_err(|e| match e {
+            AppError::Validation(m) => AppError::Validation(at_line(m)),
+            AppError::Conflict(m) => AppError::Conflict(at_line(m)),
+            other => other,
+        })?;
+        crate::kitchenowl::push::queue(ctx.tenant.conn(), ctx.user.id, booking_id, &payload)
+            .await?;
+    }
+    let ko_queued = staged.len() as i64;
+
     let total: i64 = sqlx::query_scalar("SELECT count(*) FROM import_rows WHERE batch_id = $1")
         .bind(id)
         .fetch_one(ctx.tenant.conn())
@@ -852,12 +900,19 @@ pub async fn commit(
         tracing::warn!(error = %e, "Vorschläge konnten nach dem Import nicht neu berechnet werden");
     }
 
+    let user_id = ctx.user.id;
     ctx.tenant.commit().await?;
+    // After the commit, as for a single push: the intents are durable, the first
+    // attempt is opportunistic.
+    if ko_queued > 0 {
+        crate::kitchenowl::spawn_push_attempt(&state, user_id);
+    }
     Ok(Json(CommitResult {
         inserted,
         skipped: total - inserted,
         years_touched: years.into_iter().map(|y| y as i32).collect(),
         uncategorized_remaining,
+        ko_queued,
     }))
 }
 
@@ -1071,6 +1126,8 @@ pub struct StatementRowView {
     pub duplicate_booking_id: Option<Uuid>,
     pub duplicate_comment: Option<String>,
     pub duplicate_booked_on: Option<chrono::NaiveDate>,
+    /// The KitchenOwl push this line takes with it when it is booked, if any.
+    pub ko_push: Option<crate::models::KoPushRequest>,
 }
 
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
@@ -1102,6 +1159,12 @@ pub struct StatementRowInput {
     /// an omitted field is null too and must leave the category alone.
     #[serde(default)]
     pub clear_category: bool,
+    /// Send this line to KitchenOwl too, with the push dialogue's choices. Queued
+    /// when the import is committed, and only if the line is booked.
+    pub ko_push: Option<crate::models::KoPushRequest>,
+    /// Do not send it after all.
+    #[serde(default)]
+    pub clear_ko_push: bool,
 }
 
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
@@ -1321,7 +1384,7 @@ const STATEMENT_ROW_SELECT: &str = "\
              AS category_source, \
            ir.suggestion_score, ir.duplicate_booking_id, \
            c.id AS category_id, c.name AS category_name, \
-           b.comment AS dup_comment, b.booked_on AS dup_booked_on \
+           b.comment AS dup_comment, b.booked_on AS dup_booked_on, ir.ko_push \
       FROM import_rows ir \
       LEFT JOIN categories c ON c.id = CASE WHEN ir.no_category THEN NULL \
                               ELSE COALESCE(ir.decided_category_id, ir.suggested_category_id) END \
@@ -1347,6 +1410,11 @@ fn row_to_statement_view(r: &sqlx::postgres::PgRow) -> StatementRowView {
         duplicate_booking_id: r.get("duplicate_booking_id"),
         duplicate_comment: r.get("dup_comment"),
         duplicate_booked_on: r.get("dup_booked_on"),
+        // Written only by this module, from the same type; a row that does not read
+        // back is shown without a push rather than failing the whole list.
+        ko_push: r
+            .get::<Option<serde_json::Value>, _>("ko_push")
+            .and_then(|v| serde_json::from_value(v).ok()),
     }
 }
 
@@ -1523,6 +1591,62 @@ pub async fn review_statement_row(
     .bind(body.remember_payee)
     .execute(ctx.tenant.conn())
     .await?;
+
+    // The KitchenOwl push this line should take with it. Checked now, against the
+    // line as it stands after the edit above, so a split naming somebody who left
+    // the household is refused while the dialogue is still open — not at the
+    // commit, when the person has moved on. The commit checks it again against the
+    // real booking.
+    if body.clear_ko_push {
+        sqlx::query("UPDATE import_rows SET ko_push = NULL WHERE batch_id = $1 AND id = $2")
+            .bind(id)
+            .bind(row_id)
+            .execute(ctx.tenant.conn())
+            .await?;
+    } else if let Some(choices) = &body.ko_push {
+        if crate::kitchenowl::client::KoClient::from_state(&state).is_none() {
+            return Err(AppError::Integration(
+                "KitchenOwl ist auf diesem Server nicht konfiguriert".into(),
+            ));
+        }
+        let (comment, amount_cents, kind, booked_on): (
+            Option<String>,
+            i64,
+            String,
+            Option<chrono::NaiveDate>,
+        ) = sqlx::query_as(
+            "SELECT comment, amount_cents, kind, booked_on FROM import_rows \
+                  WHERE batch_id = $1 AND id = $2",
+        )
+        .bind(id)
+        .bind(row_id)
+        .fetch_one(ctx.tenant.conn())
+        .await?;
+        let facts = crate::kitchenowl::push::BookingFacts {
+            comment: comment.unwrap_or_default(),
+            amount_cents,
+            kind,
+            date: booked_on.ok_or_else(|| {
+                AppError::Validation("Nur Kontoauszugszeilen lassen sich mitschicken".into())
+            })?,
+        };
+        // The marker is the booking's, and there is no booking yet; the payload
+        // built here is a check and is thrown away.
+        crate::kitchenowl::push::payload_for(
+            ctx.tenant.conn(),
+            Uuid::nil(),
+            &facts,
+            choices,
+            state.config.kitchenowl_push_marker_in_name,
+        )
+        .await?;
+        sqlx::query("UPDATE import_rows SET ko_push = $3 WHERE batch_id = $1 AND id = $2")
+            .bind(id)
+            .bind(row_id)
+            .bind(sqlx::types::Json(choices))
+            .execute(ctx.tenant.conn())
+            .await?;
+    }
 
     // What a payee is called, remembered under the bank's own spelling — but only
     // for the lines that asked. Renaming a student-union payee with a city and a

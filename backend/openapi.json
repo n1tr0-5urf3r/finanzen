@@ -4576,12 +4576,18 @@
           "inserted",
           "skipped",
           "yearsTouched",
-          "uncategorizedRemaining"
+          "uncategorizedRemaining",
+          "koQueued"
         ],
         "properties": {
           "inserted": {
             "type": "integer",
             "format": "int64"
+          },
+          "koQueued": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bookings from this import queued for KitchenOwl as well."
           },
           "skipped": {
             "type": "integer",
@@ -6953,6 +6959,7 @@
       },
       "KoPushRequest": {
         "type": "object",
+        "description": "The push dialogue's choices. Also what a statement line keeps when the review\nasks for it to go to KitchenOwl as well, so it is read back as well as written.",
         "properties": {
           "amountCents": {
             "type": [
@@ -9388,6 +9395,10 @@
             "type": "boolean",
             "description": "\"No category\", said explicitly. `categoryId: null` cannot say it, because\nan omitted field is null too and must leave the category alone."
           },
+          "clearKoPush": {
+            "type": "boolean",
+            "description": "Do not send it after all."
+          },
           "comment": {
             "type": [
               "string",
@@ -9411,6 +9422,17 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "koPush": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoPushRequest",
+                "description": "Send this line to KitchenOwl too, with the push dialogue's choices. Queued\nwhen the import is committed, and only if the line is booked."
+              }
             ]
           },
           "rememberPayee": {
@@ -9554,6 +9576,17 @@
           },
           "kind": {
             "type": "string"
+          },
+          "koPush": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KoPushRequest",
+                "description": "The KitchenOwl push this line takes with it when it is booked, if any."
+              }
+            ]
           },
           "purpose": {
             "type": [

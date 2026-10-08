@@ -297,7 +297,7 @@
 }
 .statement__rule { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; }
 .statement__rule input { accent-color: var(--accent); }
-.statement__decide { display: flex; gap: .5rem; }
+.statement__decide { display: flex; flex-wrap: wrap; gap: .5rem; }
 /* The payee a statement carried, under the comment a person chose. */
 .booking-row__party {
   display: block; font-size: .72rem; color: var(--muted);

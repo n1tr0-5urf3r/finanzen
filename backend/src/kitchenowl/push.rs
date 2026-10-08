@@ -25,6 +25,7 @@ use crate::{
     config::Config,
     error::{AppError, Result},
     locale::period_ord,
+    models::KoPushRequest,
 };
 
 use super::{
@@ -304,19 +305,26 @@ async fn reconcile(client: &KoClient, config: &Config, intent: &Intent) -> Resul
 
 // --------------------------------------------------------------- payloads
 
+/// What a push needs to know about the booking it starts from.
+///
+/// Separate from the booking row because a statement line is pushed before its
+/// booking exists: the review stages the dialogue's choices on the line and they
+/// are checked against the line's own facts, then checked again against the real
+/// booking when the import is committed.
+#[derive(Debug, Clone)]
+pub struct BookingFacts {
+    pub comment: String,
+    pub amount_cents: i64,
+    pub kind: String,
+    pub date: NaiveDate,
+}
+
 /// Builds the payload from a booking plus the dialogue's choices, validating every
 /// reference against the cached metadata.
-#[allow(clippy::too_many_arguments)]
 pub async fn build_payload(
     conn: &mut PgConnection,
     booking_id: Uuid,
-    name: Option<String>,
-    description: Option<String>,
-    amount_cents: Option<i64>,
-    date: Option<NaiveDate>,
-    ko_category_id: Option<i64>,
-    paid_by: Option<i64>,
-    paid_for: Vec<(i64, i64)>,
+    choices: &KoPushRequest,
     marker_in_name: bool,
 ) -> Result<PushPayload> {
     let row = sqlx::query(
@@ -339,22 +347,8 @@ pub async fn build_payload(
             "Nur bestätigte Buchungen können nach KitchenOwl übertragen werden".into(),
         ));
     }
-    if row.get::<String, _>("kind") == "transfer" {
-        return Err(AppError::Validation(
-            "Umbuchungen gehören nicht in die geteilte Haushaltskasse".into(),
-        ));
-    }
 
-    let amount = amount_cents.unwrap_or_else(|| row.get("amount_cents"));
-    if amount <= 0 {
-        return Err(AppError::Validation("Der Betrag muss positiv sein".into()));
-    }
-    let name = name
-        .map(|n| n.trim().to_string())
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| row.get::<String, _>("comment"));
-
-    let date = match date.or_else(|| row.get::<Option<NaiveDate>, _>("booked_on")) {
+    let date = match row.get::<Option<NaiveDate>, _>("booked_on") {
         Some(d) => d,
         // Imported history is month-only. Day one of the period is a deliberate,
         // visible choice rather than a fabricated "today".
@@ -365,6 +359,49 @@ pub async fn build_payload(
         )
         .ok_or_else(|| AppError::Validation("Buchungsmonat ist ungültig".into()))?,
     };
+    let facts = BookingFacts {
+        comment: row.get("comment"),
+        amount_cents: row.get("amount_cents"),
+        kind: row.get("kind"),
+        date,
+    };
+    payload_for(conn, booking_id, &facts, choices, marker_in_name).await
+}
+
+/// The dialogue's choices on top of a booking's facts, every reference checked.
+pub async fn payload_for(
+    conn: &mut PgConnection,
+    booking_id: Uuid,
+    facts: &BookingFacts,
+    choices: &KoPushRequest,
+    marker_in_name: bool,
+) -> Result<PushPayload> {
+    if facts.kind == "transfer" {
+        return Err(AppError::Validation(
+            "Umbuchungen gehören nicht in die geteilte Haushaltskasse".into(),
+        ));
+    }
+
+    let amount = choices.amount_cents.unwrap_or(facts.amount_cents);
+    if amount <= 0 {
+        return Err(AppError::Validation("Der Betrag muss positiv sein".into()));
+    }
+    let name = choices
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| facts.comment.clone());
+    let date = choices.date.unwrap_or(facts.date);
+    let paid_by = choices.paid_by_id;
+    let paid_for: Vec<(i64, i64)> = choices
+        .paid_for
+        .iter()
+        .map(|s| (s.member_id, s.factor))
+        .collect();
+    let ko_category_id = choices.ko_category_id;
+    let description = choices.description.clone();
 
     let me: Option<i64> =
         sqlx::query_scalar("SELECT member_id FROM ko_members WHERE is_me LIMIT 1")

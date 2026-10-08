@@ -1757,7 +1757,7 @@ pub struct KoPushIntent {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KoPushShareInput {
     pub member_id: i64,
@@ -1766,7 +1766,9 @@ pub struct KoPushShareInput {
     pub factor: i64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+/// The push dialogue's choices. Also what a statement line keeps when the review
+/// asks for it to go to KitchenOwl as well, so it is read back as well as written.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KoPushRequest {
     /// Defaults to the booking's comment.

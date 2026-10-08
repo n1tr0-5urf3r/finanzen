@@ -2538,6 +2538,50 @@ async fn a_push_is_offered_the_category_the_household_already_uses_for_that_name
     assert!(unknown.is_null(), "never a guess: {unknown}");
 }
 
+impl TestApp {
+    /// Uploads an ING statement with the given lines and returns
+    /// (import id, staged rows).
+    async fn stage_statement(&self, lines: &[&str]) -> (String, Vec<Value>) {
+        let mut csv = String::from(
+            "Umsatzanzeige;Datei erstellt am: 10.06.2026 08:00\n\nIBAN;DE00 0000 0000 0000 0000 00\n\
+             Bank;ING\n\nBuchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;\
+             Verwendungszweck;Saldo;Währung;Betrag;Währung\n",
+        );
+        for line in lines {
+            csv.push_str(line);
+            csv.push('\n');
+        }
+        let boundary = "----finanzen-test-boundary";
+        let mut body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; \
+             filename=\"auszug.csv\"\r\nContent-Type: text/csv\r\n\r\n"
+        )
+        .into_bytes();
+        body.extend_from_slice(csv.as_bytes());
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/imports")
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::COOKIE, self.cookie.clone().expect("session"))
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(body))
+            .unwrap();
+        let response = self.router.clone().oneshot(req).await.expect("upload");
+        assert!(response.status().is_success(), "upload failed");
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let preview: Value = serde_json::from_slice(&bytes).expect("preview");
+        let id = preview["id"].as_str().expect("import id").to_string();
+        let (_, rows) = self
+            .send("GET", &format!("/imports/{id}/statement"), None)
+            .await;
+        (id, rows["items"].as_array().expect("items").clone())
+    }
+}
+
 /// A pushed booking is linked before its expense is ever mirrored. The pull that
 /// mirrors it used to open a fresh link suggestion anyway — offering the very
 /// booking it was pushed from — and nothing ever closed it.
@@ -2566,4 +2610,126 @@ async fn a_pushed_booking_is_not_offered_for_linking_after_the_next_pull() {
     app.send("POST", "/kitchenowl/drafts/rescan", None).await;
     let (_, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
     assert_eq!(drafts["total"], 0, "{drafts}");
+}
+
+/// A statement line can go to KitchenOwl with the push dialogue's own choices. It
+/// waits on the line until the import is committed, and only a line that is booked
+/// is sent — linked to its booking from the start.
+#[tokio::test]
+async fn a_statement_line_is_sent_to_kitchenowl_when_it_is_booked() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+
+    let (import, rows) = app
+        .stage_statement(&[
+            "03.06.2026;03.06.2026;KAUFLAND SAGT DANKE;Lastschrift;Kauf;700,00;EUR;-38,14;EUR",
+            "04.06.2026;04.06.2026;BAECKEREI;Lastschrift;Kauf;661,86;EUR;-4,20;EUR",
+        ])
+        .await;
+    let kaufland = rows
+        .iter()
+        .find(|r| r["amountCents"] == 3814)
+        .expect("kaufland");
+    let baecker = rows
+        .iter()
+        .find(|r| r["amountCents"] == 420)
+        .expect("baecker");
+    let row_path = |r: &Value| format!("/imports/{import}/statement/{}", r["id"].as_str().unwrap());
+
+    // An unknown member is refused while the dialogue is still open.
+    let (status, body) = app
+        .send(
+            "PATCH",
+            &row_path(kaufland),
+            Some(json!({"koPush": {"paidById": 99}})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let choices = json!({"name": "Wocheneinkauf", "koCategoryId": 2, "paidById": 1,
+                         "paidFor": [{"memberId": 1, "factor": 1}, {"memberId": 2, "factor": 1}]});
+    let (status, view) = app
+        .send(
+            "PATCH",
+            &row_path(kaufland),
+            Some(json!({"comment": "Kaufland", "decision": "accepted", "koPush": choices})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+    assert_eq!(view["koPush"]["name"], "Wocheneinkauf");
+    assert_eq!(view["koPush"]["paidFor"][1]["memberId"], 2);
+    assert_eq!(
+        mock.inner().post_count,
+        0,
+        "nothing is sent before the commit"
+    );
+
+    // A line that is staged and then rejected sends nothing.
+    app.send(
+        "PATCH",
+        &row_path(baecker),
+        Some(json!({"koPush": {}, "decision": "rejected"})),
+    )
+    .await;
+
+    let (status, result) = app
+        .send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["inserted"], 1);
+    assert_eq!(result["koQueued"], 1);
+
+    let pushed = wait_for(&app, |v| v["state"] == "pushed").await;
+    assert_eq!(pushed["amountCents"], 3814, "the full amount travels");
+    assert_eq!(pushed["date"], "2026-06-03", "the statement's own date");
+    assert_eq!(mock.inner().post_count, 1);
+    let posted = mock.inner().expenses[0].clone();
+    assert_eq!(posted["name"], "Wocheneinkauf");
+    assert_eq!(posted["category_id"], 2);
+
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(bookings["total"], 1);
+    assert_eq!(bookings["items"][0]["comment"], "Kaufland");
+    assert_eq!(bookings["items"][0]["externalSource"], "kitchenowl");
+
+    // And the pull that mirrors it leaves nothing to link.
+    app.sync().await;
+    let (_, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(drafts["total"], 0, "{drafts}");
+}
+
+/// Changing your mind takes the push off the line again.
+#[tokio::test]
+async fn a_staged_push_can_be_withdrawn_before_the_commit() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let (import, rows) = app
+        .stage_statement(&[
+            "03.06.2026;03.06.2026;KAUFLAND SAGT DANKE;Lastschrift;Kauf;700,00;EUR;-38,14;EUR",
+        ])
+        .await;
+    let path = format!(
+        "/imports/{import}/statement/{}",
+        rows[0]["id"].as_str().unwrap()
+    );
+    app.send(
+        "PATCH",
+        &path,
+        Some(json!({"decision": "accepted", "koPush": {}})),
+    )
+    .await;
+    let (_, view) = app
+        .send("PATCH", &path, Some(json!({"clearKoPush": true})))
+        .await;
+    assert_eq!(view["koPush"], Value::Null);
+
+    let (_, result) = app
+        .send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    assert_eq!(result["inserted"], 1);
+    assert_eq!(result["koQueued"], 0);
+    let (_, list) = app.send("GET", "/kitchenowl/push", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
 }

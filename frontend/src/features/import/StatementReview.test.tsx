@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../lib/i18n';
-import type { Category, StatementRow, StatementRowPage } from '../../lib/types';
+import type { Category, KoMetadata, StatementRow, StatementRowPage } from '../../lib/types';
 
 const api = vi.fn();
 vi.mock('../../lib/api', async () => {
@@ -40,6 +40,7 @@ function row(over: Partial<StatementRow>): StatementRow {
     duplicateBookingId: null,
     duplicateComment: null,
     duplicateBookedOn: null,
+    koPush: null,
     ...over,
   };
 }
@@ -190,5 +191,66 @@ describe('the bank statement review', () => {
     await waitFor(() =>
       expect(api.mock.calls.map(([p]) => String(p)).some((p) => p.includes('page=1'))).toBe(true),
     );
+  });
+
+  /**
+   * A line can go to KitchenOwl as well, through the same dialogue a booking
+   * uses. Nothing is sent from the review: the choices wait on the line, and
+   * choosing them accepts it, since the push waits for the booking.
+   */
+  it('keeps a KitchenOwl push on the line and accepts it', async () => {
+    const user = userEvent.setup();
+    const metadata = {
+      members: [
+        { memberId: 1, name: 'Fabi', isMe: true },
+        { memberId: 2, name: 'Ada', isMe: false },
+      ],
+      categories: [{ categoryId: 1, name: 'Wocheneinkauf' }],
+      stale: false,
+    } as unknown as KoMetadata;
+    api.mockImplementation((path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return Promise.resolve(row({}) as never);
+      if (path === '/kitchenowl/status') return Promise.resolve({ configured: true } as never);
+      if (path === '/kitchenowl/metadata') return Promise.resolve(metadata as never);
+      if (path.startsWith('/kitchenowl/category-suggestion')) return Promise.resolve(null as never);
+      return Promise.resolve(PAGE as never);
+    });
+    renderReview();
+    await user.click((await screen.findAllByRole('button', { name: /Auch nach KitchenOwl/ }))[0]!);
+
+    // The dialogue starts from the line: its comment and the full amount.
+    const name = (await screen.findByLabelText('Name')) as HTMLInputElement;
+    expect(name.value).toBe('Supermarkt Sagt Danke');
+    await screen.findAllByText('Ada');
+    await user.click(screen.getByRole('button', { name: 'Vormerken' }));
+
+    await waitFor(() => {
+      const patches = api.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'PATCH');
+      const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+      const staged = bodies.find((b) => b.koPush);
+      expect(staged).toMatchObject({
+        comment: 'Supermarkt Sagt Danke',
+        decision: 'accepted',
+        koPush: {
+          name: 'Supermarkt Sagt Danke',
+          amountCents: 385,
+          date: '2026-09-18',
+          paidById: 1,
+          paidFor: [
+            { memberId: 1, factor: 1 },
+            { memberId: 2, factor: 1 },
+          ],
+        },
+      });
+    });
+    // And nothing went to KitchenOwl itself.
+    expect(api.mock.calls.some(([p]) => String(p).includes('/bookings/'))).toBe(false);
+  });
+
+  /** Without KitchenOwl on the server, the option is not offered at all. */
+  it('offers no KitchenOwl option when it is not configured', async () => {
+    renderReview();
+    await screen.findByText('VISA SUPERMARKT SAGT DANKE');
+    expect(screen.queryByRole('button', { name: /Auch nach KitchenOwl/ })).toBeNull();
   });
 });
