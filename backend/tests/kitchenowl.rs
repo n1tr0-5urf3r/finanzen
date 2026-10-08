@@ -2537,3 +2537,33 @@ async fn a_push_is_offered_the_category_the_household_already_uses_for_that_name
         .await;
     assert!(unknown.is_null(), "never a guess: {unknown}");
 }
+
+/// A pushed booking is linked before its expense is ever mirrored. The pull that
+/// mirrors it used to open a fresh link suggestion anyway — offering the very
+/// booking it was pushed from — and nothing ever closed it.
+#[tokio::test]
+async fn a_pushed_booking_is_not_offered_for_linking_after_the_next_pull() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let booking_id = app.booking("Kaufland", 1907, 3).await;
+
+    let (status, _) = app
+        .send("POST", &format!("/bookings/{booking_id}/kitchenowl"), None)
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    wait_for(&app, |v| v["state"] == "pushed").await;
+
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(page["items"][0]["linkedBookingId"], booking_id);
+    let (_, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(drafts["total"], 0, "nothing left to link: {drafts}");
+
+    // And a rescan, which re-asks every open suggestion, does not reopen it.
+    app.send("POST", "/kitchenowl/drafts/rescan", None).await;
+    let (_, drafts) = app.send("GET", "/kitchenowl/drafts", None).await;
+    assert_eq!(drafts["total"], 0, "{drafts}");
+}

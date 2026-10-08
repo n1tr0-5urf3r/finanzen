@@ -274,6 +274,9 @@ pub struct RescanResult {
 /// `(period_ord, amount_cents)`, and idempotent, because it only writes the answer
 /// the current data gives.
 pub async fn rescan_open(conn: &mut PgConnection, threshold: f64) -> Result<RescanResult> {
+    // A linked expense has no question left to ask, and re-scoring it would only
+    // offer its own booking back as a "candidate".
+    super::link::settle_drafts(conn).await?;
     let rows = sqlx::query(
         "SELECT d.id, e.external_id, e.name, e.expense_date, e.amount_cents, \
                 e.own_share_cents \

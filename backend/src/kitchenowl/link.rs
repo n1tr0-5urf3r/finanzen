@@ -48,7 +48,28 @@ pub async fn attach(conn: &mut PgConnection, booking_id: Uuid, external_id: i64)
         .bind(booking_id)
         .execute(&mut *conn)
         .await?;
+    settle_drafts(conn).await?;
     Ok(())
+}
+
+/// Closes every open suggestion whose expense is already linked.
+///
+/// A linked expense has had its question answered, whichever way the link came
+/// about. Before this, only a link made from the suggestion itself closed it: a
+/// pushed booking is linked before its expense is ever mirrored, the pull that
+/// mirrors it then opens a fresh suggestion — offering, as like as not, the very
+/// booking it was pushed from — and nothing ever closed that one again.
+pub async fn settle_drafts(conn: &mut PgConnection) -> Result<u64> {
+    let affected = sqlx::query(
+        "UPDATE ko_drafts d SET status = 'confirmed', resolved_at = now() \
+           FROM ko_expenses e \
+          WHERE e.id = d.ko_expense_id AND e.linked_booking_id IS NOT NULL \
+            AND d.status IN ('open','likely_duplicate','possible_duplicate','ignored_by_default')",
+    )
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    Ok(affected)
 }
 
 /// Removes a link. Both rows survive, and so does every figure — that is what makes
@@ -102,5 +123,6 @@ pub async fn reconcile_links(conn: &mut PgConnection) -> Result<u64> {
     .bind(SOURCE)
     .execute(&mut *conn)
     .await?;
+    settle_drafts(conn).await?;
     Ok(affected)
 }
