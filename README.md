@@ -12,7 +12,7 @@
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-2e7d5b">
   <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0--only-3c474c">
   <img alt="Rust" src="https://img.shields.io/badge/backend-Rust%20%2B%20axum-b7410e">
-  <img alt="React" src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-0096c4">
+  <img alt="React" src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-207e5c">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/db-PostgreSQL%2017-336791">
   <img alt="Tests" src="https://img.shields.io/badge/tests-284-2e7d5b">
   <img alt="Deployment" src="https://img.shields.io/badge/deploy-Docker%20Compose-2496ed">

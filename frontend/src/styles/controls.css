@@ -109,4 +109,4 @@
   cursor: pointer; border-radius: var(--r-sm);
 }
 .linkish:hover { text-decoration: underline; text-underline-offset: 2px; }
-.linkish:focus-visible { outline: 2px solid var(--cyan-500); outline-offset: 2px; }
+.linkish:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }

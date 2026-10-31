@@ -1,5 +1,5 @@
-/* Anthrazit surfaces, dark green as the primary action, and the cyan from the FI
-   logo as the accent. Everything is a semantic token, which is what makes dark
+/* Anthrazit surfaces, dark green as the primary action, and the jade of the FI
+   logo's ring as the accent. Everything is a semantic token, which is what makes dark
    mode one block rather than a component sweep. */
 :root {
   color-scheme: light dark;
@@ -10,18 +10,24 @@
   --anthrazit-500:#55646a; --anthrazit-400:#7a8a90; --anthrazit-300:#a8b5ba;
   --anthrazit-200:#cbd4d7; --anthrazit-100:#e4eaec; --anthrazit-050:#f2f5f6;
 
-  /* A true green rather than the blue-leaning teal this started as: the hue is
-     pulled from ~163° to ~145°, which reads as green next to the cyan accent
-     instead of competing with it. */
-  --forest-950:#0a1a10; --forest-900:#0f2517; --forest-800:#15321f;
-  --forest-700:#1b4527; --forest-600:#215833; --forest-500:#2a7340;
-  --forest-400:#389553; --forest-300:#5bb877; --forest-200:#8dd5a2;
-  --forest-100:#c0eacd; --forest-050:#e3f6e9;
+  /* A true green rather than the blue-leaning teal this started as. The hue sat
+     at ~145° beside a cyan accent; with the jade logo it moves to ~152°, toward
+     the logo's letters (#093e2e, ~162°), and stops short of the jade accent so a
+     button and a link still read as two different things. */
+  --forest-950:#0a1a12; --forest-900:#0f251a; --forest-800:#153222;
+  --forest-700:#1b452c; --forest-600:#215839; --forest-500:#2a7349;
+  --forest-400:#38955e; --forest-300:#5bb882; --forest-200:#8dd5aa;
+  --forest-100:#c0ead2; --forest-050:#e3f6eb;
 
-  /* sampled from the first fi.png: #00bae2 at the top, #0782be toward the bottom.
-     The current logo's ring is the same hue a shade brighter (#00d2fd). */
-  --cyan-700:#0782be; --cyan-600:#0096c4; --cyan-500:#00b8e3;
-  --cyan-400:#4fd0f0; --cyan-200:#a6e9f8; --cyan-050:#e0f7fd;
+  /* The logo's ring and circuit traces: #218461, hue ~159°. 600 is the ring a
+     shade darker so a link on white clears 4.5:1 (5.0:1); 400 is the one that
+     clears it on the dark surface (7.4:1). */
+  --jade-700:#196b4d; --jade-600:#207e5c; --jade-500:#2ba176;
+  --jade-400:#45c496; --jade-200:#b0e8d3; --jade-050:#e8f7f2;
+
+  /* The logo's monstera leaves, hue ~118°: what "good" is drawn in, because the
+     jade now belongs to the accent, and "info" is drawn in that. */
+  --leaf-600:#357133; --leaf-400:#6ebd6b;
 
   --clay-700:#8c4526; --clay-600:#b85c33; --clay-500:#c2764a;
   --clay-300:#e39366; --clay-050:#fcf0e8;
@@ -48,10 +54,10 @@
   --primary-hover:var(--forest-800);
   --primary-soft:var(--forest-050);
   --on-primary:#ffffff;
-  --accent:var(--cyan-600);
-  --accent-bright:var(--cyan-500);
-  --accent-soft:var(--cyan-050);
-  --focus-ring:color-mix(in srgb, var(--cyan-500) 45%, transparent);
+  --accent:var(--jade-600);
+  --accent-bright:var(--jade-500);
+  --accent-soft:var(--jade-050);
+  --focus-ring:color-mix(in srgb, var(--jade-500) 45%, transparent);
 
   /* ── finance semantics ──────────────────────────────────────────────────────
      Green for money in, red for money out — the convention every bank statement
@@ -76,7 +82,7 @@
   --type-sonstiges:#7a8288;       --type-sonstiges-soft:#e9eced;
 
   /* ── feedback ───────────────────────────────────────────────────────────── */
-  --good:#2e7d5b; --good-soft:#ddf0e7;
+  --good:var(--leaf-600); --good-soft:#e3f3e2;
   --warn:var(--amber-600); --warn-soft:var(--amber-050);
   --danger:#b23b2b; --danger-soft:#fbe7e3;
   --info:var(--accent); --info-soft:var(--accent-soft);
@@ -115,11 +121,13 @@
   --primary-hover:var(--forest-400);
   --primary-soft:#16302a;
   --on-primary:#06120e;
-  --accent:var(--cyan-400);
-  --accent-soft:#0b2e38;
-  --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
+  --accent:var(--jade-400);
+  --accent-soft:#0f3326;
+  --focus-ring:color-mix(in srgb, var(--jade-400) 55%, transparent);
 
-  --income:var(--forest-300); --income-soft:#10301c;
+  /* Not the forest ramp any more: that moved toward the jade accent, and money in
+     keeps the green it had. */
+  --income:#5bb877; --income-soft:#10301c;
   --expense:var(--red-300); --expense-soft:#3a1a16;
   --transfer:#a3a7d6; --transfer-soft:#242642;
   --credit:var(--income); --credit-soft:var(--income-soft);
@@ -132,7 +140,7 @@
   --type-sparen:#57b187;    --type-sparen-soft:#12301f;
   --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
 
-  --good:#57b187; --good-soft:#12301f;
+  --good:var(--leaf-400); --good-soft:#133012;
   --warn:var(--amber-400); --warn-soft:#332703;
   --danger:#e58c7c; --danger-soft:#3a201c;
   --info:var(--accent); --info-soft:var(--accent-soft);
@@ -159,10 +167,10 @@
     --primary-hover:var(--forest-400);
     --primary-soft:#16302a;
     --on-primary:#06120e;
-    --accent:var(--cyan-400);
-    --accent-soft:#0b2e38;
-    --focus-ring:color-mix(in srgb, var(--cyan-400) 55%, transparent);
-    --income:var(--forest-300); --income-soft:#10301c;
+    --accent:var(--jade-400);
+    --accent-soft:#0f3326;
+    --focus-ring:color-mix(in srgb, var(--jade-400) 55%, transparent);
+    --income:#5bb877; --income-soft:#10301c;
     --expense:var(--red-300); --expense-soft:#3a1a16;
     --transfer:#a3a7d6; --transfer-soft:#242642;
     --credit:var(--income); --credit-soft:var(--income-soft);
@@ -173,7 +181,7 @@
     --type-variabel:#e0956b;  --type-variabel-soft:#37231a;
     --type-sparen:#57b187;    --type-sparen-soft:#12301f;
     --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
-    --good:#57b187; --good-soft:#12301f;
+    --good:var(--leaf-400); --good-soft:#133012;
     --warn:var(--amber-400); --warn-soft:#332703;
     --danger:#e58c7c; --danger-soft:#3a201c;
     --shadow-1:0 1px 2px rgba(0,0,0,.45);
