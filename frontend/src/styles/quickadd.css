@@ -24,7 +24,9 @@
 }
 .amount-display { font-size: clamp(2.4rem, 12vw, 3.4rem); font-weight: 700; letter-spacing: -0.03em; }
 .amount-display--expense  { color: var(--red-300); }
-.amount-display--income   { color: var(--forest-300); }
+/* Literal, like the red beside it: this screen is dark in both themes, so the
+   light theme's --income would be dark green on near-black. */
+.amount-display--income   { color: #5bb877; }
 .amount-display--transfer { color: #a3a7d6; }
 .quick__meta { font-size: .8rem; color: var(--on-inverse-muted); }
 
@@ -112,7 +114,7 @@
 }
 /* Three distinct states, so the resolved category is visible BEFORE committing. */
 .quick__confirm--rule    { background: var(--primary); color: var(--on-primary); }
-.quick__confirm--guess   { background: var(--accent); color: #06202a; }
+.quick__confirm--guess   { background: var(--accent); color: var(--on-accent); }
 .quick__confirm--unknown { background: var(--warn); color: #1a1400; }
 .quick__confirm:disabled { background: rgba(255,255,255,.12); color: var(--on-inverse-muted); }
 

@@ -57,7 +57,13 @@
   --accent:var(--jade-600);
   --accent-bright:var(--jade-500);
   --accent-soft:var(--jade-050);
+  --on-accent:#ffffff;
   --focus-ring:color-mix(in srgb, var(--jade-500) 45%, transparent);
+  /* A figure or line that is ABOUT the money rather than a direction of it: the
+     total balance, a cumulative line. It used to borrow the cyan accent, which
+     stood apart from the greens; the jade accent does not, and a balance drawn
+     in it reads as income. Ink does not. */
+  --figure:var(--anthrazit-700);
 
   /* ── finance semantics ──────────────────────────────────────────────────────
      Green for money in, red for money out — the convention every bank statement
@@ -78,11 +84,13 @@
   --type-einkommen:#1f8aa6;       --type-einkommen-soft:#dcf0f5;
   --type-fixkosten:#3d5a8a;       --type-fixkosten-soft:#e2e8f3;
   --type-variabel:#c0673c;        --type-variabel-soft:#fae8dd;
-  --type-sparen:#2e7d5b;          --type-sparen-soft:#ddf0e7;
+  /* Violet, not green: the accent, income, "good" and the button are all green
+     now, and the money flow draws savings right beside "left over" (accent). */
+  --type-sparen:#6a4d99;          --type-sparen-soft:#ede7f6;
   --type-sonstiges:#7a8288;       --type-sonstiges-soft:#e9eced;
 
   /* ── feedback ───────────────────────────────────────────────────────────── */
-  --good:var(--leaf-600); --good-soft:#e3f3e2;
+  --good:var(--leaf-600); --good-soft:#edf3dc;
   --warn:var(--amber-600); --warn-soft:var(--amber-050);
   --danger:#b23b2b; --danger-soft:#fbe7e3;
   --info:var(--accent); --info-soft:var(--accent-soft);
@@ -120,9 +128,9 @@
   --primary:var(--forest-500);
   --primary-hover:var(--forest-400);
   --primary-soft:#16302a;
-  --on-primary:#06120e;
+  --on-primary:#ffffff;
   --accent:var(--jade-400);
-  --accent-soft:#0f3326;
+  --accent-soft:#0f3326;  --on-accent:#04140d;  --figure:var(--anthrazit-100);
   --focus-ring:color-mix(in srgb, var(--jade-400) 55%, transparent);
 
   /* Not the forest ramp any more: that moved toward the jade accent, and money in
@@ -137,10 +145,10 @@
   --type-einkommen:#4fb8d4; --type-einkommen-soft:#10313b;
   --type-fixkosten:#7c98ce; --type-fixkosten-soft:#1a2338;
   --type-variabel:#e0956b;  --type-variabel-soft:#37231a;
-  --type-sparen:#57b187;    --type-sparen-soft:#12301f;
+  --type-sparen:#b39ddf;    --type-sparen-soft:#272038;
   --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
 
-  --good:var(--leaf-400); --good-soft:#133012;
+  --good:var(--leaf-400); --good-soft:#1d2c10;
   --warn:var(--amber-400); --warn-soft:#332703;
   --danger:#e58c7c; --danger-soft:#3a201c;
   --info:var(--accent); --info-soft:var(--accent-soft);
@@ -166,9 +174,9 @@
     --primary:var(--forest-500);
     --primary-hover:var(--forest-400);
     --primary-soft:#16302a;
-    --on-primary:#06120e;
+    --on-primary:#ffffff;
     --accent:var(--jade-400);
-    --accent-soft:#0f3326;
+    --accent-soft:#0f3326;  --on-accent:#04140d;  --figure:var(--anthrazit-100);
     --focus-ring:color-mix(in srgb, var(--jade-400) 55%, transparent);
     --income:#5bb877; --income-soft:#10301c;
     --expense:var(--red-300); --expense-soft:#3a1a16;
@@ -179,9 +187,9 @@
     --type-einkommen:#4fb8d4; --type-einkommen-soft:#10313b;
     --type-fixkosten:#7c98ce; --type-fixkosten-soft:#1a2338;
     --type-variabel:#e0956b;  --type-variabel-soft:#37231a;
-    --type-sparen:#57b187;    --type-sparen-soft:#12301f;
+    --type-sparen:#b39ddf;    --type-sparen-soft:#272038;
     --type-sonstiges:#a8b0b6; --type-sonstiges-soft:#282e32;
-    --good:var(--leaf-400); --good-soft:#133012;
+    --good:var(--leaf-400); --good-soft:#1d2c10;
     --warn:var(--amber-400); --warn-soft:#332703;
     --danger:#e58c7c; --danger-soft:#3a201c;
     --shadow-1:0 1px 2px rgba(0,0,0,.45);

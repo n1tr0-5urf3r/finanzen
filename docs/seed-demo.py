@@ -97,7 +97,9 @@ for m, c, a in [(7, "Wochenmarkt", 2340), (8, "Flohmarkt", 1800), (9, "Trödella
     call("/bookings", {"year": 2026, "month": m, "kind": "expense",
                        "amountCents": a, "comment": c}, cookie=cookie); n += 1
 
-call("/years", {"year": 2026, "openingBalanceCents": 1284350}, cookie=cookie)
+# The first booking already created 2026 (as derived), so POST would be a 409:
+# the opening balance is set on the existing year.
+call("/years/2026", {"openingBalanceCents": 1284350}, cookie=cookie, method="PUT")
 d = call("/dashboard?year=2026", cookie=cookie)[1]
 print(f"{n} invented bookings · Bilanz {d['balanceCents']/100:.2f} · ohne Kategorie {d['uncategorizedCount']}")
 open('/tmp/demo-cookie.txt','w').write(cookie)

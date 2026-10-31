@@ -9,10 +9,13 @@ import { api, asList } from '../../lib/api';
 import { formatEuro, formatEuroCompact, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useMaskAmount } from '../../lib/privacy';
+import { useNarrow } from '../../lib/useNarrow';
 import { qk } from '../../lib/queryKeys';
 import type { Forecast, ForecastBasisRow, ForecastMonth } from '../../lib/types';
 
-const LEFT = 58;
+/* The monthly charts' gutter, for the same reason: a closing balance is a
+   yearly-sized figure ("12.000 €"), and 58 units clipped it to "0.000 €". */
+const LEFT = { wide: 76, narrow: 118 };
 const RIGHT = 710;
 const TOP = 12;
 
@@ -28,6 +31,7 @@ const TOP = 12;
 export function ForecastPanel({ year }: { year: number }) {
   const t = useT();
   const maskAmount = useMaskAmount();
+  const left = LEFT[useNarrow() ? 'narrow' : 'wide'];
 
   const query = useQuery({
     queryKey: qk.derived.forecast(year),
@@ -58,7 +62,7 @@ export function ForecastPanel({ year }: { year: number }) {
     TOP,
     bottom,
   );
-  const band = bands(months.length, LEFT, RIGHT);
+  const band = bands(months.length, left, RIGHT);
 
   const actual = months.filter((m) => !m.isProjected);
   const projected = months.filter((m) => m.isProjected);
@@ -163,7 +167,7 @@ export function ForecastPanel({ year }: { year: number }) {
         <Gridlines
           ticks={scale.ticks}
           y={scale.y}
-          left={LEFT}
+          left={left}
           right={RIGHT}
           format={formatEuroCompact}
         />

@@ -39,7 +39,7 @@
 .kpi__value { display: block; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
 .kpi__scope { font-size: .68rem; color: var(--muted); margin-top: .2rem; }
 .kpi--warn { border-color: var(--uncategorized); background: var(--uncategorized-soft); }
-.kpi--accent .kpi__value { color: var(--accent); }
+.kpi--accent .kpi__value { color: var(--figure); }
 
 /* ── tables ─────────────────────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
@@ -67,7 +67,9 @@
   padding: .7rem .85rem; border-radius: var(--r-md); font-size: .85rem;
   border: 1px solid; margin-bottom: 1rem;
 }
-.banner--info { background: var(--info-soft); border-color: var(--accent); color: var(--ink); }
+/* A neutral ground with the accent edge: a jade box on a jade ground read as a
+   success message. */
+.banner--info { background: var(--surface-2); border-color: var(--accent); color: var(--ink); }
 .banner--warn { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
 .banner--danger { background: var(--danger-soft); border-color: var(--danger); color: var(--ink); }
 .banner strong { display: block; }

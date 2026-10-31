@@ -30,8 +30,8 @@
 .chart__bar--sparen    { fill: var(--type-sparen); }
 .chart__bar--sonstiges { fill: var(--type-sonstiges); }
 
-.chart__line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
-.chart__dot { fill: var(--accent); }
+.chart__line { fill: none; stroke: var(--figure); stroke-width: 2; stroke-linejoin: round; }
+.chart__dot { fill: var(--figure); }
 
 /* The default: present to a screen reader, absent to the eye. */
 .chart__data {
