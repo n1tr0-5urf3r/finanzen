@@ -83,7 +83,7 @@ function renderPage(locale: 'de' | 'en' = 'de') {
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale={locale}>
         <MemoryRouter initialEntries={['/auswertung?ansicht=monate&jahr=2026']}>
-          <MonthsTab year={2026} />
+          <MonthsTab year={2026} household />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,

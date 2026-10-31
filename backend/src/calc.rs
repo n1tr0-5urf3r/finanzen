@@ -54,6 +54,10 @@ pub struct LedgerRow {
     pub is_savings: bool,
     pub in_consumption: bool,
     pub tax_relevant: bool,
+    /// My share of a household purchase somebody else paid (migration 0024), not a
+    /// booking. It counts like any other row; only the counts that point the user
+    /// at the booking list leave it out, because it cannot be found or fixed there.
+    pub ko_household: bool,
 }
 
 impl LedgerRow {
@@ -74,8 +78,16 @@ pub struct Totals {
     pub saldo_cents: i64,
     pub booking_count: i64,
     pub transfer_count: i64,
+    /// Uncategorised BOOKINGS: the ones the booking list can show and fix.
     pub uncategorized_count: i64,
+    /// Household shares without a category — an unmapped KitchenOwl category,
+    /// fixed on the KitchenOwl page rather than in the booking list.
+    pub household_uncategorized_count: i64,
+    /// Everything without a category, bookings and household shares alike: the
+    /// figure the "(ohne Kategorie)" row adds up to.
     pub uncategorized_net_cents: i64,
+    /// How many of `booking_count` are household shares rather than bookings.
+    pub household_count: i64,
 }
 
 pub fn totals(rows: &[LedgerRow]) -> Totals {
@@ -86,7 +98,9 @@ pub fn totals(rows: &[LedgerRow]) -> Totals {
         booking_count: rows.len() as i64,
         transfer_count: 0,
         uncategorized_count: 0,
+        household_uncategorized_count: 0,
         uncategorized_net_cents: 0,
+        household_count: 0,
     };
     for r in rows {
         match r.kind {
@@ -98,8 +112,15 @@ pub fn totals(rows: &[LedgerRow]) -> Totals {
         // consumed. Counting it as "uncategorised" would put a permanent non-zero
         // badge on the dashboard that the user can never clear.
         if r.category_id.is_none() && r.kind != Kind::Transfer {
-            t.uncategorized_count += 1;
+            if r.ko_household {
+                t.household_uncategorized_count += 1;
+            } else {
+                t.uncategorized_count += 1;
+            }
             t.uncategorized_net_cents += r.net_cents();
+        }
+        if r.ko_household {
+            t.household_count += 1;
         }
     }
     t.saldo_cents = t.income_cents - t.expense_cents;

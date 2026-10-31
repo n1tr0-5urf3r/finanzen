@@ -241,7 +241,7 @@ describe('the year comparison', () => {
     await screen.findAllByText('Miete');
 
     const calls = api.mock.calls.map(([p]) => String(p));
-    expect(calls.some((p) => p === '/analysis/trailing?year=2026&month=9')).toBe(true);
+    expect(calls.some((p) => p === '/analysis/trailing?year=2026&month=9&household=true')).toBe(true);
   });
 
   it('says a comparison needs two years when the first one has no predecessor', async () => {

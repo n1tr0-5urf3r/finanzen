@@ -153,15 +153,18 @@ struct TaxRow {
 }
 
 async fn tax_rows(ctx: &mut Ctx, year: i32) -> Result<Vec<TaxRow>> {
-    let rows = sqlx::query(
+    let rows = sqlx::query(&format!(
         "SELECT b.period_month, b.booked_on, b.comment, b.category_name, b.kind, \
                 b.amount_cents, \
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
-           FROM v_ledger b \
+           FROM {} b \
           WHERE b.tax_relevant AND b.period_year = $1::smallint \
           ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, \
                    b.bank_amount_cents, b.id",
-    )
+        // The same ledger as the JSON report: no household shares, ever — a
+        // flatmate's purchase is not my receipt.
+        crate::ledger::Ledger::Personal.view()
+    ))
     .bind(year)
     .fetch_all(ctx.tenant.conn())
     .await?;

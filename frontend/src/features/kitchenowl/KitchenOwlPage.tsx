@@ -29,11 +29,25 @@ import type {
 } from '../../lib/types';
 
 import { KoAmounts, KoCategoryChip, KoLinkState, KoSplit } from './parts';
-import { KoAnalysis } from './KoAnalysis';
+import { KoCategoryMapTab } from './KoCategoryMap';
 import { KoTagging } from './KoTagging';
 import { SettlementCard } from './SettlementCard';
 
-type Tab = 'ledger' | 'analysis' | 'tag' | 'review' | 'push';
+type Tab = 'ledger' | 'categories' | 'tag' | 'review' | 'push';
+
+/**
+ * The tabs, in order. There used to be an `analysis` tab, the household's own
+ * analysis beside the personal one; it went when the main analysis began counting
+ * my shares of the household's purchases. An old link to it — or any value this
+ * list does not know — opens the ledger rather than an empty page.
+ */
+const TABS: [Tab, MessageKey][] = [
+  ['ledger', 'ko.tabLedger'],
+  ['categories', 'ko.tabCategories'],
+  ['tag', 'ko.tabTag'],
+  ['review', 'ko.tabReview'],
+  ['push', 'ko.tabPush'],
+];
 
 /**
  * The KitchenOwl screen: the mirror as a browsable ledger, the link suggestions,
@@ -53,7 +67,8 @@ export function KitchenOwlPage() {
   const [params, setParams] = useSearchParams();
   const [notice, setNotice] = useState<string | null>(null);
 
-  const tab = (params.get('ansicht') as Tab) ?? 'ledger';
+  const view = params.get('ansicht');
+  const tab: Tab = TABS.find(([value]) => value === view)?.[0] ?? 'ledger';
   const linked = params.get('verknuepft');
   const search = params.get('suche') ?? '';
   const includeArchived = params.get('geloescht') === '1';
@@ -146,15 +161,7 @@ export function KitchenOwlPage() {
       ) : (
         <>
           <div className="segmented tabs ko-tabs" role="tablist">
-            {(
-              [
-                ['ledger', 'ko.tabLedger'],
-                ['analysis', 'ko.tabAnalysis'],
-                ['tag', 'ko.tabTag'],
-                ['review', 'ko.tabReview'],
-                ['push', 'ko.tabPush'],
-              ] as [Tab, MessageKey][]
-            ).map(([value, label]) => (
+            {TABS.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -197,7 +204,7 @@ export function KitchenOwlPage() {
               />
             </>
           )}
-          {tab === 'analysis' && <KoAnalysis />}
+          {tab === 'categories' && <KoCategoryMapTab />}
           {tab === 'tag' && <KoTagging />}
           {tab === 'review' && <Review onNotice={setNotice} />}
           {tab === 'push' && <PushQueue onNotice={setNotice} />}

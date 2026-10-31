@@ -1,5 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 
+/** Which of the two ledgers an analysis figure was computed from. */
+function ledgerKey(household: boolean) {
+  return household ? 'with-household' : 'personal';
+}
+
 /**
  * One place where query keys are built.
  *
@@ -33,17 +38,25 @@ export const qk = {
     root: ['derived'] as const,
     year: (year: number) => ['derived', year] as const,
     dashboard: (year: number) => ['derived', year, 'dashboard'] as const,
-    months: (year: number) => ['derived', year, 'months'] as const,
-    categories: (year: number) => ['derived', year, 'categories'] as const,
+    // The analysis page's figures exist twice — with the household's shares and
+    // without — and switching back and forth should not refetch either. The last
+    // element keeps them apart; it is last so the year prefix still invalidates
+    // both at once.
+    months: (year: number, household = true) =>
+      ['derived', year, 'months', ledgerKey(household)] as const,
+    categories: (year: number, household = true) =>
+      ['derived', year, 'categories', ledgerKey(household)] as const,
     tax: (year: number) => ['derived', year, 'tax'] as const,
-    series: (year: number, mode: string, subject: string) =>
-      ['derived', year, 'series', mode, subject] as const,
-    seriesSubjects: (year: number) => ['derived', year, 'series-subjects'] as const,
-    compare: (year: number) => ['derived', year, 'compare'] as const,
+    series: (year: number, mode: string, subject: string, household = true) =>
+      ['derived', year, 'series', mode, subject, ledgerKey(household)] as const,
+    seriesSubjects: (year: number, household = true) =>
+      ['derived', year, 'series-subjects', ledgerKey(household)] as const,
+    compare: (year: number, household = true) =>
+      ['derived', year, 'compare', ledgerKey(household)] as const,
     /** Not scoped by year: this one IS every year. */
-    overYears: () => ['derived', 'over-years'] as const,
-    trailing: (year: number, month: number) =>
-      ['derived', year, 'trailing', month] as const,
+    overYears: (household = true) => ['derived', 'over-years', ledgerKey(household)] as const,
+    trailing: (year: number, month: number, household = true) =>
+      ['derived', year, 'trailing', month, ledgerKey(household)] as const,
     forecast: (year: number) => ['derived', year, 'forecast'] as const,
     anomalies: (year: number, month: number) =>
       ['derived', year, 'anomalies', month] as const,
@@ -84,15 +97,8 @@ export const qk = {
     settlement: () => ['kitchenowl', 'settlement'] as const,
     untagged: (year: number | null) => ['kitchenowl', 'untagged', year] as const,
     categorySuggestion: (name: string) => ['kitchenowl', 'category-suggestion', name] as const,
-    analysis: (year: number) => ['kitchenowl', 'analysis', year] as const,
-    series: (year: number, mode: string, subject: string) =>
-      ['kitchenowl', 'analysis', year, 'series', mode, subject] as const,
-    seriesSubjects: (year: number) => ['kitchenowl', 'analysis', year, 'subjects'] as const,
-    compare: (year: number) => ['kitchenowl', 'analysis', year, 'compare'] as const,
-    /** Not scoped by year: this one IS every year. */
-    overYears: () => ['kitchenowl', 'analysis', 'over-years'] as const,
-    trailing: (year: number, month: number) =>
-      ['kitchenowl', 'analysis', year, 'trailing', month] as const,
+    /** Which finance category each KitchenOwl category's shares count in. */
+    categoryMap: () => ['kitchenowl', 'category-map'] as const,
   },
   admin: {
     users: () => ['admin', 'users'] as const,

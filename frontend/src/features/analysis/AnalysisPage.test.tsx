@@ -75,16 +75,19 @@ const ANALYSIS: CategoryAnalysis = {
   totalNetCents: 900000,
   monthsWithData: 9,
   uncategorizedCount: 0,
+  householdUncategorizedCount: 0,
+  householdCount: 0,
   excludedTransferCount: 4,
 };
 
-function renderPage(locale: 'de' | 'en' = 'de') {
+function renderPage(locale: 'de' | 'en' = 'de', entry = '/auswertung?jahr=2026') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale={locale}>
-        <MemoryRouter initialEntries={['/auswertung?jahr=2026']}>
+        <MemoryRouter initialEntries={[entry]}>
           <AnalysisPage />
+          <Landed />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,
@@ -249,9 +252,8 @@ describe('the category analysis', () => {
   });
 
   /**
-   * The comparison used to be a screen of its own, which is exactly the split the
-   * household's identical pair never had. Both halves are reachable from here
-   * now, and the year survives the switch — going from the breakdown of a year to
+   * The comparison used to be a screen of its own. Both halves are reachable
+   * from here now, and the year survives the switch — going from the breakdown of a year to
    * the comparison of that same year must not quietly send you back to today.
    */
   it('reaches the comparison from the same screen, keeping the year', async () => {
@@ -263,7 +265,7 @@ describe('the category analysis', () => {
 
     await waitFor(() =>
       expect(api.mock.calls.map(([path]) => String(path))).toContain(
-        '/analysis/compare?year=2026',
+        '/analysis/compare?year=2026&household=true',
       ),
     );
     expect(screen.getByRole('tab', { name: 'Jahresvergleich' })).toHaveAttribute(
@@ -287,7 +289,7 @@ describe('the category analysis', () => {
 
     await waitFor(() =>
       expect(api.mock.calls.map(([path]) => String(path))).toContain(
-        '/overview/months?year=2026',
+        '/overview/months?year=2026&household=true',
       ),
     );
     expect(screen.getByRole('tab', { name: 'Monate' })).toHaveAttribute('aria-selected', 'true');
@@ -318,7 +320,72 @@ describe('the category analysis', () => {
       'aria-selected',
       'true',
     );
-    expect(api.mock.calls.map(([p]) => String(p))).not.toContain('/analysis/compare?year=2026');
+    expect(api.mock.calls.map(([p]) => String(p))).not.toContain(
+      '/analysis/compare?year=2026&household=true',
+    );
+  });
+});
+
+/**
+ * The household switch: my shares of what the flatmates paid are in every figure
+ * unless it is turned off, for every tab at once, and the choice is part of the
+ * address like the year and the tab.
+ */
+describe('the household switch', () => {
+  const requested = () => api.mock.calls.map(([p]) => String(p));
+
+  it('counts the household by default, and every request says so', async () => {
+    renderPage();
+    await screen.findAllByText('Miete');
+    expect(screen.getByRole('checkbox', { name: 'Haushaltsanteile (KitchenOwl) einbeziehen' })).toBeChecked();
+    expect(requested()).toContain('/analysis/categories?year=2026&household=true');
+    expect(requested().some((p) => p.includes('household=false'))).toBe(false);
+    // The default is not written to the address.
+    expect(screen.getByTestId('landed').textContent).toBe('?jahr=2026');
+  });
+
+  it('switches it off in the address and asks for the bookings alone', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Miete');
+
+    await user.click(screen.getByRole('checkbox', { name: 'Haushaltsanteile (KitchenOwl) einbeziehen' }));
+
+    expect(screen.getByTestId('landed').textContent).toBe('?jahr=2026&haushalt=0');
+    await waitFor(() =>
+      expect(requested()).toContain('/analysis/categories?year=2026&household=false'),
+    );
+    expect(
+      screen.getByRole('checkbox', { name: 'Haushaltsanteile (KitchenOwl) einbeziehen' }),
+    ).not.toBeChecked();
+
+    // And it holds on the next tab, too.
+    await user.click(screen.getByRole('tab', { name: 'Jahresvergleich' }));
+    await waitFor(() =>
+      expect(requested()).toContain('/analysis/compare?year=2026&household=false'),
+    );
+    expect(screen.getByTestId('landed').textContent).toContain('haushalt=0');
+  });
+
+  it('opens switched off from a link, on a tab without a year', async () => {
+    renderPage('de', '/auswertung?ansicht=jahre&haushalt=0');
+    await waitFor(() => expect(requested()).toContain('/analysis/over-years?household=false'));
+    expect(
+      screen.getByRole('checkbox', { name: 'Haushaltsanteile (KitchenOwl) einbeziehen' }),
+    ).not.toBeChecked();
+  });
+
+  it('says how many household shares still lack a category, and where to fix it', async () => {
+    api.mockImplementation((path: string) =>
+      String(path).startsWith('/analysis/categories')
+        ? Promise.resolve({ ...ANALYSIS, householdUncategorizedCount: 3, householdCount: 5 } as never)
+        : Promise.resolve([] as never),
+    );
+    renderPage();
+    const link = await screen.findByRole('link', {
+      name: /3 Haushaltsanteile sind keiner Kategorie zugeordnet/,
+    });
+    expect(link).toHaveAttribute('href', '/kitchenowl?ansicht=categories');
   });
 });
 

@@ -8,7 +8,9 @@ import { Banner, EmptyState, ErrorState, LoadingState, StatusPill } from '../../
 import { api, asList } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
+import { HouseholdUncategorizedBanner } from './HouseholdItems';
 import { SeriesChart, SERIES_ANCHOR, useSeriesSelection } from './SeriesChart';
 import type { MessageKey } from '../../lib/messages/de';
 import type { Category, CategoryAnalysis, CategoryAnalysisRow } from '../../lib/types';
@@ -43,13 +45,14 @@ const COLUMNS: { key: SortKey; labelKey: MessageKey; numeric: boolean }[] = [
  *
  * The year and the page furniture belong to `AnalysisPage`; this is only the tab.
  */
-export function CategoryTab({ year }: { year: number }) {
+export function CategoryTab({ year, household }: { year: number; household: boolean }) {
   const t = useT();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'net', desc: true });
 
   const query = useQuery({
-    queryKey: qk.derived.categories(year),
-    queryFn: () => api<CategoryAnalysis>(`/analysis/categories?year=${year}`),
+    queryKey: qk.derived.categories(year, household),
+    queryFn: () =>
+      api<CategoryAnalysis>(withHousehold(`/analysis/categories?year=${year}`, household)),
   });
   // The picker needs the real category list, not the analysis rows: a category
   // with no bookings this year is still a legitimate thing to chart.
@@ -109,11 +112,16 @@ export function CategoryTab({ year }: { year: number }) {
               </Link>
             </Banner>
           )}
+          <HouseholdUncategorizedBanner count={query.data.householdUncategorizedCount} />
 
           {/* Above the table, because "how much do I spend on tanken" is the
               question people come here with; the year's totals are what they
               scroll to afterwards. */}
-          <SeriesChart year={year} categories={sortedByName(asList<Category>(categories.data))} />
+          <SeriesChart
+            year={year}
+            household={household}
+            categories={sortedByName(asList<Category>(categories.data))}
+          />
 
           <div className="panel table-wrap screen-table">
             <table className="data-table">

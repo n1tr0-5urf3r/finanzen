@@ -65,7 +65,8 @@ pub enum CountedBasis {
     /// Linked to a KitchenOwl expense: counted at my share of it.
     KoShare,
     /// A household settlement: counted net of the others' shares of my linked
-    /// purchases, which the statistics already left out.
+    /// purchases, which the statistics already left out, and of my shares of the
+    /// flatmates' purchases, which they already count (migration 0024).
     KoSettlement,
 }
 
@@ -171,7 +172,9 @@ pub struct Booking {
     /// of `v_counted_booking` applies (`counted_basis` says which): for a booking
     /// linked to a KitchenOwl expense, my share of it, scaled to this booking; for
     /// a household settlement, the settlement net of the others' shares of my
-    /// linked purchases since the previous one. `amount_cents` stays what moved,
+    /// linked purchases and of my shares of the flatmates' purchases since the
+    /// previous one (the default the statistics use; the analysis page can
+    /// switch the latter off). `amount_cents` stays what moved,
     /// because a listing shows the bank; this is how a statistic that differs from
     /// the rows behind it explains itself. Always positive, like `amount_cents`.
     pub counted_amount_cents: Option<i64>,
@@ -396,43 +399,17 @@ pub struct CategoryAnalysis {
     pub rows: Vec<CategoryAnalysisRow>,
     pub total_net_cents: i64,
     pub months_with_data: i64,
+    /// Uncategorised bookings — the ones the booking list can show.
     pub uncategorized_count: i64,
+    /// Household shares counted without a category, because their KitchenOwl
+    /// category is not mapped to one. Fixed on the KitchenOwl page, not in the
+    /// booking list, so counted apart from the bookings.
+    pub household_uncategorized_count: i64,
+    /// How many of the rows' items are household shares rather than bookings; 0
+    /// when they were switched off.
+    pub household_count: i64,
     /// Transfers are excluded from this analysis; the count lets the UI say so.
     pub excluded_transfer_count: i64,
-}
-
-/// One household subject — a KitchenOwl category or a member who paid — across
-/// every year the mirror covers.
-///
-/// Two figures per year, never added to each other: what the household spent, and
-/// the slice of it the user carries. For a payer the second is meaningless (they
-/// fronted the whole amount) and is zero.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoOverYearsSeries {
-    pub key: String,
-    pub label: String,
-    pub per_year_amount_cents: Vec<i64>,
-    pub per_year_own_share_cents: Vec<i64>,
-    pub total_amount_cents: i64,
-    pub total_own_share_cents: i64,
-    pub years_active: i64,
-    pub expense_count: i64,
-}
-
-/// The household mirror, one column per year.
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoOverYears {
-    pub years: Vec<i32>,
-    pub amount_per_year_cents: Vec<i64>,
-    pub own_share_per_year_cents: Vec<i64>,
-    pub months_per_year: Vec<i64>,
-    pub by_category: Vec<KoOverYearsSeries>,
-    pub by_payer: Vec<KoOverYearsSeries>,
-    pub expense_count: i64,
-    /// Kept out by KitchenOwl itself, and therefore out of every figure here.
-    pub excluded_count: i64,
 }
 
 /// One subject — a category or a type — across every year the ledger covers.
@@ -651,8 +628,40 @@ pub struct MonthlySeries {
     /// and not by the year's months — an expense that only happens in summer
     /// should not look small.
     pub average_per_active_month_cents: i64,
+    /// Bookings and household shares together, as in every count of the analysis.
     pub booking_count: i64,
     pub months_with_data: i64,
+    /// The household shares among the figures, oldest first, so a drilldown can
+    /// list them beside the bookings. Empty when the household is switched off.
+    pub household_items: Vec<HouseholdShareItem>,
+}
+
+/// My share of one household purchase somebody else paid, as the statistics count
+/// it (migration 0024). Not a booking: it has no account and cannot be edited
+/// here — it changes in KitchenOwl, and its category through the category map.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HouseholdShareItem {
+    /// The mirrored expense's id; also the row's id in the ledger.
+    pub id: Uuid,
+    /// KitchenOwl's id for the expense.
+    pub external_id: i64,
+    /// The expense's name in KitchenOwl. Data, so never translated.
+    pub name: String,
+    pub date: NaiveDate,
+    pub month: u8,
+    pub month_name: String,
+    /// The member who paid. `null` if they have since left the household.
+    pub paid_by_name: Option<String>,
+    /// What the household spent in total.
+    pub amount_cents: i64,
+    /// My share of it — the figure that counts. Negative for a refund.
+    pub own_share_cents: i64,
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    /// The finance category's type label, so the item's chip matches a booking's.
+    pub category_type: Option<String>,
+    pub ko_category_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1204,10 +1213,12 @@ pub struct RestoreResult {
 
 // ------------------------------------------------------------- kitchenowl
 //
-// KitchenOwl is a SEPARATE, PARALLEL LEDGER. Nothing in this section may be added
-// to a personal-booking figure, and every DTO that carries both the shared amount
-// and the user's own share names them so they cannot be confused:
-// `amountCents` is what the household spent, `ownShareCents` is the user's slice.
+// KitchenOwl is a SEPARATE, PARALLEL LEDGER. Nothing in this section is added to
+// a personal-booking figure; the statistics take the user's shares of it through
+// `v_ledger` (migrations 0022–0024), never from these DTOs. Every DTO that carries
+// both the shared amount and the user's own share names them so they cannot be
+// confused: `amountCents` is what the household spent, `ownShareCents` is the
+// user's slice.
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1226,7 +1237,9 @@ pub struct KoMember {
 
 /// A KitchenOwl expense category. A **different taxonomy** from the app's 32
 /// categories: seven household labels with no relationship to Fixkosten/Variable
-/// Kosten. Never auto-mapped, and the UI must not style it like an app category.
+/// Kosten. Never auto-mapped — the user maps each one to a finance category on the
+/// KitchenOwl page ([`KoCategoryMapping`]) — and the UI must not style it like an
+/// app category.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KoCategory {
@@ -1236,6 +1249,44 @@ pub struct KoCategory {
     pub color_argb: Option<i64>,
     pub budget_cents: Option<i64>,
     pub fetched_at: DateTime<Utc>,
+}
+
+/// One KitchenOwl category and the finance category my shares of the flatmates'
+/// purchases in it count in.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategoryMapping {
+    pub ko_category_id: i64,
+    /// KitchenOwl's name for it. Data, so never translated.
+    pub name: String,
+    /// The mapping. `null` counts the shares without a category.
+    pub finances_category_id: Option<Uuid>,
+    pub finances_category_name: Option<String>,
+    /// A finance category of exactly the same name, offered while unmapped. Never
+    /// applied by itself.
+    pub suggested_category_id: Option<Uuid>,
+    /// My shares of the flatmates' purchases in this category, over the whole
+    /// mirror: how many, and for how much — what the mapping moves.
+    pub share_count: i64,
+    pub own_share_cents: i64,
+}
+
+/// The whole map, and the shares no mapping can reach.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategoryMap {
+    pub categories: Vec<KoCategoryMapping>,
+    /// Shares in expenses KitchenOwl has no category for. They count without a
+    /// category until the expense is tagged.
+    pub untagged_share_count: i64,
+    pub untagged_own_share_cents: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KoCategoryMapInput {
+    /// The finance category, or `null` to remove the mapping.
+    pub finances_category_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -1548,238 +1599,6 @@ pub struct KoSummary {
     pub last_synced_at: Option<DateTime<Utc>>,
     pub stale: bool,
     pub warning: Option<String>,
-}
-
-/// One KitchenOwl category over a year.
-///
-/// Both figures, always: `amountCents` is what the household spent and
-/// `ownShareCents` is the user's slice of it. They are different numbers with
-/// different meanings and adding them is meaningless.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoCategoryAnalysisRow {
-    /// Null for expenses with no KitchenOwl category — the normal case for a third
-    /// of the live corpus, never an error.
-    pub ko_category_id: Option<i64>,
-    pub ko_category_name: Option<String>,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    /// Of the household's total, not of the user's share.
-    pub share_of_total: f64,
-    pub average_per_month_cents: i64,
-    pub average_own_share_per_month_cents: i64,
-    pub monthly_amount_cents: Vec<i64>,
-    pub monthly_own_share_cents: Vec<i64>,
-}
-
-/// Who paid, which only a shared ledger can ask.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoPayerShare {
-    pub member_id: Option<i64>,
-    pub name: String,
-    pub amount_cents: i64,
-    pub expense_count: i64,
-    /// Twelve slots, Januar first. The flow diagram shows one month at a time and
-    /// the year total alone cannot answer "who fronted June".
-    pub monthly_amount_cents: Vec<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoCategoryAnalysis {
-    pub year: i32,
-    pub rows: Vec<KoCategoryAnalysisRow>,
-    pub total_amount_cents: i64,
-    pub total_own_share_cents: i64,
-    pub expense_count: i64,
-    pub months_with_data: i64,
-    pub uncategorized_count: i64,
-    /// Expenses KitchenOwl itself keeps out of its statistics, so this analysis
-    /// does too. Reported rather than hidden.
-    pub excluded_count: i64,
-    pub paid_by: Vec<KoPayerShare>,
-    /// The years the mirror holds anything for, newest first — the year picker
-    /// cannot borrow the personal ledger's years, which start earlier.
-    pub years: Vec<i32>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoSeriesMonth {
-    pub month: u8,
-    /// German month name; data, not chrome.
-    pub month_name: String,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-}
-
-/// One KitchenOwl category or one recurring name across twelve months.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoMonthlySeries {
-    pub year: i32,
-    /// `category`, `name` or `uncategorized`.
-    pub mode: String,
-    pub subject: String,
-    pub ko_category_id: Option<i64>,
-    pub months: Vec<KoSeriesMonth>,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    /// Divided by the months that hold THIS subject, never by twelve.
-    pub average_per_active_month_cents: i64,
-    pub average_own_share_per_active_month_cents: i64,
-    pub months_with_data: i64,
-}
-
-/// One KitchenOwl category, this year against last.
-///
-/// Both figures are carried through the comparison, and so are both deltas. A
-/// household that spent 200 € more of which the user carries 100 € more is two
-/// facts, and collapsing them to one would be the same mistake the single-year
-/// view is built to avoid.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoCompareRow {
-    pub ko_category_id: Option<i64>,
-    pub ko_category_name: Option<String>,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    pub previous_amount_cents: i64,
-    pub previous_own_share_cents: i64,
-    pub previous_expense_count: i64,
-    pub delta_amount_cents: i64,
-    pub delta_own_share_cents: i64,
-    /// `delta / previous`, absent when there is no previous to be a share of —
-    /// "+∞ %" for a category that did not exist last year is worse than nothing,
-    /// and `isNew` says what actually happened.
-    pub delta_ratio: Option<f64>,
-    /// The same figures restricted to the months both years carry. The mirror
-    /// started on 2024-12-22, so 2024 against 2025 is a part year against a full
-    /// one and the raw totals would be a statement about the calendar.
-    pub comparable_amount_cents: i64,
-    pub comparable_own_share_cents: i64,
-    pub comparable_previous_amount_cents: i64,
-    pub comparable_previous_own_share_cents: i64,
-    pub comparable_delta_amount_cents: i64,
-    pub comparable_delta_own_share_cents: i64,
-    pub comparable_delta_ratio: Option<f64>,
-    pub monthly_amount_cents: Vec<i64>,
-    pub monthly_own_share_cents: Vec<i64>,
-    pub previous_monthly_amount_cents: Vec<i64>,
-    pub previous_monthly_own_share_cents: Vec<i64>,
-    pub is_new: bool,
-    pub is_gone: bool,
-}
-
-/// One year's side of the comparison.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoCompareTotals {
-    pub year: i32,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    pub months_with_data: i64,
-    /// Where the year's data stops, so a trailing window can end there instead of
-    /// running into months that have not happened.
-    pub last_month_with_data: Option<u8>,
-    pub comparable_amount_cents: i64,
-    pub comparable_own_share_cents: i64,
-    pub comparable_expense_count: i64,
-    /// What KitchenOwl itself keeps out of its statistics, per year.
-    pub excluded_count: i64,
-}
-
-/// Who paid, this year against last.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoComparePayer {
-    pub member_id: Option<i64>,
-    pub name: String,
-    pub amount_cents: i64,
-    pub previous_amount_cents: i64,
-    pub delta_cents: i64,
-    pub expense_count: i64,
-    pub previous_expense_count: i64,
-}
-
-/// The household's year against the one before it.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoYearComparison {
-    pub year: i32,
-    pub previous_year: i32,
-    pub current: KoCompareTotals,
-    pub previous: KoCompareTotals,
-    /// The months both years actually carry expenses in.
-    pub comparable_months: Vec<u8>,
-    /// False when the two years cover different months, which is when the raw
-    /// totals stop being a comparison.
-    pub fully_comparable: bool,
-    pub previous_year_has_data: bool,
-    pub rows: Vec<KoCompareRow>,
-    pub paid_by: Vec<KoComparePayer>,
-    /// Every year the mirror holds, newest first — the picker's options.
-    pub years: Vec<i32>,
-}
-
-/// One month of a trailing window, in window order.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoTrailingMonth {
-    pub year: i32,
-    pub month: u8,
-    pub month_name: String,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-}
-
-/// One category over a trailing window, its twelve values in window order.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoTrailingCategory {
-    pub ko_category_id: Option<i64>,
-    pub ko_category_name: Option<String>,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    pub average_per_month_cents: i64,
-    pub average_own_share_per_month_cents: i64,
-    pub monthly_amount_cents: Vec<i64>,
-    pub monthly_own_share_cents: Vec<i64>,
-}
-
-/// Twelve months ending wherever asked, ignoring the year boundary.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoTrailingWindow {
-    pub year: i32,
-    pub month: u8,
-    pub from_year: i32,
-    pub from_month: u8,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub expense_count: i64,
-    pub months_with_data: i64,
-    pub months: Vec<KoTrailingMonth>,
-    pub rows: Vec<KoTrailingCategory>,
-}
-
-/// A name worth charting, as the picker offers it.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct KoSeriesSubject {
-    pub name: String,
-    pub expense_count: i64,
-    pub amount_cents: i64,
-    pub own_share_cents: i64,
-    pub ko_category_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

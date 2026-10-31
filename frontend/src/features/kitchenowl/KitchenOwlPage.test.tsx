@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -342,5 +342,163 @@ describe('the KitchenOwl ledger', () => {
     await screen.findByRole('tablist');
     expect(container.querySelector('.ko-strip')).toBeNull();
     expect(screen.queryByRole('button', { name: /Ausgleich buchen/ })).toBeNull();
+  });
+});
+
+describe('the address of the old household analysis', () => {
+  /**
+   * The household's own analysis tab is gone — the main analysis counts my shares
+   * of the household's purchases now. A bookmark to it opens the ledger rather
+   * than a page with tabs and nothing under them.
+   */
+  it('opens the ledger for a tab that no longer exists', async () => {
+    route('/kitchenowl?ansicht=analysis');
+    await screen.findAllByText('Supermarkt');
+    expect(screen.getByRole('tab', { name: 'Ausgaben' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('tab', { name: 'Auswertung' })).toBeNull();
+  });
+});
+
+describe('the category map', () => {
+  const MAP = {
+    categories: [
+      {
+        // Mapped already.
+        koCategoryId: 1,
+        name: 'Wocheneinkauf',
+        financesCategoryId: 'food',
+        financesCategoryName: 'Lebensmittel',
+        suggestedCategoryId: null,
+        shareCount: 12,
+        ownShareCents: 36000,
+      },
+      {
+        // Unmapped, with a finance category of the same name on offer.
+        koCategoryId: 7,
+        name: 'Hobbies',
+        financesCategoryId: null,
+        financesCategoryName: null,
+        suggestedCategoryId: 'hobbies',
+        shareCount: 2,
+        ownShareCents: 1500,
+      },
+      {
+        // Unmapped and nothing to suggest.
+        koCategoryId: 3,
+        name: 'Haushalt',
+        financesCategoryId: null,
+        financesCategoryName: null,
+        suggestedCategoryId: null,
+        shareCount: 4,
+        ownShareCents: 2200,
+      },
+    ],
+    untaggedShareCount: 5,
+    untaggedOwnShareCents: 3100,
+  };
+  const CATEGORIES = [
+    { id: 'food', name: 'Lebensmittel', archived: false },
+    { id: 'hobbies', name: 'Hobbies', archived: false },
+    { id: 'old', name: 'Alt', archived: true },
+  ];
+
+  beforeEach(() => {
+    // The server's state, so a refetch after a save sees the save.
+    const state = structuredClone(MAP);
+    api.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/kitchenowl/status') return Promise.resolve(STATUS);
+      if (path === '/kitchenowl/category-map') return Promise.resolve(structuredClone(state));
+      if (path === '/categories') return Promise.resolve(CATEGORIES);
+      if (path.startsWith('/kitchenowl/category-map/') && init?.method === 'PUT') {
+        const id = Number(path.split('/').pop());
+        const row = state.categories.find((c) => c.koCategoryId === id)!;
+        Object.assign(row, JSON.parse(String(init.body)), { suggestedCategoryId: null });
+        return Promise.resolve({ ...row });
+      }
+      return Promise.resolve(null);
+    });
+  });
+
+  const puts = () =>
+    api.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+
+  function mapRow(container: HTMLElement, name: string) {
+    const row = container.querySelector(`[data-ko-category="${name}"]`);
+    if (!row) throw new Error(`no map row for ${name}`);
+    return within(row as HTMLElement);
+  }
+
+  async function open() {
+    const view = route('/kitchenowl?ansicht=categories');
+    // The finance categories arrive separately; until then there is nothing to select.
+    await screen.findAllByRole('option', { name: 'Lebensmittel' });
+    return view;
+  }
+
+  it('is one list: the KitchenOwl category, and what it counts as for me', async () => {
+    const { container } = await open();
+    expect(screen.getByRole('tab', { name: 'Zuordnung' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByText('Zählt bei mir als')).toBeInTheDocument();
+    const food = mapRow(container, 'Wocheneinkauf');
+    expect(food.getByRole('combobox')).toHaveValue('food');
+    expect(food.getByText(/12 Anteile/)).toBeInTheDocument();
+    // No save step: a mapped row has nothing to press.
+    expect(food.queryByRole('button')).toBeNull();
+    // An archived category is not on offer for a new mapping.
+    expect(
+      [...food.getByRole('combobox').querySelectorAll('option')].map((o) => o.textContent),
+    ).not.toContain('Alt');
+    expect(
+      screen.getByText(/5 Anteile stammen aus Ausgaben ohne KitchenOwl-Kategorie/),
+    ).toBeInTheDocument();
+  });
+
+  it('offers a same-name category as a suggestion, and maps it only when taken', async () => {
+    const user = userEvent.setup();
+    const { container } = await open();
+    const hobbies = mapRow(container, 'Hobbies');
+    // Not preselected: the select shows what is actually in effect.
+    expect(hobbies.getByRole('combobox')).toHaveValue('');
+    expect(puts()).toHaveLength(0);
+
+    await user.click(hobbies.getByRole('button', { name: 'Vorschlag übernehmen: Hobbies' }));
+
+    expect(puts()).toHaveLength(1);
+    const [path, init] = puts()[0]!;
+    expect(path).toBe('/kitchenowl/category-map/7');
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      financesCategoryId: 'hobbies',
+    });
+    await waitFor(() =>
+      expect(mapRow(container, 'Hobbies').getByRole('combobox')).toHaveValue('hobbies'),
+    );
+    expect(mapRow(container, 'Hobbies').queryByRole('button')).toBeNull();
+  });
+
+  it('saves a choice the moment it is made, including "no category"', async () => {
+    const user = userEvent.setup();
+    const { container } = await open();
+
+    await user.selectOptions(mapRow(container, 'Haushalt').getByRole('combobox'), 'food');
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    await user.selectOptions(mapRow(container, 'Wocheneinkauf').getByRole('combobox'), '');
+    await waitFor(() => expect(puts()).toHaveLength(2));
+
+    expect(puts().map(([path]) => path)).toEqual([
+      '/kitchenowl/category-map/3',
+      '/kitchenowl/category-map/1',
+    ]);
+    expect(JSON.parse(String((puts()[0]![1] as RequestInit).body))).toEqual({
+      financesCategoryId: 'food',
+    });
+    expect(JSON.parse(String((puts()[1]![1] as RequestInit).body))).toEqual({
+      financesCategoryId: null,
+    });
   });
 });

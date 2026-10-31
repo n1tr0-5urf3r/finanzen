@@ -8,6 +8,7 @@ import { FlowMoney, Money } from '../../components/Money';
 import { Banner, EmptyState, ErrorState, Kpi, LoadingState } from '../../components/ui';
 import { api, asList } from '../../lib/api';
 import { useT } from '../../lib/i18n';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
 import { sortedByLabel } from '../../lib/categories';
 import type { OverYears, OverYearsSeries, Year } from '../../lib/types';
@@ -33,14 +34,14 @@ const FULL_YEAR = 12;
  * a part year with a full one; instead the short years are named, every figure is
  * the year's own total, and the month count sits in the table beside it.
  */
-export function OverYearsTab() {
+export function OverYearsTab({ household }: { household: boolean }) {
   const t = useT();
   const [grouping, setGrouping] = useState<Grouping>('categories');
   const [charted, setCharted] = useState<string>('');
 
   const query = useQuery({
-    queryKey: qk.derived.overYears(),
-    queryFn: () => api<OverYears>('/analysis/over-years'),
+    queryKey: qk.derived.overYears(household),
+    queryFn: () => api<OverYears>(withHousehold('/analysis/over-years', household)),
   });
   // The closing balance per year is the one figure this screen cannot derive: it
   // needs the configured carryover, which the year list already carries.

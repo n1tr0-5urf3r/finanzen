@@ -52,8 +52,7 @@ always render de-DE.
 - **Month by month** — per category or per comment. Click a category to chart it,
   expand the bookings behind any bar in place.
 - **Money flow** — a year or a single month as a flow diagram: income, one total,
-  then out into cost buckets or what was left. The household ledger gets the same
-  diagram for who fronted what.
+  then out into cost buckets or what was left.
 - **Rules and overrides** — a rule table maps comments; a manual assignment on one
   booking wins. Editing a rule recategorises the past and reports how many bookings
   moved.
@@ -69,8 +68,12 @@ always render de-DE.
 - **Recurring templates** — the fixed monthly items in two taps. Amounts marked as
   estimates materialise as drafts, never as confirmed bookings.
 - **KitchenOwl** — shared household expenses as a separate, parallel ledger. Every
-  figure is a pair (household total and your share); never summed with personal
-  bookings, never auto-booked.
+  figure is a pair (household total and your share); never auto-booked. The
+  statistics count your *share*: of a purchase you paid and linked, and of what a
+  flatmate paid, in the category you map its KitchenOwl category to — settlements
+  are netted so nothing counts twice. One switch on the analysis page,
+  "Haushaltsanteile (KitchenOwl) einbeziehen", shows your bookings alone; balances
+  and the tax list never include the household.
 - **Privacy mode** — masks every amount while categories, counts and chart shapes
   stay intact.
 - **Multiple users** — isolation enforced by Postgres row-level security, not by
@@ -84,12 +87,10 @@ always render de-DE.
 | **Dashboard** — the year so far, and where it is heading | **Months** — what each month came to, and where it left the balance |
 | <a href="docs/screenshots/auswertung.png"><img src="docs/screenshots/auswertung.png" alt="Analysis"></a> | <a href="docs/screenshots/buchungen.png"><img src="docs/screenshots/buchungen.png" alt="Bookings"></a> |
 | **Analysis** — any category or comment across twelve months | **Bookings** — filter by year, text or category; edit in place |
-| <a href="docs/screenshots/geldfluss.png"><img src="docs/screenshots/geldfluss.png" alt="Money flow"></a> | <a href="docs/screenshots/haushalt-fluss.png"><img src="docs/screenshots/haushalt-fluss.png" alt="Household money flow"></a> |
-| **Money flow** — in, through one total, back out | **Household flow** — who fronted it, and what for |
+| <a href="docs/screenshots/geldfluss.png"><img src="docs/screenshots/geldfluss.png" alt="Money flow"></a> | <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Tax"></a> |
+| **Money flow** — in, through one total, back out | **Tax** — receipt list with camera upload and CSV/PDF export |
 | <a href="docs/screenshots/quickadd.png"><img src="docs/screenshots/quickadd.png" alt="Quick add" width="260"></a> | <a href="docs/screenshots/mobil.png"><img src="docs/screenshots/mobil.png" alt="Mobile" width="260"></a> |
 | **Quick add** — the reason the project exists | **Mobile** — tables become cards |
-| <a href="docs/screenshots/steuer.png"><img src="docs/screenshots/steuer.png" alt="Tax"></a> | |
-| **Tax** — receipt list with camera upload and CSV/PDF export | |
 
 <sub>Every screenshot shows invented sample data.</sub>
 

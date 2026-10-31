@@ -176,7 +176,9 @@ pub async fn sync_metadata(
         seen_categories.push(category.category_id);
         // NOTE: finances_category_id is deliberately NOT written here. KitchenOwl's
         // seven categories and the app's 32 are different taxonomies; the column is
-        // a hint the user may set, never something a sync decides.
+        // the user's mapping (it decides where my shares of the flatmates'
+        // purchases count, migration 0024), never something a sync decides. A
+        // rename upstream keeps it, because the row is updated, not replaced.
         sqlx::query(
             "INSERT INTO ko_categories (user_id, category_id, name, color_argb, budget_cents, \
                                         fetched_at) \

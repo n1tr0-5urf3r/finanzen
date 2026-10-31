@@ -11,7 +11,9 @@ import { api, asList } from '../../lib/api';
 import { formatEuroCompact, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useMaskAmount } from '../../lib/privacy';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
+import { HouseholdRows } from './HouseholdItems';
 import type {
   Booking,
   BookingPage,
@@ -72,15 +74,24 @@ export function useSeriesSelection() {
   return { mode, subject, select };
 }
 
-export function SeriesChart({ year, categories }: { year: number; categories: Category[] }) {
+export function SeriesChart({
+  year,
+  household,
+  categories,
+}: {
+  year: number;
+  household: boolean;
+  categories: Category[];
+}) {
   const t = useT();
   const maskAmount = useMaskAmount();
   const { mode, subject, select } = useSeriesSelection();
   const [showBookings, setShowBookings] = useState(false);
 
   const subjects = useQuery({
-    queryKey: qk.derived.seriesSubjects(year),
-    queryFn: () => api<SeriesSubject[]>(`/analysis/series/subjects?year=${year}`),
+    queryKey: qk.derived.seriesSubjects(year, household),
+    queryFn: () =>
+      api<SeriesSubject[]>(withHousehold(`/analysis/series/subjects?year=${year}`, household)),
     staleTime: 5 * 60_000,
   });
 
@@ -104,12 +115,15 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
       : [];
 
   const series = useQuery({
-    queryKey: qk.derived.series(year, mode, active),
+    queryKey: qk.derived.series(year, mode, active, household),
     queryFn: () =>
       api<MonthlySeries>(
-        mode === 'comment'
-          ? `/analysis/series?year=${year}&comment=${encodeURIComponent(active)}`
-          : `/analysis/series?year=${year}&categoryId=${active}`,
+        withHousehold(
+          mode === 'comment'
+            ? `/analysis/series?year=${year}&comment=${encodeURIComponent(active)}`
+            : `/analysis/series?year=${year}&categoryId=${active}`,
+          household,
+        ),
       ),
     enabled: Boolean(active),
   });
@@ -134,6 +148,9 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
     },
     enabled: showBookings && Boolean(active),
   });
+
+  // Counted in every figure above but not bookings, so listed apart from them.
+  const householdItems = series.data?.householdItems ?? [];
 
   const bars = useMemo(() => {
     const months = series.data?.months ?? [];
@@ -220,6 +237,11 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
             <div>
               <span className="kpi__label">{t('analysis.count')}</span>
               <span className="num">{series.data.bookingCount}</span>
+              {householdItems.length > 0 && (
+                <span className="kpi__scope">
+                  {t('analysis.ofWhichHousehold', { count: householdItems.length })}
+                </span>
+              )}
             </div>
             <div>
               <span className="kpi__label">{t('months.withData')}</span>
@@ -238,7 +260,9 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
             >
               {showBookings
                 ? t('analysis.hideBookings')
-                : t('analysis.showBookings', { count: series.data.bookingCount })}
+                : householdItems.length > 0
+                  ? t('analysis.showEntries', { count: series.data.bookingCount })
+                  : t('analysis.showBookings', { count: series.data.bookingCount })}
             </Button>
             <Link to={bookingsHref}>{t('analysis.openInBookings')}</Link>
           </p>
@@ -247,7 +271,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
             <div className="series__bookings">
               {bookings.isPending && <LoadingState />}
               {bookings.isError && <ErrorState error={bookings.error} />}
-              {bookings.data && (
+              {(bookings.data || householdItems.length > 0) && (
                 <table className="table table--compact">
                   <thead>
                     <tr>
@@ -258,7 +282,7 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
                     </tr>
                   </thead>
                   <tbody>
-                    {asList<Booking>(bookings.data.items).map((b) => (
+                    {asList<Booking>(bookings.data?.items).map((b) => (
                       <tr key={b.id}>
                         <td>
                           <DataLabel>{b.monthName}</DataLabel>
@@ -279,6 +303,9 @@ export function SeriesChart({ year, categories }: { year: number; categories: Ca
                       </tr>
                     ))}
                   </tbody>
+                  {/* In the same table, so the columns line up with the bookings',
+                      under a heading of their own that says whose they are. */}
+                  <HouseholdRows items={householdItems} />
                 </table>
               )}
               {bookings.data && bookings.data.total > bookings.data.items.length && (

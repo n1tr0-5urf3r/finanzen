@@ -628,9 +628,13 @@ async fn a_pull_mirrors_the_household_and_writes_no_booking() {
         .send("GET", "/bookings?year=2026&status=all", None)
         .await;
     assert_eq!(bookings["total"], 0, "a pull must never write a booking");
+    // The statistics do count my share of what Ada paid (migration 0024) — as a
+    // share, not as a booking, and not in the balance — and nothing of what I paid
+    // myself, which only a booking of mine can record.
     let (_, dashboard) = app.send("GET", "/dashboard?year=2026", None).await;
-    assert_eq!(dashboard["expenseCents"], 0);
+    assert_eq!(dashboard["expenseCents"], 954, "{dashboard}");
     assert_eq!(dashboard["bookingCount"], 0);
+    assert_eq!(dashboard["closingBalanceCents"], 0);
 }
 
 #[tokio::test]
@@ -1203,6 +1207,9 @@ async fn metadata_is_served_stale_rather_than_withheld() {
     );
 }
 
+/// The household's own figures and the personal ones stay apart: the summary never
+/// adds a booking to the household's amount. What does reach the personal
+/// statistics is my SHARE of Ada's purchase (migration 0024), in its own row.
 #[tokio::test]
 async fn the_two_ledgers_are_never_summed() {
     // The widget reports the CURRENT month, so both ledgers are dated there.
@@ -1238,12 +1245,13 @@ async fn the_two_ledgers_are_never_summed() {
     assert_eq!(status, StatusCode::CREATED, "{created}");
     app.sync().await;
 
-    // The personal ledger reports its own figure and only its own.
+    // The personal ledger reports my booking and my half of what Ada paid — never
+    // the household's 19,07 of it.
     let year = today.format("%Y").to_string();
     let (_, dashboard) = app
         .send("GET", &format!("/dashboard?year={year}"), None)
         .await;
-    assert_eq!(dashboard["expenseCents"], 1907);
+    assert_eq!(dashboard["expenseCents"], 1907 + 954, "{dashboard}");
     assert_eq!(dashboard["bookingCount"], 1);
 
     // The KitchenOwl summary reports its own, labelled, and never adds the two.
@@ -1439,164 +1447,6 @@ async fn the_live_instance_still_has_the_shapes_the_fixtures_claim() {
         serde_json::from_str::<serde_json::Value>(&body).is_err(),
         "the error body is not JSON: {body:?}"
     );
-}
-
-// ------------------------------------------------------- the household's analysis
-
-/// The same questions the personal analysis answers, asked of the mirror.
-///
-/// Every figure is a pair — what the household spent and the user's share — and
-/// the two are never added. That is the single most likely mistake in this
-/// integration, so it is asserted on every level of the response.
-#[tokio::test]
-async fn the_household_ledger_analyses_its_own_year() {
-    let mock = MockServer::start().await;
-    let mut excluded = expense(
-        9,
-        "Korrektur",
-        99.00,
-        on(2026, 2, 2),
-        Some((1, "Wocheneinkauf")),
-        1,
-        &[(1, 1), (2, 1)],
-    );
-    // KitchenOwl's own statistics skip these, so ours must too.
-    excluded["exclude_from_statistics"] = json!(true);
-
-    mock.seed(vec![
-        expense(
-            1,
-            "Kaufland",
-            20.00,
-            on(2026, 1, 10),
-            Some((1, "Wocheneinkauf")),
-            1,
-            &[(1, 1), (2, 1)],
-        ),
-        expense(
-            2,
-            "Kaufland",
-            30.00,
-            on(2026, 3, 5),
-            Some((1, "Wocheneinkauf")),
-            2,
-            &[(1, 1), (2, 1)],
-        ),
-        expense(
-            3,
-            "Kino",
-            22.50,
-            on(2026, 3, 20),
-            Some((2, "Ausflug")),
-            1,
-            &[(1, 1), (2, 1)],
-        ),
-        // No category at all — a third of the live corpus looks like this.
-        expense(4, "Kiosk", 10.00, on(2026, 4, 1), None, 1, &[(1, 1)]),
-        excluded,
-    ]);
-    let app = app!(Some(mock.url.clone()));
-    let (status, _) = app.sync().await;
-    assert_eq!(status, StatusCode::OK);
-
-    let (status, a) = app
-        .send("GET", "/kitchenowl/analysis/categories?year=2026", None)
-        .await;
-    assert_eq!(status, StatusCode::OK, "{a}");
-
-    // 20 + 30 + 22,50 + 10 — and NOT the 99,00 KitchenOwl excludes.
-    assert_eq!(a["totalAmountCents"], 8250);
-    assert_eq!(a["excludedCount"], 1);
-    // The user's slice: half of the three shared ones, all of the solo one.
-    assert_eq!(a["totalOwnShareCents"], 1000 + 1500 + 1125 + 1000);
-    assert_eq!(a["expenseCount"], 4);
-    // Januar, März, April — never twelve, and never the months of the excluded row.
-    assert_eq!(a["monthsWithData"], 3);
-    assert_eq!(a["uncategorizedCount"], 1);
-    assert_eq!(a["years"][0], 2026);
-
-    let rows = a["rows"].as_array().expect("rows");
-    let top = &rows[0];
-    assert_eq!(top["koCategoryName"], "Wocheneinkauf");
-    assert_eq!(top["amountCents"], 5000);
-    assert_eq!(top["ownShareCents"], 2500);
-    assert_eq!(top["expenseCount"], 2);
-    // Twelve slots, the two months that carry something and no others.
-    assert_eq!(top["monthlyAmountCents"][0], 2000);
-    assert_eq!(
-        top["monthlyAmountCents"][1], 0,
-        "the excluded Februar row must not appear"
-    );
-    assert_eq!(top["monthlyAmountCents"][2], 3000);
-    assert_eq!(top["monthlyOwnShareCents"][2], 1500);
-    // Averaged over the months the household was active, not over twelve.
-    assert_eq!(top["averagePerMonthCents"], 1667);
-
-    // Who paid is a question only a shared ledger has.
-    let payers = a["paidBy"].as_array().expect("paidBy");
-    let fabi = payers.iter().find(|p| p["name"] == "Fabi").expect("Fabi");
-    assert_eq!(fabi["amountCents"], 2000 + 2250 + 1000);
-    let ada = payers.iter().find(|p| p["name"] == "Ada").expect("Ada");
-    assert_eq!(ada["amountCents"], 3000);
-
-    // One recurring purchase across the year, the "how much Kaufland" question.
-    let (status, s) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/series?year=2026&name=kaufland",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK, "{s}");
-    assert_eq!(s["subject"], "kaufland");
-    assert_eq!(s["amountCents"], 5000);
-    assert_eq!(s["ownShareCents"], 2500);
-    assert_eq!(s["monthsWithData"], 2);
-    assert_eq!(s["averagePerActiveMonthCents"], 2500);
-    assert_eq!(s["averageOwnSharePerActiveMonthCents"], 1250);
-    assert_eq!(s["months"].as_array().expect("months").len(), 12);
-    assert_eq!(s["months"][0]["amountCents"], 2000);
-    assert_eq!(s["months"][2]["amountCents"], 3000);
-
-    // The uncategorised third of the corpus is reachable, not a dead end.
-    let (status, u) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/series?year=2026&uncategorized=true",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK, "{u}");
-    assert_eq!(u["amountCents"], 1000);
-
-    // ...and asking for two subjects at once is a 400, not a silent choice.
-    let (status, _) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/series?year=2026&name=kaufland&uncategorized=true",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-
-    let (status, subjects) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/series/subjects?year=2026",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK);
-    // Only names seen more than once are worth a chart.
-    assert_eq!(subjects.as_array().expect("subjects").len(), 1);
-    assert_eq!(subjects[0]["name"], "Kaufland");
-    assert_eq!(subjects[0]["expenseCount"], 2);
-
-    // THE invariant, again: analysing the mirror writes nothing to the ledger.
-    let (_, bookings) = app
-        .send("GET", "/bookings?year=2026&status=all", None)
-        .await;
-    assert_eq!(bookings["total"], 0);
 }
 
 /// The background sync ran for nobody.
@@ -1876,215 +1726,6 @@ async fn a_settlement_booking_can_be_deleted_again() {
     // ...and the month is offered again afterwards, because the period is free.
     let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
     assert_eq!(view["alreadySettled"], false);
-}
-
-// ------------------------------------------------- the household, year on year
-
-/// Two years in the mirror, with a deliberately uneven shape.
-///
-/// 2025 carries February and June; 2026 carries February only. That makes June the
-/// months-only-one-year-has, which is exactly the case the comparison has to refuse
-/// to read as a saving.
-fn two_years() -> Vec<serde_json::Value> {
-    vec![
-        // 2025: Wocheneinkauf in Februar and Juni, Ausflug in Februar.
-        expense(
-            1,
-            "Kaufland",
-            40.00,
-            on(2025, 2, 10),
-            Some((1, "Wocheneinkauf")),
-            1,
-            &[(1, 1), (2, 1)],
-        ),
-        expense(
-            2,
-            "Kaufland",
-            60.00,
-            on(2025, 6, 10),
-            Some((1, "Wocheneinkauf")),
-            1,
-            &[(1, 1), (2, 1)],
-        ),
-        expense(
-            3,
-            "Kino",
-            30.00,
-            on(2025, 2, 20),
-            Some((2, "Ausflug")),
-            2,
-            &[(1, 1), (2, 1)],
-        ),
-        // 2026: Wocheneinkauf in Februar only, and a category that is new this year.
-        expense(
-            4,
-            "Kaufland",
-            50.00,
-            on(2026, 2, 10),
-            Some((1, "Wocheneinkauf")),
-            1,
-            &[(1, 1), (2, 1)],
-        ),
-        expense(
-            5,
-            "Baumarkt",
-            20.00,
-            on(2026, 2, 12),
-            Some((3, "Haushalt")),
-            2,
-            &[(1, 1), (2, 1)],
-        ),
-    ]
-}
-
-/// The household's year against the one before it — and the trap that a part year
-/// against a full one is not a comparison.
-#[tokio::test]
-async fn the_household_year_is_compared_only_over_the_months_both_years_hold() {
-    let mock = MockServer::start().await;
-    mock.seed(two_years());
-    let app = app!(Some(mock.url.clone()));
-    let (status, _) = app.sync().await;
-    assert_eq!(status, StatusCode::OK);
-
-    let (status, c) = app
-        .send("GET", "/kitchenowl/analysis/compare?year=2026", None)
-        .await;
-    assert_eq!(status, StatusCode::OK, "{c}");
-    assert_eq!(c["previousYear"], 2025);
-    assert_eq!(c["previousYearHasData"], true);
-
-    // 2026 has one month, 2025 has two, and only Februar is shared.
-    assert_eq!(c["fullyComparable"], false);
-    assert_eq!(c["comparableMonths"], serde_json::json!([2]));
-    assert_eq!(c["current"]["monthsWithData"], 1);
-    assert_eq!(c["previous"]["monthsWithData"], 2);
-    assert_eq!(c["current"]["lastMonthWithData"], 2);
-
-    // Raw: 70,00 against 130,00 — which would read as a 46 % saving caused entirely
-    // by June not having happened yet.
-    assert_eq!(c["current"]["amountCents"], 7000);
-    assert_eq!(c["previous"]["amountCents"], 13000);
-    // Restricted to Februar, the honest pair: 70,00 against 70,00.
-    assert_eq!(c["current"]["comparableAmountCents"], 7000);
-    assert_eq!(c["previous"]["comparableAmountCents"], 7000);
-    // Both figures, always: the user's half of each.
-    assert_eq!(c["current"]["ownShareCents"], 3500);
-    assert_eq!(c["previous"]["ownShareCents"], 6500);
-    assert_eq!(c["current"]["comparableOwnShareCents"], 3500);
-    assert_eq!(c["previous"]["comparableOwnShareCents"], 3500);
-
-    let rows = c["rows"].as_array().expect("rows");
-    let find = |name: &str| {
-        rows.iter()
-            .find(|r| r["koCategoryName"] == name)
-            .unwrap_or_else(|| panic!("row {name} missing"))
-    };
-
-    // Wocheneinkauf: 50,00 this year against 100,00 raw, but 40,00 in the shared
-    // month — so the raw delta says −50,00 and the honest one says +10,00. Getting
-    // this backwards is the whole reason the restricted figures exist.
-    let wocheneinkauf = find("Wocheneinkauf");
-    assert_eq!(wocheneinkauf["amountCents"], 5000);
-    assert_eq!(wocheneinkauf["previousAmountCents"], 10000);
-    assert_eq!(wocheneinkauf["deltaAmountCents"], -5000);
-    assert_eq!(wocheneinkauf["comparableAmountCents"], 5000);
-    assert_eq!(wocheneinkauf["comparablePreviousAmountCents"], 4000);
-    assert_eq!(wocheneinkauf["comparableDeltaAmountCents"], 1000);
-    // The share moves with it and is reported separately, never folded in.
-    assert_eq!(wocheneinkauf["ownShareCents"], 2500);
-    assert_eq!(wocheneinkauf["comparableDeltaOwnShareCents"], 500);
-    assert_eq!(wocheneinkauf["monthlyAmountCents"][1], 5000);
-    assert_eq!(wocheneinkauf["previousMonthlyAmountCents"][5], 6000);
-
-    // A category that did not exist last year is new, not infinitely more expensive.
-    let haushalt = find("Haushalt");
-    assert_eq!(haushalt["isNew"], true);
-    assert_eq!(haushalt["previousAmountCents"], 0);
-    assert!(haushalt["deltaRatio"].is_null());
-
-    // ...and one that has stopped is marked rather than dropped.
-    let ausflug = find("Ausflug");
-    assert_eq!(ausflug["isGone"], true);
-    assert_eq!(ausflug["amountCents"], 0);
-    assert_eq!(ausflug["previousAmountCents"], 3000);
-
-    // Who paid, both years. Ada paid the Kino in 2025 and the Baumarkt in 2026.
-    let payers = c["paidBy"].as_array().expect("paidBy");
-    let ada = payers
-        .iter()
-        .find(|p| p["name"] == "Ada")
-        .expect("Ada paid something");
-    assert_eq!(ada["amountCents"], 2000);
-    assert_eq!(ada["previousAmountCents"], 3000);
-    assert_eq!(ada["deltaCents"], -1000);
-
-    // THE invariant of this whole module: comparing the mirror writes no booking.
-    let (_, bookings) = app
-        .send("GET", "/bookings?year=2026&status=all", None)
-        .await;
-    assert_eq!(bookings["total"], 0);
-}
-
-/// The rolling window ignores the calendar, which is the only reason it exists.
-#[tokio::test]
-async fn the_household_trailing_window_crosses_the_year_boundary() {
-    let mock = MockServer::start().await;
-    mock.seed(two_years());
-    let app = app!(Some(mock.url.clone()));
-    app.sync().await;
-
-    // Twelve months ending Februar 2026 start in März 2025 — so Juni 2025 is inside
-    // the window and Februar 2025 has just fallen out of it.
-    let (status, w) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/trailing?year=2026&month=2",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK, "{w}");
-    assert_eq!(w["fromYear"], 2025);
-    assert_eq!(w["fromMonth"], 3);
-    assert_eq!(w["months"].as_array().expect("months").len(), 12);
-
-    // Juni 2025 (60,00) plus Februar 2026 (50,00 + 20,00). Februar 2025 is excluded
-    // by the window, which is the assertion that matters: a calendar year would
-    // have included it or dropped Juni.
-    assert_eq!(w["amountCents"], 6000 + 5000 + 2000);
-    assert_eq!(w["ownShareCents"], 3000 + 2500 + 1000);
-    assert_eq!(w["monthsWithData"], 2);
-
-    let months = w["months"].as_array().expect("months");
-    assert_eq!(months[0]["year"], 2025);
-    assert_eq!(months[0]["month"], 3);
-    // Position 3 in the window is Juni 2025; position 11 is Februar 2026.
-    assert_eq!(months[3]["month"], 6);
-    assert_eq!(months[3]["amountCents"], 6000);
-    assert_eq!(months[11]["year"], 2026);
-    assert_eq!(months[11]["month"], 2);
-    assert_eq!(months[11]["amountCents"], 7000);
-
-    // Categories are bucketed by WINDOW position, not by calendar month.
-    let rows = w["rows"].as_array().expect("rows");
-    let wocheneinkauf = rows
-        .iter()
-        .find(|r| r["koCategoryName"] == "Wocheneinkauf")
-        .expect("Wocheneinkauf");
-    assert_eq!(wocheneinkauf["monthlyAmountCents"][3], 6000);
-    assert_eq!(wocheneinkauf["monthlyAmountCents"][11], 5000);
-    // Averaged over the months the household was active in the window, not twelve.
-    assert_eq!(wocheneinkauf["averagePerMonthCents"], 5500);
-
-    // A month outside 1..12 is a 400, not a window that silently slides.
-    let (status, _) = app
-        .send(
-            "GET",
-            "/kitchenowl/analysis/trailing?year=2026&month=13",
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 // ------------------------------------------------ filing the untagged expenses
@@ -3619,4 +3260,604 @@ async fn a_booked_settlement_is_netted_whatever_its_category() {
     assert_eq!(d["expenseCents"], 10000 + 5083, "{d}");
     assert_eq!(d["incomeCents"], 0);
     assert_eq!(d["closingBalanceCents"], -30000 + 14917);
+}
+
+// ------------------------------------- the flatmates' purchases, at my share
+
+/// Ada pays; I am one of the people it was for. Weights 1:2, so a third is mine.
+fn ada_paid(id: i64, name: &str, euros: f64, date: i64, category: Option<(i64, &str)>) -> Value {
+    expense(id, name, euros, date, category, 2, &[(1, 1), (2, 2)])
+}
+
+impl TestApp {
+    /// Maps a KitchenOwl category to a finance category, or clears it with `None`.
+    async fn map_category(&self, ko_category_id: i64, category_id: Option<&str>) -> Value {
+        let (status, body) = self
+            .send(
+                "PUT",
+                &format!("/kitchenowl/category-map/{ko_category_id}"),
+                Some(json!({"financesCategoryId": category_id})),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        body
+    }
+
+    /// One row of a category analysis, by category id (`None`: the uncategorised
+    /// row), or `null` when there is none.
+    async fn category_row(&self, path: &str, category_id: Option<&str>) -> Value {
+        let (status, analysis) = self.send("GET", path, None).await;
+        assert_eq!(status, StatusCode::OK, "{analysis}");
+        analysis["rows"]
+            .as_array()
+            .expect("rows")
+            .iter()
+            .find(|r| match category_id {
+                Some(id) => r["categoryId"] == id,
+                None => r["categoryId"].is_null(),
+            })
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    /// The analysis with the household switched off: categories, months, years.
+    async fn figures_without_household(&self) -> (Value, Value, Value) {
+        let (_, a) = self
+            .send(
+                "GET",
+                "/analysis/categories?year=2026&household=false",
+                None,
+            )
+            .await;
+        let (_, m) = self
+            .send("GET", "/overview/months?year=2026&household=false", None)
+            .await;
+        let (_, o) = self
+            .send("GET", "/analysis/over-years?household=false", None)
+            .await;
+        (a, m, o)
+    }
+}
+
+/// What Ada paid for the household counts in my statistics at my share, in the
+/// finance category its KitchenOwl category is mapped to — and nothing else from
+/// the mirror does: not what I paid myself, not a payback KitchenOwl keeps out of
+/// its statistics, not an expense deleted upstream, not one I have no share in.
+#[tokio::test]
+async fn a_flatmates_purchase_counts_my_share_in_its_mapped_category() {
+    let mut payback = ada_paid(5, "Rückzahlung", 50.0, on(2026, 5, 9), None);
+    payback["exclude_from_statistics"] = json!(true);
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        // 30,00 of 90,00 is mine, filed under Wocheneinkauf.
+        ada_paid(
+            1,
+            "Wocheneinkauf",
+            90.0,
+            on(2026, 5, 4),
+            Some((1, "Wocheneinkauf")),
+        ),
+        // 15,00 of 45,00, in a KitchenOwl category nobody has mapped.
+        ada_paid(2, "Putzmittel", 45.0, on(2026, 5, 6), Some((3, "Haushalt"))),
+        // A refund of 12,00: 4,00 of it comes back to me.
+        ada_paid(
+            3,
+            "Pfand",
+            -12.0,
+            on(2026, 6, 2),
+            Some((1, "Wocheneinkauf")),
+        ),
+        // I paid this one; my bank booking is its only record.
+        expense(
+            4,
+            "Getränke",
+            60.0,
+            on(2026, 5, 7),
+            Some((1, "Wocheneinkauf")),
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        payback,
+        // Ada's own purchase, nothing of it mine.
+        expense(
+            6,
+            "Geschenk",
+            20.0,
+            on(2026, 5, 8),
+            Some((1, "Wocheneinkauf")),
+            2,
+            &[(2, 1)],
+        ),
+        // Deleted in KitchenOwl after the first sync.
+        ada_paid(
+            7,
+            "Doppelt erfasst",
+            30.0,
+            on(2026, 5, 10),
+            Some((1, "Wocheneinkauf")),
+        ),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    let (status, _) = app.sync().await;
+    assert_eq!(status, StatusCode::OK);
+    mock.inner().expenses.retain(|e| e["id"] != json!(7));
+    let (_, body) = app.sync().await;
+    assert_eq!(body["expenses"]["archivedCount"], 1, "{body}");
+
+    let food = app.category_id("Lebensmittel").await;
+    let mapped = app.map_category(1, Some(&food)).await;
+    assert_eq!(mapped["financesCategoryName"], "Lebensmittel", "{mapped}");
+    assert_eq!(mapped["shareCount"], 2);
+    assert_eq!(mapped["ownShareCents"], 3000 - 400);
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000 + 1500, "{d}");
+    assert_eq!(d["incomeCents"], 400);
+    assert_eq!(d["bookingCount"], 0, "shares are not bookings");
+    assert_eq!(
+        d["uncategorizedCount"], 0,
+        "nothing for the booking list to fix"
+    );
+    assert_eq!(
+        d["uncategorizedNetCents"], 1500,
+        "but the gap is in the figures"
+    );
+    assert_eq!(
+        d["closingBalanceCents"], 0,
+        "not a cent of it went through my account"
+    );
+
+    let (_, monthly) = app.send("GET", "/overview/months?year=2026", None).await;
+    assert_eq!(monthly["months"][4]["expenseCents"], 4500, "{monthly}");
+    assert_eq!(monthly["months"][5]["incomeCents"], 400);
+    assert_eq!(monthly["months"][4]["uncategorizedCount"], 0);
+
+    let (_, analysis) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(analysis["householdCount"], 3, "{analysis}");
+    assert_eq!(analysis["householdUncategorizedCount"], 1);
+    assert_eq!(analysis["uncategorizedCount"], 0);
+    let row = app
+        .category_row("/analysis/categories?year=2026", Some(&food))
+        .await;
+    assert_eq!(row["expenseCents"], 3000, "{row}");
+    assert_eq!(row["incomeCents"], 400);
+    assert_eq!(row["netCents"], 2600);
+    assert_eq!(row["bookingCount"], 2);
+    let unmapped = app
+        .category_row("/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(unmapped["netCents"], 1500, "{unmapped}");
+
+    // The drilldown lists them, marked as KitchenOwl's, beside the bookings.
+    let (_, series) = app
+        .send(
+            "GET",
+            &format!("/analysis/series?year=2026&categoryId={food}"),
+            None,
+        )
+        .await;
+    assert_eq!(series["netCents"], 2600, "{series}");
+    assert_eq!(series["bookingCount"], 2);
+    let items = series["householdItems"].as_array().expect("items");
+    assert_eq!(items.len(), 2, "{series}");
+    assert_eq!(items[0]["name"], "Wocheneinkauf");
+    assert_eq!(items[0]["paidByName"], "Ada");
+    assert_eq!(items[0]["date"], "2026-05-04");
+    assert_eq!(items[0]["amountCents"], 9000);
+    assert_eq!(items[0]["ownShareCents"], 3000);
+    assert_eq!(items[1]["ownShareCents"], -400);
+    let (_, by_name) = app
+        .send("GET", "/analysis/series?year=2026&comment=putzmittel", None)
+        .await;
+    assert_eq!(by_name["netCents"], 1500, "{by_name}");
+    assert_eq!(by_name["householdItems"][0]["categoryId"], Value::Null);
+
+    // The category list and the years count them like any statistic; the balance
+    // chain does not.
+    let (_, categories) = app.send("GET", "/categories", None).await;
+    let listed = categories
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == food.as_str())
+        .cloned()
+        .unwrap();
+    assert_eq!(listed["netCents"], 2600, "{listed}");
+    let (status, body) = app
+        .send(
+            "POST",
+            "/years",
+            Some(json!({"year": 2026, "openingBalanceCents": 10000})),
+        )
+        .await;
+    assert!(status.is_success(), "{body}");
+    let y = app.year_row(2026).await;
+    assert_eq!(y["expenseCents"], 4500, "{y}");
+    assert_eq!(y["incomeCents"], 400);
+    assert_eq!(y["closingBalanceCents"], 10000, "the opening, untouched");
+    let (_, forecast) = app.send("GET", "/analysis/forecast?year=2026", None).await;
+    assert_eq!(forecast["months"][4]["netCents"], 4500, "{forecast}");
+    assert_eq!(
+        forecast["months"][4]["closingBalanceCents"], 10000,
+        "the running balance is money in the account"
+    );
+
+    // Switched off, the analysis is the bookings alone — here, nothing.
+    let (off_categories, off_months, off_years) = app.figures_without_household().await;
+    assert_eq!(off_categories["rows"], json!([]), "{off_categories}");
+    assert_eq!(off_categories["householdCount"], 0);
+    assert_eq!(off_months["total"]["expenseCents"], 0, "{off_months}");
+    assert_eq!(off_years["years"], json!([]), "{off_years}");
+    let (_, off) = app
+        .send(
+            "GET",
+            &format!("/analysis/series?year=2026&categoryId={food}&household=false"),
+            None,
+        )
+        .await;
+    assert_eq!(off["netCents"], 0, "{off}");
+    assert_eq!(off["householdItems"], json!([]));
+    let (_, off) = app
+        .send("GET", "/analysis/compare?year=2026&household=false", None)
+        .await;
+    assert_eq!(off["current"]["expenseCents"], 0, "{off}");
+    let (_, on_) = app.send("GET", "/analysis/compare?year=2026", None).await;
+    assert_eq!(on_["current"]["expenseCents"], 4500, "{on_}");
+    let (_, off) = app
+        .send(
+            "GET",
+            "/analysis/trailing?year=2026&month=6&household=false",
+            None,
+        )
+        .await;
+    assert_eq!(off["expenseCents"], 0, "{off}");
+    let (_, on_) = app
+        .send("GET", "/analysis/trailing?year=2026&month=6", None)
+        .await;
+    assert_eq!(on_["expenseCents"], 4500, "{on_}");
+    let (_, subjects) = app
+        .send(
+            "GET",
+            "/analysis/series/subjects?year=2026&household=false",
+            None,
+        )
+        .await;
+    assert_eq!(subjects, json!([]), "{subjects}");
+
+    // Unmapping sends the shares back to "ohne Kategorie".
+    app.map_category(1, None).await;
+    let unmapped = app
+        .category_row("/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(unmapped["netCents"], 1500 + 2600, "{unmapped}");
+}
+
+/// The flatmate paid 90,00 split 1:2, so my 30,00 counts under the mapped category.
+/// Handing over the 30,00 I owe is the same 30,00 again, so the settlement counts
+/// 0, and the year's total is 30,00 — as it is with the household switched off,
+/// where the settlement carries it instead.
+#[tokio::test]
+async fn a_settlement_paying_for_my_share_of_the_flatmates_purchases_counts_nothing_twice() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![ada_paid(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+        Some((1, "Wocheneinkauf")),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let food = app.category_id("Lebensmittel").await;
+    app.map_category(1, Some(&food)).await;
+    let ausgleich = app.settlement_category().await;
+    let settlement = app
+        .booking_at(
+            (2026, 6, 2),
+            "expense",
+            "Ausgleich Juni",
+            3000,
+            Some(&ausgleich),
+        )
+        .await;
+
+    let listed = app.listed(&settlement).await;
+    assert_eq!(listed["amountCents"], 3000, "the bank amount stays");
+    assert_eq!(listed["countedAmountCents"], 0, "{listed}");
+    assert_eq!(listed["countedBasis"], "koSettlement");
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000, "{d}");
+    assert_eq!(d["closingBalanceCents"], -3000, "30,00 left the account");
+    let food_row = app
+        .category_row("/analysis/categories?year=2026", Some(&food))
+        .await;
+    assert_eq!(food_row["netCents"], 3000, "{food_row}");
+    let settled = app
+        .category_row("/analysis/categories?year=2026", Some(&ausgleich))
+        .await;
+    assert_eq!(settled["netCents"], 0, "{settled}");
+
+    // Off: 0023's figures — the settlement counts in full and Lebensmittel is empty.
+    let path = "/analysis/categories?year=2026&household=false";
+    assert_eq!(app.category_row(path, Some(&food)).await, Value::Null);
+    let settled = app.category_row(path, Some(&ausgleich)).await;
+    assert_eq!(settled["expenseCents"], 3000, "{settled}");
+    let (_, off) = app
+        .send("GET", "/overview/months?year=2026&household=false", None)
+        .await;
+    assert_eq!(off["total"]["expenseCents"], 3000, "{off}");
+    assert_eq!(off["months"][5]["expenseCents"], 3000);
+
+    let y = app.year_row(2026).await;
+    assert_eq!(y["expenseCents"], 3000, "{y}");
+    assert_eq!(y["closingBalanceCents"], -3000);
+}
+
+/// Linked shares and the flatmate's purchases in one window, settled in one go. I
+/// paid 90,00 for three and linked it (60,00 is the others'); Ada paid 60,00 for
+/// both of us (30,00 is mine); she hands me the 30,00 difference. With the
+/// household switched off every figure is 0023's: the settlement counts
+/// -30,00 + 60,00 = an expense of 30,00. Switched on it counts 0, and the 30,00 sits
+/// in Lebensmittel as my share of Ada's purchase. The totals agree, and the map
+/// changes nothing about the switched-off figures.
+#[tokio::test]
+async fn the_switched_off_analysis_is_exactly_the_linked_shares_rule() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        shared_purchase(1, "Großeinkauf", 90.0, on(2026, 5, 4)),
+        expense(
+            2,
+            "Wocheneinkauf",
+            60.0,
+            on(2026, 5, 12),
+            Some((1, "Wocheneinkauf")),
+            2,
+            &[(1, 1), (2, 1)],
+        ),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let mine = app
+        .booking_at((2026, 5, 4), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let settlement = app
+        .booking_at(
+            (2026, 7, 1),
+            "income",
+            "Ausgleich Juli",
+            3000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.sync().await;
+    app.link_expense(1, &mine).await;
+
+    let (analysis, monthly, over) = app.figures_without_household().await;
+    assert_eq!(analysis["totalNetCents"], 6000, "{analysis}");
+    let rows = analysis["rows"].as_array().unwrap();
+    let net = |id: &str| {
+        rows.iter()
+            .find(|r| r["categoryId"] == id)
+            .map(|r| r["netCents"].clone())
+            .unwrap_or(Value::Null)
+    };
+    assert_eq!(net(&food), 3000, "the linked share only");
+    assert_eq!(net(&ausgleich), 3000, "flipped to an expense, as in 0023");
+    assert_eq!(monthly["months"][6]["expenseCents"], 3000, "{monthly}");
+    assert_eq!(monthly["months"][6]["incomeCents"], 0);
+    assert_eq!(over["expensePerYearCents"], json!([6000]), "{over}");
+
+    // Mapping Ada's category moves the default figures and none of the off ones.
+    app.map_category(1, Some(&food)).await;
+    assert_eq!(
+        app.figures_without_household().await,
+        (analysis, monthly, over)
+    );
+
+    let listed = app.listed(&settlement).await;
+    assert_eq!(listed["countedAmountCents"], 0, "{listed}");
+    let food_row = app
+        .category_row("/analysis/categories?year=2026", Some(&food))
+        .await;
+    assert_eq!(food_row["netCents"], 3000 + 3000, "{food_row}");
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 6000, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["closingBalanceCents"], -9000 + 3000);
+}
+
+/// A flatmate's purchase is not my receipt: the tax report lists bookings only, and
+/// a tax-relevant settlement keeps its 0023 figure there however the household
+/// shares net it elsewhere.
+#[tokio::test]
+async fn the_tax_report_never_counts_the_flatmates_purchases() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![ada_paid(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+        Some((1, "Wocheneinkauf")),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let food = app.category_id("Lebensmittel").await;
+    app.map_category(1, Some(&food)).await;
+    let ausgleich = app.settlement_category().await;
+    let (status, body) = app
+        .send(
+            "POST",
+            "/bookings",
+            Some(json!({
+                "year": 2026, "month": 6, "bookedOn": "2026-06-02",
+                "kind": "expense", "amountCents": 3000, "comment": "Ausgleich Juni",
+                "categoryId": ausgleich, "taxRelevant": true
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+
+    let (_, tax) = app.send("GET", "/tax?year=2026", None).await;
+    assert_eq!(tax["bookingCount"], 1, "{tax}");
+    assert_eq!(tax["totalExpenseCents"], 3000);
+    assert_eq!(tax["entries"][0]["expenseCents"], 3000);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["taxRelevantCount"], 1, "{d}");
+    assert_eq!(
+        d["expenseCents"], 3000,
+        "the share, and the settlement at 0"
+    );
+}
+
+/// The map: every KitchenOwl category, a suggestion only where a finance category
+/// has exactly the same name, and only a `PUT` decides anything.
+#[tokio::test]
+async fn the_category_map_suggests_by_name_and_validates_what_it_is_given() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        ada_paid(1, "Brettspiel", 30.0, on(2026, 5, 4), Some((7, "Hobbies"))),
+        ada_paid(2, "Kiosk", 6.0, on(2026, 5, 5), None),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+
+    // Nothing mirrored yet: there is no KitchenOwl category to map.
+    let food = app.category_id("Lebensmittel").await;
+    let (status, _) = app
+        .send(
+            "PUT",
+            "/kitchenowl/category-map/7",
+            Some(json!({"financesCategoryId": food})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    app.sync().await;
+    let (status, created) = app
+        .send(
+            "POST",
+            "/categories",
+            Some(json!({"name": "hobbies", "typeCode": "variabel"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let hobbies = created["id"].as_str().unwrap().to_string();
+
+    let (status, map) = app.send("GET", "/kitchenowl/category-map", None).await;
+    assert_eq!(status, StatusCode::OK, "{map}");
+    let entries = map["categories"].as_array().expect("categories");
+    assert_eq!(entries.len(), 4, "every KitchenOwl category: {map}");
+    let entry = |id: i64| {
+        entries
+            .iter()
+            .find(|c| c["koCategoryId"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(entry(7)["suggestedCategoryId"], hobbies.as_str());
+    assert_eq!(
+        entry(7)["financesCategoryId"],
+        Value::Null,
+        "suggested, not set"
+    );
+    assert_eq!(entry(7)["shareCount"], 1);
+    assert_eq!(entry(7)["ownShareCents"], 1000);
+    assert_eq!(
+        entry(1)["suggestedCategoryId"],
+        Value::Null,
+        "Wocheneinkauf is not Lebensmittel by name"
+    );
+    assert_eq!(map["untaggedShareCount"], 1);
+    assert_eq!(map["untaggedOwnShareCents"], 200);
+
+    // Until it is confirmed the share has no category.
+    let (_, analysis) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(analysis["householdUncategorizedCount"], 2, "{analysis}");
+
+    let (status, body) = app
+        .send(
+            "PUT",
+            "/kitchenowl/category-map/7",
+            Some(json!({"financesCategoryId": uuid::Uuid::new_v4()})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let (status, _) = app
+        .send(
+            "PUT",
+            "/kitchenowl/category-map/99",
+            Some(json!({"financesCategoryId": hobbies})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let saved = app.map_category(7, Some(&hobbies)).await;
+    assert_eq!(saved["financesCategoryId"], hobbies.as_str());
+    assert_eq!(saved["suggestedCategoryId"], Value::Null);
+
+    // A sync keeps the user's mapping.
+    app.sync().await;
+    let (_, map) = app.send("GET", "/kitchenowl/category-map", None).await;
+    let kept = map["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["koCategoryId"] == 7)
+        .cloned()
+        .unwrap();
+    assert_eq!(kept["financesCategoryId"], hobbies.as_str(), "{kept}");
+    let row = app
+        .category_row("/analysis/categories?year=2026", Some(&hobbies))
+        .await;
+    assert_eq!(row["netCents"], 1000, "{row}");
+}
+
+/// An expense I linked to a booking of mine counts through that booking, not a
+/// second time on its own; and without a member known to be me, nothing in the
+/// mirror says what is mine, so no share is added at all.
+#[tokio::test]
+async fn no_share_is_added_for_a_linked_expense_or_without_me() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        ada_paid(1, "Wocheneinkauf", 90.0, on(2026, 5, 4), None),
+        ada_paid(2, "Getränke", 30.0, on(2026, 5, 6), None),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let mine = app
+        .booking_at((2026, 5, 6), "expense", "Getränke", 3000, None)
+        .await;
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000 + 1000 + 3000, "{d}");
+
+    // Linking Ada's purchase to a booking of mine is unusual, but then the booking
+    // counts at my share of it and the expense must not count again.
+    app.link_expense(2, &mine).await;
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000 + 1000, "{d}");
+
+    let (_, me) = app.send("GET", "/auth/me", None).await;
+    let user = me["id"].as_str().expect("user id").to_string();
+    let pool = app.tenantless_pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(&user)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let cleared = sqlx::query("UPDATE ko_members SET is_me = false")
+        .execute(&mut *tx)
+        .await
+        .unwrap()
+        .rows_affected();
+    assert_eq!(cleared, 2);
+    tx.commit().await.unwrap();
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 1000, "the linked booking alone: {d}");
 }

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatPercent, monthShort } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
 import type { CategoryTypeSummary, MonthlyOverview, MonthlyRow } from '../../lib/types';
 
@@ -39,12 +40,13 @@ const TYPE_COLUMNS: { code: string; pick: (m: MonthlyRow) => number }[] = [
  * money flow's type view and the table's per-type columns, and a tab that
  * repeats its neighbours is how a screen becomes too much to read.
  */
-export function MonthsTab({ year }: { year: number }) {
+export function MonthsTab({ year, household }: { year: number; household: boolean }) {
   const t = useT();
 
   const overview = useQuery({
-    queryKey: qk.derived.months(year),
-    queryFn: () => api<MonthlyOverview>(`/overview/months?year=${year}`),
+    queryKey: qk.derived.months(year, household),
+    queryFn: () =>
+      api<MonthlyOverview>(withHousehold(`/overview/months?year=${year}`, household)),
   });
   const types = useQuery({
     queryKey: qk.taxonomy.types(),

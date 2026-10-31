@@ -177,36 +177,6 @@ export interface Dashboard {
   topCategories: CategoryAnalysisRow[];
 }
 
-/**
- * One category, this year against last.
- *
- * Every figure is in the stored expense-positive convention, so a positive
- * `deltaCents` means it cost MORE than last year. The display flips that sign like
- * everywhere else: `<FlowMoney netCents={deltaCents}>` reads as the direction money
- * moved, which is the same for a cost that fell and an income that rose.
- */
-export interface KoOverYearsSeries {
-  key: string;
-  label: string;
-  perYearAmountCents: number[];
-  perYearOwnShareCents: number[];
-  totalAmountCents: number;
-  totalOwnShareCents: number;
-  yearsActive: number;
-  expenseCount: number;
-}
-
-export interface KoOverYears {
-  years: number[];
-  amountPerYearCents: number[];
-  ownSharePerYearCents: number[];
-  monthsPerYear: number[];
-  byCategory: KoOverYearsSeries[];
-  byPayer: KoOverYearsSeries[];
-  expenseCount: number;
-  excludedCount: number;
-}
-
 export interface OverYearsSeries {
   key: string;
   label: string;
@@ -231,6 +201,14 @@ export interface OverYears {
   uncategorizedCount: number;
 }
 
+/**
+ * One category, this year against last.
+ *
+ * Every figure is in the stored expense-positive convention, so a positive
+ * `deltaCents` means it cost MORE than last year. The display flips that sign like
+ * everywhere else: `<FlowMoney netCents={deltaCents}>` reads as the direction money
+ * moved, which is the same for a cost that fell and an income that rose.
+ */
 export interface CompareRow {
   categoryId: string | null;
   categoryName: string;
@@ -355,7 +333,15 @@ export interface CategoryAnalysis {
   rows: CategoryAnalysisRow[];
   totalNetCents: number;
   monthsWithData: number;
+  /** Uncategorised BOOKINGS — what the booking list can show and fix. */
   uncategorizedCount: number;
+  /**
+   * Household shares counted without a category because their KitchenOwl
+   * category is not mapped; fixed on the KitchenOwl page, not in the booking list.
+   */
+  householdUncategorizedCount: number;
+  /** How many of the counted items are household shares; 0 when switched off. */
+  householdCount: number;
   excludedTransferCount: number;
 }
 
@@ -564,6 +550,26 @@ export interface KoCategory {
   fetchedAt: string;
 }
 
+/** One KitchenOwl category and the finance category its shares count in. */
+export interface KoCategoryMapping {
+  koCategoryId: number;
+  name: string;
+  financesCategoryId: string | null;
+  financesCategoryName: string | null;
+  /** Same name, offered while unmapped; never applied by itself. */
+  suggestedCategoryId: string | null;
+  /** My shares of the flatmates' purchases in it, over the whole mirror. */
+  shareCount: number;
+  ownShareCents: number;
+}
+
+export interface KoCategoryMap {
+  categories: KoCategoryMapping[];
+  /** Shares in expenses KitchenOwl has no category for — no mapping reaches them. */
+  untaggedShareCount: number;
+  untaggedOwnShareCents: number;
+}
+
 export interface KoMetadata {
   members: KoMember[];
   categories: KoCategory[];
@@ -612,176 +618,6 @@ export interface KoExpensePage {
   sumAmountCents: number;
   sumOwnShareCents: number;
   linkedCount: number;
-}
-
-/**
- * The household ledger's own analysis. Two figures everywhere: `amountCents` is
- * what the household spent, `ownShareCents` is the user's slice. They are never
- * added — not to each other and not to anything from the personal ledger.
- */
-export interface KoCategoryAnalysisRow {
-  koCategoryId: number | null;
-  koCategoryName: string | null;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  shareOfTotal: number;
-  averagePerMonthCents: number;
-  averageOwnSharePerMonthCents: number;
-  monthlyAmountCents: number[];
-  monthlyOwnShareCents: number[];
-}
-
-export interface KoPayerShare {
-  memberId: number | null;
-  name: string;
-  amountCents: number;
-  expenseCount: number;
-  /** Twelve slots, Januar first. */
-  monthlyAmountCents: number[];
-}
-
-export interface KoCategoryAnalysis {
-  year: number;
-  rows: KoCategoryAnalysisRow[];
-  totalAmountCents: number;
-  totalOwnShareCents: number;
-  expenseCount: number;
-  monthsWithData: number;
-  uncategorizedCount: number;
-  /** What KitchenOwl itself keeps out of its statistics, so this does too. */
-  excludedCount: number;
-  paidBy: KoPayerShare[];
-  years: number[];
-}
-
-export interface KoSeriesMonth {
-  month: number;
-  monthName: string;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-}
-
-export interface KoMonthlySeries {
-  year: number;
-  mode: 'category' | 'name' | 'uncategorized';
-  subject: string;
-  koCategoryId: number | null;
-  months: KoSeriesMonth[];
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  averagePerActiveMonthCents: number;
-  averageOwnSharePerActiveMonthCents: number;
-  monthsWithData: number;
-}
-
-export interface KoSeriesSubject {
-  name: string;
-  expenseCount: number;
-  amountCents: number;
-  ownShareCents: number;
-  koCategoryName: string | null;
-}
-
-/** One KitchenOwl category, this year against last. Both figures, both deltas. */
-export interface KoCompareRow {
-  koCategoryId: number | null;
-  koCategoryName: string | null;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  previousAmountCents: number;
-  previousOwnShareCents: number;
-  previousExpenseCount: number;
-  deltaAmountCents: number;
-  deltaOwnShareCents: number;
-  /** Null when there was no previous year to be a share of. */
-  deltaRatio: number | null;
-  comparableAmountCents: number;
-  comparableOwnShareCents: number;
-  comparablePreviousAmountCents: number;
-  comparablePreviousOwnShareCents: number;
-  comparableDeltaAmountCents: number;
-  comparableDeltaOwnShareCents: number;
-  comparableDeltaRatio: number | null;
-  monthlyAmountCents: number[];
-  monthlyOwnShareCents: number[];
-  previousMonthlyAmountCents: number[];
-  previousMonthlyOwnShareCents: number[];
-  isNew: boolean;
-  isGone: boolean;
-}
-
-export interface KoCompareTotals {
-  year: number;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  monthsWithData: number;
-  lastMonthWithData: number | null;
-  comparableAmountCents: number;
-  comparableOwnShareCents: number;
-  comparableExpenseCount: number;
-  excludedCount: number;
-}
-
-export interface KoComparePayer {
-  memberId: number | null;
-  name: string;
-  amountCents: number;
-  previousAmountCents: number;
-  deltaCents: number;
-  expenseCount: number;
-  previousExpenseCount: number;
-}
-
-export interface KoYearComparison {
-  year: number;
-  previousYear: number;
-  current: KoCompareTotals;
-  previous: KoCompareTotals;
-  comparableMonths: number[];
-  fullyComparable: boolean;
-  previousYearHasData: boolean;
-  rows: KoCompareRow[];
-  paidBy: KoComparePayer[];
-  years: number[];
-}
-
-export interface KoTrailingMonth {
-  year: number;
-  month: number;
-  monthName: string;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-}
-
-export interface KoTrailingCategory {
-  koCategoryId: number | null;
-  koCategoryName: string | null;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  averagePerMonthCents: number;
-  averageOwnSharePerMonthCents: number;
-  monthlyAmountCents: number[];
-  monthlyOwnShareCents: number[];
-}
-
-export interface KoTrailingWindow {
-  year: number;
-  month: number;
-  fromYear: number;
-  fromMonth: number;
-  amountCents: number;
-  ownShareCents: number;
-  expenseCount: number;
-  monthsWithData: number;
-  months: KoTrailingMonth[];
-  rows: KoTrailingCategory[];
 }
 
 export interface KoMatchCandidate {
@@ -1201,8 +1037,35 @@ export interface MonthlySeries {
   netCents: number;
   /** Divided by the months carrying a booking for this subject, not by twelve. */
   averagePerActiveMonthCents: number;
+  /** Bookings and household shares together. */
   bookingCount: number;
   monthsWithData: number;
+  /** The household shares among the figures; empty when switched off. */
+  householdItems: HouseholdShareItem[];
+}
+
+/**
+ * My share of one household purchase somebody else paid, as the statistics count
+ * it. Not a booking: no account, not editable here.
+ */
+export interface HouseholdShareItem {
+  id: string;
+  externalId: number;
+  /** KitchenOwl's name for the expense — data, never translated. */
+  name: string;
+  date: string;
+  month: number;
+  monthName: string;
+  paidByName: string | null;
+  /** What the household spent in total. */
+  amountCents: number;
+  /** My share — the figure that counts. Negative for a refund. */
+  ownShareCents: number;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** The finance category's type label, for the chip's colour. */
+  categoryType: string | null;
+  koCategoryName: string | null;
 }
 
 export interface SeriesSubject {

@@ -39,6 +39,20 @@
 //! 40,00, because net the flatmates paid 40,00 for me — so the counted `kind`
 //! follows the sign.
 //!
+//! **Since migration 0024 the flatmates' purchases are in the statistics too, so
+//! a settlement also counts net of my shares of them.** Each purchase somebody
+//! else paid, in which I have a share, counts as its own row at that share, in the
+//! finance category its KitchenOwl category is mapped to. The part of a
+//! settlement that pays for those shares would be counted a second time, so within
+//! the window M — the sum of those shares — comes off as well: the settlement
+//! counts at `bank net + O − M`. Over a window the statistics then come to my
+//! linked shares, my shares of the flatmates' purchases and my unlinked purchases
+//! at full, and the settlement carries only the correction for the unlinked ones.
+//! The flatmate pays 90,00 for three, my 30,00 counts in its category, I pay a
+//! settlement of 30,00, and the settlement counts 0. The analysis can be switched
+//! to the 0023 figure (`bank net + O`, no household rows), and the tax report
+//! always uses it.
+//!
 //! A settlement, for this rule, is a confirmed income or expense booked here
 //! (`external_source = SOURCE`) or sitting in the `Haushaltsausgleich` category this
 //! module resolves by name — which is where the user's hand-entered settlements of
@@ -48,7 +62,8 @@
 //! while it settles the balance as of the click, and the old ones are month-only,
 //! so a date would cut the settlement's own month in the wrong place. Linked
 //! purchases after the last settlement belong to no window and stay at my share — a
-//! receivable is not income. The definition is the view `v_counted_booking`.
+//! receivable is not income — and the flatmates' purchases after it stay at my
+//! share, a payable not yet paid. The definition is the view `v_counted_booking`.
 //!
 //! `transfer` models money moving between the user's OWN accounts: `net_cents` is 0
 //! by generated column, so it moves neither the balance nor any category. This money

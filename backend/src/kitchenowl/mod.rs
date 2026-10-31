@@ -13,14 +13,20 @@
 //! - Matching is an optional, reversible **link**. Confirming one moves no money
 //!   and writes no booking. It does decide how much of the booking the personal
 //!   statistics count — my share of the expense, through `v_ledger` (migration
-//!   0022) — which is the one way a KitchenOwl figure reaches a personal report:
-//!   as a fraction applied to a booking, never as an amount added to one.
+//!   0022): a fraction applied to a booking, never an amount added to one.
+//! - The other way a KitchenOwl figure reaches a personal report is my share of a
+//!   purchase somebody else paid (migration 0024). It enters the statistics as a
+//!   row of its own in `v_ledger`, in the finance category its KitchenOwl category
+//!   is mapped to ([`category_map`]) — never as a booking, never in the booking
+//!   list, and never in a balance, because none of that money passed through my
+//!   account. The analysis page can switch these rows off; the tax report never
+//!   has them.
 //! - The two ledgers will never reconcile, by design. There is no "unreconciled
 //!   difference" error state anywhere, because an unlinked expense is normal.
 //! - If KitchenOwl is unreachable the rest of the app keeps working and the failure
 //!   is visible, as `AppError::Integration` -> 502 and as a recorded `sync_runs` row.
 
-pub mod analysis;
+pub mod category_map;
 pub mod client;
 pub mod link;
 pub mod matching;

@@ -11,8 +11,9 @@ use crate::{
 };
 
 /// The net per category is a statistic, so it is read through `v_ledger` like every
-/// other one: confirmed bookings only, a KitchenOwl-linked booking at my share and a
-/// household settlement net of the linked shares.
+/// other one: confirmed bookings, a KitchenOwl-linked booking at my share, my shares
+/// of the flatmates' purchases in their mapped category, and a household
+/// settlement net of both kinds of share. `booking_count` counts those shares too.
 ///
 /// One grouped pass over the ledger, joined, rather than two correlated subqueries
 /// per category: `v_ledger` is no longer a plain table scan, and the correlated

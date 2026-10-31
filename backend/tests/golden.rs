@@ -217,6 +217,7 @@ fn ledger_2026() -> Vec<LedgerRow> {
                 is_savings: code == Some("sparen"),
                 in_consumption: matches!(code, Some("fixkosten" | "variabel" | "sonstiges")),
                 tax_relevant: b["taxRelevant"].as_bool().unwrap_or(false),
+                ko_household: false,
             }
         })
         .collect()
@@ -629,6 +630,7 @@ fn transfers_are_excluded_from_consumption_but_not_from_the_balance() {
         is_savings: false,
         in_consumption: false,
         tax_relevant: false,
+        ko_household: false,
     });
 
     assert_eq!(calc::by_type(&rows), before_types, "Typ-Netto unverändert");
@@ -1078,6 +1080,7 @@ fn a_gap_inside_the_data_keeps_the_running_balance() {
         is_savings: false,
         in_consumption: true,
         tax_relevant: false,
+        ko_household: false,
     };
     // Januar and März, nothing in Februar.
     let months = calc::by_month(&[row(1, 1_000), row(3, 2_000)]);

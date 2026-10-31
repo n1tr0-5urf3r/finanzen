@@ -13,6 +13,7 @@ pub mod forecast;
 pub mod funds;
 pub mod importer;
 pub mod kitchenowl;
+pub mod ledger;
 pub mod locale;
 pub mod models;
 pub mod openapi;
@@ -196,32 +197,16 @@ pub fn router(state: AppState) -> Router {
         .route("/kitchenowl/metadata", get(kitchenowl::routes::metadata))
         .route("/kitchenowl/sync", post(kitchenowl::routes::sync_now))
         .route(
-            "/kitchenowl/analysis/categories",
-            get(kitchenowl::analysis::categories),
+            "/kitchenowl/category-map",
+            get(kitchenowl::category_map::list),
         )
         .route(
-            "/kitchenowl/analysis/series",
-            get(kitchenowl::analysis::series),
-        )
-        .route(
-            "/kitchenowl/analysis/series/subjects",
-            get(kitchenowl::analysis::series_subjects),
+            "/kitchenowl/category-map/{categoryId}",
+            put(kitchenowl::category_map::set),
         )
         .route(
             "/kitchenowl/category-suggestion",
             get(kitchenowl::tagging::category_suggestion),
-        )
-        .route(
-            "/kitchenowl/analysis/over-years",
-            get(kitchenowl::analysis::over_years),
-        )
-        .route(
-            "/kitchenowl/analysis/compare",
-            get(kitchenowl::analysis::compare),
-        )
-        .route(
-            "/kitchenowl/analysis/trailing",
-            get(kitchenowl::analysis::trailing),
         )
         .route(
             "/kitchenowl/settlement",

@@ -195,10 +195,13 @@ async fn precedents(conn: &mut PgConnection) -> Result<HashMap<String, (i64, Str
 
 /// The personal rule table, projected onto KitchenOwl's categories.
 ///
-/// Only reaches a suggestion where the user has already mapped a finance category
-/// to a KitchenOwl one (`ko_categories.finances_category_id`). That map is a hint
-/// the user maintains, not an automatic correspondence — the two taxonomies are
-/// unrelated and nothing here invents a link between them.
+/// Only reaches a suggestion where the user has already mapped a KitchenOwl
+/// category to a finance one (`ko_categories.finances_category_id`, set on the
+/// KitchenOwl page). That map is what the statistics count my shares of the
+/// flatmates' purchases under (migration 0024); here it is read backwards, as a
+/// hint — the two taxonomies are unrelated and nothing here invents a link
+/// between them. Where several KitchenOwl categories map to the same finance
+/// category, the rule suggests whichever the join meets first.
 async fn rule_suggestions(conn: &mut PgConnection) -> Result<HashMap<String, (i64, String)>> {
     let rows = sqlx::query(
         "SELECT r.match_key AS key, k.category_id AS cat, k.name AS cat_name \

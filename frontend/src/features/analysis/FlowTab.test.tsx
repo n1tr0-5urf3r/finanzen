@@ -83,6 +83,8 @@ const ANALYSIS: CategoryAnalysis = {
   totalNetCents: 150000,
   monthsWithData: 2,
   uncategorizedCount: 0,
+  householdUncategorizedCount: 0,
+  householdCount: 0,
   excludedTransferCount: 4,
 };
 
@@ -94,8 +96,8 @@ function renderTab() {
         <MemoryRouter initialEntries={['/auswertung?jahr=2026&ansicht=fluss']}>
           {/* The period picker lives in the page's filter bar, beside the year;
               both halves read the same URL parameter, so the test mounts both. */}
-          <FlowPeriodPicker year={2026} />
-          <FlowTab year={2026} />
+          <FlowPeriodPicker year={2026} household />
+          <FlowTab year={2026} household />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,

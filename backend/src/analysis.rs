@@ -4,6 +4,11 @@
 //! [`crate::calc`], so the SQL stays a projection and the arithmetic has exactly one
 //! definition. The golden suite asserts the engine directly; this module is what
 //! puts the same numbers on the wire.
+//!
+//! Every statistic here except the tax report counts my shares of the household's
+//! purchases paid by others (migration 0024) by default. The analysis page can
+//! switch them off with `household=false`, which reads [`Ledger::Personal`]; the
+//! tax report always does, because a flatmate's purchase is not my receipt.
 
 use axum::{Json, extract::Query};
 use sqlx::{PgConnection, Row};
@@ -13,11 +18,12 @@ use crate::{
     auth::Ctx,
     calc::{self, Kind, LedgerRow},
     error::{AppError, Result},
+    ledger::Ledger,
     locale::{div_round_half_up, month_name_de},
     models::{
-        CategoryAnalysis, CategoryAnalysisRow, CategoryTypeSummary, Dashboard, MonthlyOverview,
-        MonthlyRow, MonthlySeries, OverYears, OverYearsSeries, SeriesMonth, SeriesSubject,
-        TaxCategorySummary, TaxEntry, TaxReport,
+        CategoryAnalysis, CategoryAnalysisRow, CategoryTypeSummary, Dashboard, HouseholdShareItem,
+        MonthlyOverview, MonthlyRow, MonthlySeries, OverYears, OverYearsSeries, SeriesMonth,
+        SeriesSubject, TaxCategorySummary, TaxEntry, TaxReport,
     },
 };
 
@@ -27,33 +33,58 @@ pub struct YearQuery {
     pub year: i32,
 }
 
-async fn load_ledger(conn: &mut PgConnection, year: i32) -> Result<Vec<LedgerRow>> {
-    let rows = sqlx::query(
-        "SELECT period_year, period_month, kind, amount_cents, category_id, category_name, \
-                type_code, type_label, is_income, is_savings, in_consumption, tax_relevant \
-           FROM v_ledger WHERE period_year = $1::smallint",
-    )
+/// A year, and whether the household's shares are counted — the analysis page's
+/// switch. Absent means yes.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsQuery {
+    pub year: i32,
+    pub household: Option<bool>,
+}
+
+/// Just the switch, for the statistics that span every year.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HouseholdQuery {
+    pub household: Option<bool>,
+}
+
+/// How the `household` parameter is documented on every endpoint that takes it.
+pub(crate) const HOUSEHOLD_PARAM: &str = "Eigene Anteile an Haushaltsausgaben, die andere \
+     bezahlt haben (KitchenOwl), einbeziehen. Standard: true";
+
+/// The columns [`ledger_row`] reads, for every query that feeds the engine.
+pub(crate) const LEDGER_COLUMNS: &str = "period_year, period_month, kind, amount_cents, \
+     category_id, category_name, type_code, type_label, is_income, is_savings, \
+     in_consumption, tax_relevant, ko_household";
+
+pub(crate) fn ledger_row(r: &sqlx::postgres::PgRow) -> LedgerRow {
+    LedgerRow {
+        period_year: r.get::<i16, _>("period_year") as i32,
+        period_month: r.get::<i16, _>("period_month") as u8,
+        kind: Kind::parse(r.get::<String, _>("kind").as_str()).unwrap_or(Kind::Expense),
+        amount_cents: r.get("amount_cents"),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        type_code: r.get("type_code"),
+        type_label: r.get("type_label"),
+        is_income: r.get::<Option<bool>, _>("is_income").unwrap_or(false),
+        is_savings: r.get::<Option<bool>, _>("is_savings").unwrap_or(false),
+        in_consumption: r.get::<Option<bool>, _>("in_consumption").unwrap_or(false),
+        tax_relevant: r.get("tax_relevant"),
+        ko_household: r.get("ko_household"),
+    }
+}
+
+async fn load_ledger(conn: &mut PgConnection, ledger: Ledger, year: i32) -> Result<Vec<LedgerRow>> {
+    let rows = sqlx::query(&format!(
+        "SELECT {LEDGER_COLUMNS} FROM {} WHERE period_year = $1::smallint",
+        ledger.view()
+    ))
     .bind(year)
     .fetch_all(&mut *conn)
     .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LedgerRow {
-            period_year: r.get::<i16, _>("period_year") as i32,
-            period_month: r.get::<i16, _>("period_month") as u8,
-            kind: Kind::parse(r.get::<String, _>("kind").as_str()).unwrap_or(Kind::Expense),
-            amount_cents: r.get("amount_cents"),
-            category_id: r.get("category_id"),
-            category_name: r.get("category_name"),
-            type_code: r.get("type_code"),
-            type_label: r.get("type_label"),
-            is_income: r.get::<Option<bool>, _>("is_income").unwrap_or(false),
-            is_savings: r.get::<Option<bool>, _>("is_savings").unwrap_or(false),
-            in_consumption: r.get::<Option<bool>, _>("in_consumption").unwrap_or(false),
-            tax_relevant: r.get("tax_relevant"),
-        })
-        .collect())
+    Ok(rows.iter().map(ledger_row).collect())
 }
 
 /// Opening balance, and whether it was configured by hand or derived from the
@@ -149,7 +180,10 @@ fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow>
 /// last only to keep the sort total for genuinely identical rows.
 ///
 /// The amounts listed and summed are the counted ones: a tax-relevant purchase
-/// linked to a KitchenOwl expense appears at my share, which is what I bore.
+/// linked to a KitchenOwl expense appears at my share, which is what I bore. The
+/// household's purchases paid by others never appear, and a settlement is not
+/// netted of them: somebody else's receipt is not mine to claim, so the report
+/// reads [`Ledger::Personal`] whatever the analysis page is set to.
 #[utoipa::path(
     get,
     path = "/api/v1/dashboard",
@@ -158,7 +192,7 @@ fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow>
     responses((status = 200, description = "Jahreszahlen, beide Sparquoten, Top-Kategorien", body = Dashboard)),
 )]
 pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Dashboard>> {
-    let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
+    let rows = load_ledger(ctx.tenant.conn(), Ledger::WithHousehold, q.year).await?;
     let (opening, _, gap) = opening_balance(ctx.tenant.conn(), q.year).await?;
     let cash = cash_flow(ctx.tenant.conn(), q.year).await?;
 
@@ -199,7 +233,10 @@ pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<
         savings_rate_naive: rates.naive_rate,
         savings_rate_consumption: rates.consumption_rate,
         savings_amount_cents: rates.savings_amount_cents,
-        booking_count: totals.booking_count,
+        // Labelled "Buchungen": the household shares are counted in every figure
+        // but are not bookings, and a count the booking list cannot reproduce
+        // would read as a bug.
+        booking_count: totals.booking_count - totals.household_count,
         tax_relevant_count: rows.iter().filter(|r| r.tax_relevant).count() as i64,
         uncategorized_count: totals.uncategorized_count,
         uncategorized_net_cents: totals.uncategorized_net_cents,
@@ -214,11 +251,15 @@ pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<
     get,
     path = "/api/v1/overview/months",
     tag = "analysis",
-    params(("year" = i32, Query, description = "Kalenderjahr")),
+    params(
+        ("year" = i32, Query, description = "Kalenderjahr"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
+    ),
     responses((status = 200, description = "Monatswerte netto je Typ, kumuliert", body = MonthlyOverview)),
 )]
-pub async fn monthly(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<MonthlyOverview>> {
-    let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
+pub async fn monthly(mut ctx: Ctx, Query(q): Query<StatsQuery>) -> Result<Json<MonthlyOverview>> {
+    let ledger = Ledger::from_param(q.household);
+    let rows = load_ledger(ctx.tenant.conn(), ledger, q.year).await?;
     let months = calc::by_month(&rows);
     let totals = calc::totals(&rows);
 
@@ -227,6 +268,7 @@ pub async fn monthly(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Mo
             .filter(|r| {
                 r.period_month == month
                     && r.category_id.is_none()
+                    && !r.ko_household
                     && r.kind != crate::calc::Kind::Transfer
             })
             .count() as i64
@@ -281,14 +323,18 @@ pub async fn monthly(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Mo
     get,
     path = "/api/v1/analysis/categories",
     tag = "analysis",
-    params(("year" = i32, Query, description = "Kalenderjahr")),
+    params(
+        ("year" = i32, Query, description = "Kalenderjahr"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
+    ),
     responses((status = 200, description = "Netto je Kategorie mit beiden Bruttoschenkeln", body = CategoryAnalysis)),
 )]
 pub async fn categories(
     mut ctx: Ctx,
-    Query(q): Query<YearQuery>,
+    Query(q): Query<StatsQuery>,
 ) -> Result<Json<CategoryAnalysis>> {
-    let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
+    let ledger = Ledger::from_param(q.household);
+    let rows = load_ledger(ctx.tenant.conn(), ledger, q.year).await?;
     let months = calc::months_with_data(&rows);
     let analysis_rows = to_analysis_rows(&rows, months);
     let totals = calc::totals(&rows);
@@ -298,6 +344,8 @@ pub async fn categories(
         total_net_cents: analysis_rows.iter().map(|r| r.net_cents.max(0)).sum(),
         months_with_data: months,
         uncategorized_count: totals.uncategorized_count,
+        household_uncategorized_count: totals.household_uncategorized_count,
+        household_count: totals.household_count,
         excluded_transfer_count: totals.transfer_count,
         rows: analysis_rows,
     };
@@ -313,15 +361,16 @@ pub async fn categories(
     responses((status = 200, description = "Steuerrelevante Buchungen mit stabiler Nummer", body = TaxReport)),
 )]
 pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxReport>> {
-    let rows = sqlx::query(
+    let rows = sqlx::query(&format!(
         "SELECT b.id, b.period_month, b.comment, b.category_name, b.kind, \
                 b.amount_cents, \
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
-           FROM v_ledger b \
+           FROM {} b \
           WHERE b.tax_relevant AND b.period_year = $1::smallint \
           ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, \
                    b.bank_amount_cents, b.id",
-    )
+        Ledger::Personal.view()
+    ))
     .bind(q.year)
     .fetch_all(ctx.tenant.conn())
     .await?;
@@ -399,6 +448,7 @@ pub struct SeriesQuery {
     /// spreadsheet's Filter tab existed for and the one a household actually asks.
     pub category_id: Option<Uuid>,
     pub comment: Option<String>,
+    pub household: Option<bool>,
 }
 
 /// Twelve months for one category or one comment.
@@ -410,6 +460,7 @@ pub struct SeriesQuery {
         ("year" = i32, Query, description = "Kalenderjahr"),
         ("categoryId" = Option<Uuid>, Query, description = "Kategorie — genau eine von beiden"),
         ("comment" = Option<String>, Query, description = "Kommentar, z. B. tanken — Groß-/Kleinschreibung egal"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
     ),
     responses(
         (status = 200, description = "Zwölf Monate für eine Kategorie oder einen Kommentar", body = MonthlySeries),
@@ -417,21 +468,31 @@ pub struct SeriesQuery {
     ),
 )]
 pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<MonthlySeries>> {
-    let (mode, subject, where_sql): (&str, String, &str) = match (&q.category_id, &q.comment) {
-        (Some(_), None) => ("category", String::new(), "b.category_id = $2"),
-        // Matched case-insensitively on the trimmed comment, exactly as the rule
-        // table matches, so "Tanken" and "tanken" are one subject and not two.
-        (None, Some(c)) => (
-            "comment",
-            c.trim().to_string(),
-            "b.match_key = lower(btrim($2))",
-        ),
-        _ => {
-            return Err(AppError::Validation(
-                "Genau eine von categoryId oder comment angeben".into(),
-            ));
-        }
-    };
+    let ledger = Ledger::from_param(q.household);
+    // The second predicate picks the same subject out of the household shares,
+    // whose comment is the expense's name.
+    let (mode, subject, where_sql, household_sql): (&str, String, &str, &str) =
+        match (&q.category_id, &q.comment) {
+            (Some(_), None) => (
+                "category",
+                String::new(),
+                "b.category_id = $2",
+                "h.category_id = $2",
+            ),
+            // Matched case-insensitively on the trimmed comment, exactly as the rule
+            // table matches, so "Tanken" and "tanken" are one subject and not two.
+            (None, Some(c)) => (
+                "comment",
+                c.trim().to_string(),
+                "b.match_key = lower(btrim($2))",
+                "lower(btrim(h.name)) = lower(btrim($2))",
+            ),
+            _ => {
+                return Err(AppError::Validation(
+                    "Genau eine von categoryId oder comment angeben".into(),
+                ));
+            }
+        };
 
     let sql = format!(
         "SELECT b.period_month, \
@@ -439,9 +500,10 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
                 COALESCE(SUM(b.amount_cents) FILTER (WHERE b.kind = 'expense'), 0)::bigint AS exp, \
                 COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
                 count(*)::bigint AS n \
-           FROM v_ledger b \
+           FROM {view} b \
           WHERE b.period_year = $1::smallint AND {where_sql} \
-          GROUP BY b.period_month ORDER BY b.period_month"
+          GROUP BY b.period_month ORDER BY b.period_month",
+        view = ledger.view()
     );
 
     let mut query = sqlx::query(&sql).bind(q.year);
@@ -450,6 +512,36 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
         _ => query.bind(&subject),
     };
     let rows = query.fetch_all(ctx.tenant.conn()).await?;
+
+    // The household shares behind the figures, listed beside the bookings: the
+    // booking list cannot show them (they are not bookings), and a total whose
+    // items cannot be found anywhere reads as an error.
+    let household_items = if ledger.includes_household() {
+        let sql = format!(
+            "SELECT h.id, h.external_id, h.name, h.expense_date, h.period_month, \
+                    h.paid_by_name, h.amount_cents, h.own_share_cents, h.category_id, \
+                    c.name AS category_name, t.label AS category_type, \
+                    h.ko_category_name \
+               FROM v_ko_household_share h \
+               LEFT JOIN categories c ON c.id = h.category_id \
+               LEFT JOIN category_types t ON t.id = c.type_id \
+              WHERE h.period_year = $1::smallint AND {household_sql} \
+              ORDER BY h.expense_date, h.name, h.id"
+        );
+        let query = sqlx::query(&sql).bind(q.year);
+        let query = match (&q.category_id, &q.comment) {
+            (Some(id), _) => query.bind(id),
+            _ => query.bind(&subject),
+        };
+        query
+            .fetch_all(ctx.tenant.conn())
+            .await?
+            .iter()
+            .map(household_item)
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     let mut months: Vec<SeriesMonth> = (1..=12u8)
         .map(|month| SeriesMonth {
@@ -504,9 +596,29 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
         net_cents,
         booking_count,
         months_with_data,
+        household_items,
     };
     ctx.tenant.commit().await?;
     Ok(Json(out))
+}
+
+fn household_item(r: &sqlx::postgres::PgRow) -> HouseholdShareItem {
+    let month = r.get::<i16, _>("period_month") as u8;
+    HouseholdShareItem {
+        id: r.get("id"),
+        external_id: r.get("external_id"),
+        name: r.get("name"),
+        date: r.get("expense_date"),
+        month,
+        month_name: month_name_de(month).to_string(),
+        paid_by_name: r.get("paid_by_name"),
+        amount_cents: r.get("amount_cents"),
+        own_share_cents: r.get("own_share_cents"),
+        category_id: r.get("category_id"),
+        category_name: r.get("category_name"),
+        category_type: r.get("category_type"),
+        ko_category_name: r.get("ko_category_name"),
+    }
 }
 
 /// The comments worth charting, most used first — what the picker offers.
@@ -514,23 +626,28 @@ pub async fn series(mut ctx: Ctx, Query(q): Query<SeriesQuery>) -> Result<Json<M
     get,
     path = "/api/v1/analysis/series/subjects",
     tag = "analysis",
-    params(("year" = i32, Query, description = "Kalenderjahr")),
+    params(
+        ("year" = i32, Query, description = "Kalenderjahr"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
+    ),
     responses((status = 200, description = "Kommentare mit mehr als einer Buchung, häufigste zuerst", body = Vec<SeriesSubject>)),
 )]
 pub async fn series_subjects(
     mut ctx: Ctx,
-    Query(q): Query<YearQuery>,
+    Query(q): Query<StatsQuery>,
 ) -> Result<Json<Vec<SeriesSubject>>> {
-    let rows = sqlx::query(
+    let ledger = Ledger::from_param(q.household);
+    let rows = sqlx::query(&format!(
         "SELECT b.comment, count(*)::bigint AS n, \
                 COALESCE(SUM(b.net_cents), 0)::bigint AS net, \
                 max(b.category_name) AS category_name \
-           FROM v_ledger b \
+           FROM {} b \
           WHERE b.period_year = $1::smallint \
           GROUP BY b.comment \
           HAVING count(*) > 1 \
           ORDER BY n DESC, b.comment LIMIT 300",
-    )
+        ledger.view()
+    ))
     .bind(q.year)
     .fetch_all(ctx.tenant.conn())
     .await?;
@@ -571,14 +688,17 @@ pub async fn series_subjects(
     get,
     path = "/api/v1/analysis/over-years",
     tag = "analysis",
+    params(("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM)),
     responses((status = 200, description = "Netto je Kategorie und Typ über alle Jahre", body = OverYears)),
 )]
-pub async fn over_years(mut ctx: Ctx) -> Result<Json<OverYears>> {
-    let rows = sqlx::query(
+pub async fn over_years(mut ctx: Ctx, Query(q): Query<HouseholdQuery>) -> Result<Json<OverYears>> {
+    let ledger = Ledger::from_param(q.household);
+    let rows = sqlx::query(&format!(
         "SELECT period_year, period_month, kind, amount_cents, net_cents, \
-                category_id, category_name, type_code, type_label \
-           FROM v_ledger",
-    )
+                category_id, category_name, type_code, type_label, ko_household \
+           FROM {}",
+        ledger.view()
+    ))
     .fetch_all(ctx.tenant.conn())
     .await?;
 
@@ -625,7 +745,8 @@ pub async fn over_years(mut ctx: Ctx) -> Result<Json<OverYears>> {
         let category_name: Option<String> = row.get("category_name");
         let type_label: Option<String> = row.get("type_label");
         let type_code: Option<String> = row.get("type_code");
-        if category_id.is_none() {
+        // Bookings only, like every uncategorised count that leads to the list.
+        if category_id.is_none() && !row.get::<bool, _>("ko_household") {
             uncategorized += 1;
         }
 

@@ -91,7 +91,7 @@ function renderTab() {
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="de">
         <MemoryRouter initialEntries={['/auswertung?ansicht=jahre']}>
-          <OverYearsTab />
+          <OverYearsTab household />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,

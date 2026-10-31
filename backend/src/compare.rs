@@ -21,12 +21,14 @@
 //! pairs the results up. Two implementations of netting is one too many.
 
 use axum::{Json, extract::Query};
-use sqlx::{PgConnection, Row};
+use sqlx::PgConnection;
 
 use crate::{
+    analysis::{HOUSEHOLD_PARAM, LEDGER_COLUMNS, ledger_row},
     auth::Ctx,
     calc::{self, Kind, LedgerRow},
     error::{AppError, Result},
+    ledger::Ledger,
     locale::{div_round_half_up, month_name_de},
     models::{
         CompareRow, CompareTotals, CompareTypeRow, TrailingCategory, TrailingMonth, TrailingWindow,
@@ -49,36 +51,19 @@ fn year_month(ord: i32) -> (i32, u8) {
 /// range that spans two years, which is what the column exists for.
 async fn load_ledger_range(
     conn: &mut PgConnection,
+    ledger: Ledger,
     from_ord: i32,
     to_ord: i32,
 ) -> Result<Vec<LedgerRow>> {
-    let rows = sqlx::query(
-        "SELECT period_year, period_month, kind, amount_cents, category_id, category_name, \
-                type_code, type_label, is_income, is_savings, in_consumption, tax_relevant \
-           FROM v_ledger WHERE period_ord BETWEEN $1::int AND $2::int",
-    )
+    let rows = sqlx::query(&format!(
+        "SELECT {LEDGER_COLUMNS} FROM {} WHERE period_ord BETWEEN $1::int AND $2::int",
+        ledger.view()
+    ))
     .bind(from_ord)
     .bind(to_ord)
     .fetch_all(&mut *conn)
     .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LedgerRow {
-            period_year: r.get::<i16, _>("period_year") as i32,
-            period_month: r.get::<i16, _>("period_month") as u8,
-            kind: Kind::parse(r.get::<String, _>("kind").as_str()).unwrap_or(Kind::Expense),
-            amount_cents: r.get("amount_cents"),
-            category_id: r.get("category_id"),
-            category_name: r.get("category_name"),
-            type_code: r.get("type_code"),
-            type_label: r.get("type_label"),
-            is_income: r.get::<Option<bool>, _>("is_income").unwrap_or(false),
-            is_savings: r.get::<Option<bool>, _>("is_savings").unwrap_or(false),
-            in_consumption: r.get::<Option<bool>, _>("in_consumption").unwrap_or(false),
-            tax_relevant: r.get("tax_relevant"),
-        })
-        .collect())
+    Ok(rows.iter().map(ledger_row).collect())
 }
 
 /// Which months of a year carry at least one booking.
@@ -120,6 +105,7 @@ fn totals_for(year: i32, all: &[LedgerRow], comparable: &[LedgerRow]) -> Compare
 #[serde(rename_all = "camelCase")]
 pub struct CompareQuery {
     pub year: i32,
+    pub household: Option<bool>,
 }
 
 /// This year against last, per category and per type.
@@ -127,14 +113,20 @@ pub struct CompareQuery {
     get,
     path = "/api/v1/analysis/compare",
     tag = "analysis",
-    params(("year" = i32, Query, description = "Kalenderjahr; verglichen wird mit dem Vorjahr")),
+    params(
+        ("year" = i32, Query, description = "Kalenderjahr; verglichen wird mit dem Vorjahr"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
+    ),
     responses((status = 200, description = "Jahr gegen Vorjahr, roh und auf gemeinsame Monate beschränkt", body = YearComparison)),
 )]
 pub async fn compare(mut ctx: Ctx, Query(q): Query<CompareQuery>) -> Result<Json<YearComparison>> {
     let previous_year = q.year - 1;
-    let current = load_ledger_range(ctx.tenant.conn(), ord(q.year, 1), ord(q.year, 12)).await?;
+    let ledger = Ledger::from_param(q.household);
+    let current =
+        load_ledger_range(ctx.tenant.conn(), ledger, ord(q.year, 1), ord(q.year, 12)).await?;
     let previous = load_ledger_range(
         ctx.tenant.conn(),
+        ledger,
         ord(previous_year, 1),
         ord(previous_year, 12),
     )
@@ -308,6 +300,7 @@ pub async fn compare(mut ctx: Ctx, Query(q): Query<CompareQuery>) -> Result<Json
 pub struct TrailingQuery {
     pub year: i32,
     pub month: u8,
+    pub household: Option<bool>,
 }
 
 /// The twelve months ending at the given period, whatever years they fall in.
@@ -318,6 +311,7 @@ pub struct TrailingQuery {
     params(
         ("year" = i32, Query, description = "Jahr des letzten Monats im Fenster"),
         ("month" = u8, Query, description = "Monat 1..12 — das Fenster endet hier"),
+        ("household" = Option<bool>, Query, description = HOUSEHOLD_PARAM),
     ),
     responses(
         (status = 200, description = "Zwölf Monate rückwärts, über die Jahresgrenze hinweg", body = TrailingWindow),
@@ -337,7 +331,13 @@ pub async fn trailing(
     let from_ord = to_ord - 11;
     let (from_year, from_month) = year_month(from_ord);
 
-    let rows = load_ledger_range(ctx.tenant.conn(), from_ord, to_ord).await?;
+    let rows = load_ledger_range(
+        ctx.tenant.conn(),
+        Ledger::from_param(q.household),
+        from_ord,
+        to_ord,
+    )
+    .await?;
 
     // Twelve slots in window order, oldest first — and every one of them present,
     // including the empty ones. A month with nothing in it is information; dropping

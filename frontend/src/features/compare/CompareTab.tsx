@@ -14,6 +14,7 @@ import {
 import { api, asList } from '../../lib/api';
 import { formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
 import { GroupedMonthBars } from '../../charts/GroupedMonthBars';
 import { TrailingChart } from './TrailingChart';
@@ -80,7 +81,7 @@ const COLUMNS: { key: SortKey; labelKey: MessageKey; numeric: boolean }[] = [
  * different months the restricted figures lead, the raw ones are one click away,
  * and the banner says which is which rather than leaving it to be noticed.
  */
-export function CompareTab({ year }: { year: number }) {
+export function CompareTab({ year, household }: { year: number; household: boolean }) {
   const t = useT();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'delta', desc: true });
   const [basisOverride, setBasisOverride] = useState<Basis | null>(null);
@@ -89,8 +90,9 @@ export function CompareTab({ year }: { year: number }) {
   const [charted, setCharted] = useState<string>('');
 
   const query = useQuery({
-    queryKey: qk.derived.compare(year),
-    queryFn: () => api<YearComparison>(`/analysis/compare?year=${year}`),
+    queryKey: qk.derived.compare(year, household),
+    queryFn: () =>
+      api<YearComparison>(withHousehold(`/analysis/compare?year=${year}`, household)),
   });
 
   // The window ends where the year's data ends: a trailing twelve months that ran
@@ -99,8 +101,11 @@ export function CompareTab({ year }: { year: number }) {
   // partial payload white-screens the tab instead of degrading to a default.
   const endMonth = query.data?.current?.lastMonthWithData ?? 12;
   const trailing = useQuery({
-    queryKey: qk.derived.trailing(year, endMonth),
-    queryFn: () => api<TrailingWindow>(`/analysis/trailing?year=${year}&month=${endMonth}`),
+    queryKey: qk.derived.trailing(year, endMonth, household),
+    queryFn: () =>
+      api<TrailingWindow>(
+        withHousehold(`/analysis/trailing?year=${year}&month=${endMonth}`, household),
+      ),
     enabled: query.isSuccess,
   });
 

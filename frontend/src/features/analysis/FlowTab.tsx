@@ -8,8 +8,10 @@ import { Banner, EmptyState, ErrorState, Kpi, LoadingState } from '../../compone
 import { api, asList } from '../../lib/api';
 import { monthName } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { withHousehold } from '../../lib/household';
 import { qk } from '../../lib/queryKeys';
 import { buildFlow, monthsWithActivity, type FlowDetail } from '../../lib/sankey';
+import { HouseholdUncategorizedBanner } from './HouseholdItems';
 import type { MessageKey } from '../../lib/messages/de';
 import type { CategoryAnalysis, CategoryTypeCode, CategoryTypeSummary } from '../../lib/types';
 
@@ -40,12 +42,13 @@ function useFlowMonth(): [number | null, (next: number | null) => void] {
  * rather than in a second panel of its own — one row of controls per screen is
  * the pattern every other page here follows.
  */
-export function FlowPeriodPicker({ year }: { year: number }) {
+export function FlowPeriodPicker({ year, household }: { year: number; household: boolean }) {
   const t = useT();
   const [month, selectMonth] = useFlowMonth();
   const query = useQuery({
-    queryKey: qk.derived.categories(year),
-    queryFn: () => api<CategoryAnalysis>(`/analysis/categories?year=${year}`),
+    queryKey: qk.derived.categories(year, household),
+    queryFn: () =>
+      api<CategoryAnalysis>(withHousehold(`/analysis/categories?year=${year}`, household)),
   });
   const months = useMemo(() => monthsWithActivity(query.data?.rows ?? []), [query.data]);
 
@@ -83,7 +86,7 @@ export function FlowPeriodPicker({ year }: { year: number }) {
  * link; the drill-down does not, because it is a way of looking rather than a
  * thing to send someone.
  */
-export function FlowTab({ year }: { year: number }) {
+export function FlowTab({ year, household }: { year: number; household: boolean }) {
   const t = useT();
   const [month] = useFlowMonth();
   const [expanded, setExpanded] = useState<CategoryTypeCode | null>(null);
@@ -93,8 +96,9 @@ export function FlowTab({ year }: { year: number }) {
   // Same key as the category tab: switching tabs must not refetch what is
   // already in the cache, and both read the identical figures.
   const query = useQuery({
-    queryKey: qk.derived.categories(year),
-    queryFn: () => api<CategoryAnalysis>(`/analysis/categories?year=${year}`),
+    queryKey: qk.derived.categories(year, household),
+    queryFn: () =>
+      api<CategoryAnalysis>(withHousehold(`/analysis/categories?year=${year}`, household)),
   });
   const types = useQuery({
     queryKey: qk.taxonomy.types(),
@@ -227,6 +231,7 @@ export function FlowTab({ year }: { year: number }) {
                   </Link>
                 </Banner>
               )}
+              <HouseholdUncategorizedBanner count={query.data.householdUncategorizedCount} />
               {query.data.excludedTransferCount > 0 && (
                 <Banner tone="info">
                   {t('analysis.transfersExcluded', { count: query.data.excludedTransferCount })}

@@ -46,6 +46,7 @@ const SERIES = {
   averagePerActiveMonthCents: 7_266,
   bookingCount: 3,
   monthsWithData: 3,
+  householdItems: [] as unknown[],
 };
 
 const BOOKING_PAGE = {
@@ -79,7 +80,7 @@ function renderChart() {
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="de">
         <MemoryRouter>
-          <SeriesChart year={2026} categories={CATEGORIES as never} />
+          <SeriesChart year={2026} household categories={CATEGORIES as never} />
         </MemoryRouter>
       </I18nProvider>
     </QueryClientProvider>,
@@ -151,6 +152,70 @@ describe('the per-subject series', () => {
     const call = mocked.mock.calls.map(([p]) => String(p)).find((p) => p.startsWith('/bookings'));
     // Filtered by the charted category, not by everything in the year.
     expect(call).toContain('categoryId=c1');
+  });
+
+  /**
+   * My shares of what a flatmate paid count in the figures, so the drilldown has
+   * to show them — but apart from the bookings and marked as KitchenOwl's, with
+   * who paid, because nothing about them can be found or edited in the booking
+   * list.
+   */
+  it('lists the household shares behind the figures, marked as KitchenOwl', async () => {
+    const user = userEvent.setup();
+    mocked.mockImplementation((path: string) =>
+      Promise.resolve(
+        (path.includes('/series/subjects')
+          ? SUBJECTS
+          : path.includes('/series')
+            ? {
+                ...SERIES,
+                bookingCount: 4,
+                householdItems: [
+                  {
+                    id: 'k1', externalId: 7, name: 'Wocheneinkauf', date: '2026-05-04',
+                    month: 5, monthName: 'Mai', paidByName: 'Ada', amountCents: 9_000,
+                    ownShareCents: 3_000, categoryId: 'c1', categoryName: 'Auto & Parken',
+                    categoryType: 'Variable Kosten',
+                    koCategoryName: 'Wocheneinkauf',
+                  },
+                ],
+              }
+            : BOOKING_PAGE) as never,
+      ),
+    );
+    renderChart();
+    await screen.findByText(/tanken · 2026/);
+
+    // Four entries: three bookings and one household share.
+    await user.click(screen.getByRole('button', { name: /4 Einträge ansehen/ }));
+    expect(
+      await screen.findByText('Aus KitchenOwl: dein Anteil an 1 Einkäufen anderer'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Wocheneinkauf')).toBeInTheDocument();
+    expect(screen.getByText(/bezahlt von Ada/)).toBeInTheDocument();
+    // In the bookings' table, so the columns line up — but in a section of its own,
+    // and read-only: nothing in it is a control.
+    const section = screen.getByText('Wocheneinkauf').closest('tbody')!;
+    expect(section.closest('table')!.textContent).toContain('tanken');
+    expect(section.textContent).not.toContain('tanken');
+    expect(section.querySelectorAll('button, input, select, a')).toHaveLength(0);
+  });
+
+  it('asks for the series with the household switch it was given', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <I18nProvider initialLocale="de">
+          <MemoryRouter>
+            <SeriesChart year={2026} household={false} categories={CATEGORIES as never} />
+          </MemoryRouter>
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText(/tanken · 2026/);
+    const calls = mocked.mock.calls.map(([p]) => String(p));
+    expect(calls).toContain('/analysis/series?year=2026&categoryId=c1&household=false');
+    expect(calls).toContain('/analysis/series/subjects?year=2026&household=false');
   });
 
   it('survives a payload that is not a list', async () => {

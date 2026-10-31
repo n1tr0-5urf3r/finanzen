@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { ScopeNote } from "../../components/Money";
 import { PageHeader } from "../../components/ui";
 import { YearPicker } from "../../components/YearPicker";
+import { HOUSEHOLD_PARAM, householdFromParams } from "../../lib/household";
 import { useT } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/messages/de";
 import { CompareTab } from "../compare/CompareTab";
@@ -30,19 +31,6 @@ const ACROSS_YEARS: [Tab, MessageKey][] = [
 ];
 const TABS: Tab[] = [...ONE_YEAR, ...ACROSS_YEARS].map(([value]) => value);
 
-/**
- * Everything that answers "where did the money go this year".
- *
- * The category breakdown and the year-against-year comparison were two separate
- * screens, which is how the household's identical pair ended up as one screen
- * with a switch and the personal one as two entries in the navigation. They are
- * near-clones — same columns shape, same sorter, same year, same table-and-cards
- * duality — so they are two tabs of one screen now, the way Kategorien, Import
- * and Einstellungen have always done it.
- *
- * The year lives in the URL and is shared by both tabs: switching from the
- * breakdown of 2024 to the comparison of 2024 should not send you back to today.
- */
 /** Each tab states its own convention; one subtitle for all would be wrong for most. */
 const SUBTITLE: Record<Tab, MessageKey> = {
   kategorien: "analysis.intro",
@@ -52,12 +40,31 @@ const SUBTITLE: Record<Tab, MessageKey> = {
   jahre: "overYears.intro",
 };
 
+/**
+ * Everything that answers "where did the money go this year".
+ *
+ * The category breakdown and the year-against-year comparison were two separate
+ * screens. They are near-clones — same columns shape, same sorter, same year,
+ * same table-and-cards duality — so they are two tabs of one screen now, the way
+ * Kategorien, Import and Einstellungen have always done it.
+ *
+ * The year lives in the URL and is shared by every tab: switching from the
+ * breakdown of 2024 to the comparison of 2024 should not send you back to today.
+ *
+ * So does the household switch. By default every figure includes my share of what
+ * the flatmates paid (KitchenOwl), in its mapped category, with the settlements
+ * netted accordingly — which is also why the household's own analysis screens on
+ * the KitchenOwl page could go. Switched off, the page shows the bookings alone,
+ * exactly as it did before those shares were counted. One switch for every tab:
+ * comparing one ledger's months with the other's categories would be nonsense.
+ */
 export function AnalysisPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const year = Number(params.get("jahr")) || new Date().getFullYear();
   const view = params.get("ansicht");
   const tab: Tab = TABS.find((value) => value === view) ?? "kategorien";
+  const household = householdFromParams(params);
 
   function setParam(key: string, value: string | null) {
     setParams(
@@ -102,11 +109,11 @@ export function AnalysisPage() {
         ))}
       </div>
 
-      {/* The over-the-years tab IS every year, so the year picker there is a
-          control that does nothing — and a filter bar holding nothing else is
-          furniture. Both go; the year keeps its value for the other tabs. */}
-      {tab !== "jahre" && (
-        <div className="panel panel--pad filter-bar">
+      <div className="panel panel--pad filter-bar">
+        {/* The over-the-years tab IS every year, so the year picker there is a
+            control that does nothing; it goes, and the year keeps its value for
+            the other tabs. The household switch applies to every tab. */}
+        {tab !== "jahre" && (
           <div style={{ minWidth: "8rem" }}>
             <YearPicker
               id="analysis-year"
@@ -114,20 +121,33 @@ export function AnalysisPage() {
               onChange={(next) => setParam("jahr", String(next))}
             />
           </div>
-          {tab === "fluss" && (
-            <div style={{ minWidth: "10rem" }}>
-              <FlowPeriodPicker year={year} />
-            </div>
-          )}
-          <ScopeNote transfersIncluded={false} />
-        </div>
-      )}
+        )}
+        {tab === "fluss" && (
+          <div style={{ minWidth: "10rem" }}>
+            <FlowPeriodPicker year={year} household={household} />
+          </div>
+        )}
+        <label
+          className="chip"
+          style={{ cursor: "pointer", minHeight: "var(--tap)" }}
+          title={t("analysis.householdHint")}
+        >
+          <input
+            type="checkbox"
+            checked={household}
+            // On is the default and is not written to the URL.
+            onChange={(e) => setParam(HOUSEHOLD_PARAM, e.target.checked ? null : "0")}
+          />
+          {t("analysis.household")}
+        </label>
+        <ScopeNote transfersIncluded={false} />
+      </div>
 
-      {tab === "vergleich" && <CompareTab year={year} />}
-      {tab === "jahre" && <OverYearsTab />}
-      {tab === "fluss" && <FlowTab year={year} />}
-      {tab === "kategorien" && <CategoryTab year={year} />}
-      {tab === "monate" && <MonthsTab year={year} />}
+      {tab === "vergleich" && <CompareTab year={year} household={household} />}
+      {tab === "jahre" && <OverYearsTab household={household} />}
+      {tab === "fluss" && <FlowTab year={year} household={household} />}
+      {tab === "kategorien" && <CategoryTab year={year} household={household} />}
+      {tab === "monate" && <MonthsTab year={year} household={household} />}
     </>
   );
 }

@@ -3,9 +3,10 @@
    deliberate and not decoration:
 
    - `.ko-chip` is NOT `.category-chip`. KitchenOwl's seven household labels and
-     the app's 32 categories are unrelated taxonomies that are never mapped onto
-     each other, so the KitchenOwl chip is outlined and neutral and never touches
-     the --type-* palette. Making them look alike would teach the wrong thing.
+     the app's 32 categories are unrelated taxonomies — the user maps one onto the
+     other for counting, but never automatically — so the KitchenOwl chip is
+     outlined and neutral and never touches the --type-* palette. Making them look
+     alike would teach the wrong thing.
    - `.ko-widget` on the dashboard is boxed and captioned, so it cannot be read
      as part of the personal ledger's arithmetic around it.
    - `.money--share` is tinted away from the household total it sits next to. The
@@ -141,20 +142,45 @@
   background: rgba(14, 17, 19, .55); overflow: auto;
 }
 
-/* ── the household's own analysis ─────────────────────────────────────────────
-   Deliberately the same furniture as the personal Auswertung — same table, same
-   cards, same chart frame — because it answers the same questions. What is NOT
-   shared is the colour: these bars are the KitchenOwl accent, never the personal
-   ledger's income/expense pair, so no figure here can be mistaken for a booking. */
-/* `.ko-analysis__controls` and `.ko-analysis__totals` are gone too — a third
-   filter bar and a third KPI grid, breaking at 620px where `.grid--kpi` breaks at
-   520 and 1120. Three screens used them; all three now use the shared ones.
-   Only the payer list survives, because stacking two names under one label is
-   particular to a ledger with more than one payer in it. */
-.ko-analysis__payers { display: flex; flex-direction: column; gap: .15rem; font-size: .85rem; }
+/* ── household shares in the analysis ─────────────────────────────────────────
+   My shares of what the flatmates paid are listed in the analysis drilldown
+   beside the bookings, and they must not pass for bookings: they are not in the
+   account and cannot be edited there. The KitchenOwl accent stripe and the chip
+   say where they come from. */
+.ko-household-items__head th {
+  padding-top: .7rem; font-size: .78rem; font-weight: 600; color: var(--ink-2);
+  text-align: left;
+}
+.ko-household-items__title { display: inline-flex; align-items: center; gap: .35rem; }
+.ko-household-items__title svg { flex: none; color: var(--accent); }
+.ko-household-items__row td { vertical-align: top; }
+.ko-household-items__row td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: .45rem; }
+.ko-household-items__meta { display: block; font-size: .72rem; color: var(--muted); }
 
-.chart__bar--household { fill: var(--accent); opacity: .32; }
-.chart__bar--share { fill: var(--accent); }
+/* ── the category map ────────────────────────────────────────────────────────
+   One list, two sides: KitchenOwl's category → mine. A grid rather than a table so
+   a phone stacks the two sides instead of scrolling sideways. */
+.ko-map__list { list-style: none; margin: 0; padding: 0; }
+.ko-map__head, .ko-map__row {
+  display: grid; grid-template-columns: minmax(10rem, 1fr) 1.5rem minmax(12rem, 1.4fr);
+  align-items: center; gap: .4rem .8rem; padding: .6rem .9rem;
+}
+.ko-map__head {
+  font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.ko-map__row + .ko-map__row { border-top: 1px solid var(--line); }
+.ko-map__source { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; min-width: 0; }
+.ko-map__meta { font-size: .74rem; color: var(--muted); }
+.ko-map__arrow { color: var(--muted); }
+.ko-map__target { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; min-width: 0; }
+.ko-map__target .select { flex: 1 1 12rem; min-width: 0; max-width: 22rem; }
+.ko-map__saved { display: inline-flex; align-items: center; gap: .2rem; font-size: .74rem; color: var(--muted); }
+@media (max-width: 640px) {
+  .ko-map__head { display: none; }
+  .ko-map__row { grid-template-columns: 1fr; }
+  .ko-map__arrow { display: none; }
+}
 
 /* ── settling up ──────────────────────────────────────────────────────────────
    The only control in this feature that writes to the personal ledger, so it is
