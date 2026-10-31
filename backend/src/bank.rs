@@ -248,14 +248,27 @@ pub fn read_ing_csv(bytes: &[u8]) -> Result<Statement> {
 /// goes, the shouting is softened, and the result lands in the review as a
 /// SUGGESTION — every row of a statement is reviewed by hand, and this only has to
 /// be a better starting point than an empty field.
+///
+/// A transfer is the exception. Its purpose was typed by a person — `Internet`,
+/// `Miete November` — and says what the money was FOR, which is what a comment
+/// says; the payee is only who sent it, a name with nothing for the rule table to
+/// match. So a transfer whose purpose reads like words rather than a reference
+/// number offers that purpose. The payee stays on the review card and on the
+/// booking either way.
 pub fn suggest_comment(row: &StatementRow) -> String {
-    let mut name = row.counterparty.trim().to_string();
-    for prefix in ["VISA ", "Visa ", "PayPal ", "PAYPAL "] {
-        if let Some(rest) = name.strip_prefix(prefix) {
-            name = rest.trim().to_string();
-            break;
+    let mut name = match typed_purpose(row) {
+        Some(purpose) => purpose.to_string(),
+        None => {
+            let mut name = row.counterparty.trim().to_string();
+            for prefix in CARD_PREFIXES {
+                if let Some(rest) = name.strip_prefix(prefix) {
+                    name = rest.trim().to_string();
+                    break;
+                }
+            }
+            name
         }
-    }
+    };
     // A name that is one long SHOUT is title-cased; one that already has lower-case
     // letters is somebody's chosen spelling and is left alone.
     if !name.is_empty()
@@ -286,4 +299,42 @@ pub fn suggest_comment(row: &StatementRow) -> String {
         name = name.chars().take(59).collect::<String>() + "…";
     }
     name
+}
+
+/// What a card terminal or a payment provider puts in front of the shop's name.
+const CARD_PREFIXES: [&str; 4] = ["VISA ", "Visa ", "PayPal ", "PAYPAL "];
+
+/// The purpose of a transfer, when a person wrote it.
+///
+/// Only for the `Buchungstext` of a transfer — `Überweisung`, `Dauerauftrag`,
+/// `Echtzeitüberweisung`, and a `Gutschrift` (`aus Dauerauftrag`) coming in. A
+/// `Lastschrift`'s purpose is the creditor's mandate and invoice numbers, and a
+/// card payment's is the terminal's `NR XXXX … KAUFUMSATZ` line; for those the
+/// payee is the useful part. A salary is a `Gutschrift` too, but its purpose is
+/// a payroll reference: a long run of digits gives that away, and so does length,
+/// because a person types a few words and a system writes a record.
+fn typed_purpose(row: &StatementRow) -> Option<&str> {
+    let text = row.booking_text.trim().to_lowercase();
+    let transfer = text.contains("überweisung")
+        || text.contains("ueberweisung")
+        || text.contains("dauerauftrag")
+        || text.starts_with("gutschrift");
+    if !transfer
+        || CARD_PREFIXES
+            .iter()
+            .any(|p| row.counterparty.trim().starts_with(p))
+    {
+        return None;
+    }
+    let purpose = row.purpose.trim();
+    let mut digits = 0;
+    let mut longest_digits = 0;
+    for c in purpose.chars() {
+        digits = if c.is_ascii_digit() { digits + 1 } else { 0 };
+        longest_digits = longest_digits.max(digits);
+    }
+    let reads_as_words = purpose.chars().count() <= 60
+        && purpose.chars().any(char::is_alphabetic)
+        && longest_digits < 5;
+    reads_as_words.then_some(purpose)
 }

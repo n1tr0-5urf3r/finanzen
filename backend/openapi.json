@@ -9534,7 +9534,7 @@
           },
           "comment": {
             "type": "string",
-            "description": "What the comment will be. Starts as a suggestion from the payee and is the\nfield the review exists to correct."
+            "description": "What the comment will be. Starts as a suggestion — the payee, or what the\nsender of a transfer typed as its purpose — and is the field the review\nexists to correct."
           },
           "counterparty": {
             "type": [

@@ -1110,8 +1110,9 @@ pub struct StatementRowView {
     pub amount_cents: i64,
     pub counterparty: Option<String>,
     pub purpose: Option<String>,
-    /// What the comment will be. Starts as a suggestion from the payee and is the
-    /// field the review exists to correct.
+    /// What the comment will be. Starts as a suggestion — the payee, or what the
+    /// sender of a transfer typed as its purpose — and is the field the review
+    /// exists to correct.
     pub comment: String,
     pub category_id: Option<Uuid>,
     pub category_name: Option<String>,

@@ -1222,6 +1222,54 @@ fn ing_statement_reads_the_shape_a_bank_exports() {
     assert!(finanzen::bank::suggest_comment(&statement.rows[3]).starts_with("Studierendenwerk"));
 }
 
+/// A transfer's purpose was typed by a person and says what the money was for;
+/// its payee only says who sent it. A standing order from a flatmate marked
+/// `Internet` used to be suggested as the flatmate's name. Card payments and
+/// direct debits still offer the payee: their purpose is a terminal or mandate
+/// reference, and so is a salary's.
+#[test]
+fn a_transfer_suggests_the_purpose_its_sender_typed() {
+    let csv = "Umsatzanzeige;Datei erstellt am: 31.10.2026 08:00\n\n\
+         IBAN;DE00 0000 0000 0000 0000 00\nBank;ING\n\n\
+         Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;\
+         Saldo;Währung;Betrag;Währung\n\
+         30.10.2026;30.10.2026;Mara-Luise Beispiel;Gutschrift aus Dauerauftrag;Internet;\
+         1.204,13;EUR;27,50;EUR\n\
+         30.10.2026;30.10.2026;Hausverwaltung Muster;Dauerauftrag;MIETE NOVEMBER;\
+         1.176,63;EUR;-640,00;EUR\n\
+         29.10.2026;29.10.2026;STADTWERKE MUSTERSTADT;Lastschrift;Abschlag Strom;\
+         1.816,63;EUR;-48,00;EUR\n\
+         29.10.2026;29.10.2026;VISA BAECKEREI KORN;Lastschrift;NR XXXX 0000 MUSTERSTADT DE \
+         KAUFUMSATZ 28.10 4.20 000003;1.864,63;EUR;-4,20;EUR\n\
+         28.10.2026;28.10.2026;MUSTER GMBH;Gutschrift;Gehalt 10/2026 PersNr 0012345;\
+         1.868,83;EUR;1.500,00;EUR\n";
+    let statement = finanzen::bank::read_ing_csv(csv.as_bytes()).unwrap();
+    let rows = &statement.rows;
+    assert_eq!(rows.len(), 5);
+
+    // The columns are read as the bank named them: the purpose is the purpose.
+    assert_eq!(rows[0].counterparty, "Mara-Luise Beispiel");
+    assert_eq!(rows[0].purpose, "Internet");
+    assert_eq!(rows[0].kind, "income");
+
+    let suggested: Vec<String> = rows.iter().map(finanzen::bank::suggest_comment).collect();
+    assert_eq!(
+        suggested,
+        [
+            // What the flatmate typed, not her name.
+            "Internet",
+            // Typed in capitals, softened like a shouted payee.
+            "Miete November",
+            // A direct debit's purpose is the creditor's; the payee names it.
+            "Stadtwerke Musterstadt",
+            // A card payment's purpose is the terminal's record.
+            "Baeckerei Korn",
+            // A salary is a Gutschrift too, but its purpose is a payroll reference.
+            "Muster Gmbh",
+        ]
+    );
+}
+
 /// A file that is not a statement is refused by the one line that identifies one.
 #[test]
 fn a_file_without_a_statement_header_is_refused() {
