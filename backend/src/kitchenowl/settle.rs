@@ -23,14 +23,32 @@
 //! same in reverse: they pay, nothing enters my ledger, I owe 10,00, and the expense
 //! I book when I hand it over is the only record that my food cost anything at all.
 //!
-//! **Since migration 0022 that argument holds only for UNLINKED purchases.** A
-//! booking linked to its KitchenOwl expense is counted at my share, so its
-//! overstatement is already gone from every statistic; the part of a settlement
-//! that repays the others' share of a linked purchase is then counted a second
-//! time. Purchases the others paid are unaffected (they never had a booking), and
-//! the account balances are unaffected (they use the bank amounts). Which way to
-//! resolve it — count the settlement net of linked shares, or not link purchases
-//! one settles — is the user's call, so it is stated here rather than guessed.
+//! **Since migration 0022 that argument holds only for UNLINKED purchases, so a
+//! settlement counts net of linked shares (migration 0023).** A booking linked to
+//! its KitchenOwl expense is counted at my share, so its overstatement is already
+//! gone from every statistic, and the part of a settlement that repays the others'
+//! share of a linked purchase would be counted a second time. The booking keeps its
+//! bank amount — the account balances are built from that — but `v_ledger` counts it
+//! at its bank net plus O, where O is the others' shares of my confirmed linked
+//! bookings (bank net minus counted net, so a linked refund counts against it) in
+//! the settlement's window. Over a window the statistics then come to exactly what
+//! they did before 0022, with the shared purchases at my share in their own
+//! categories and the settlement carrying only what is left: my share of what the
+//! flatmates paid, minus the others' shares of my unlinked purchases. That can turn
+//! a settlement round — income 20,00 against O = 60,00 counts as an expense of
+//! 40,00, because net the flatmates paid 40,00 for me — so the counted `kind`
+//! follows the sign.
+//!
+//! A settlement, for this rule, is a confirmed income or expense booked here
+//! (`external_source = SOURCE`) or sitting in the `Haushaltsausgleich` category this
+//! module resolves by name — which is where the user's hand-entered settlements of
+//! the past years live, and category names are unique per user. Its window is the
+//! linked bookings whose PERIOD is after the previous settlement's and up to its
+//! own: a settlement is booked under the current period with `booked_on` on the 1st
+//! while it settles the balance as of the click, and the old ones are month-only,
+//! so a date would cut the settlement's own month in the wrong place. Linked
+//! purchases after the last settlement belong to no window and stay at my share — a
+//! receivable is not income. The definition is the view `v_counted_booking`.
 //!
 //! `transfer` models money moving between the user's OWN accounts: `net_cents` is 0
 //! by generated column, so it moves neither the balance nor any category. This money

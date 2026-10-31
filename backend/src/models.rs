@@ -57,6 +57,28 @@ impl CategorySource {
     }
 }
 
+/// Which rule makes the statistics count a booking at something other than its
+/// bank amount. Both are defined in SQL, in `v_counted_booking` (migration 0023).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum CountedBasis {
+    /// Linked to a KitchenOwl expense: counted at my share of it.
+    KoShare,
+    /// A household settlement: counted net of the others' shares of my linked
+    /// purchases, which the statistics already left out.
+    KoSettlement,
+}
+
+impl CountedBasis {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "ko_share" => Some(Self::KoShare),
+            "ko_settlement" => Some(Self::KoSettlement),
+            _ => None,
+        }
+    }
+}
+
 // -------------------------------------------------------------------- auth
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -145,11 +167,21 @@ pub struct Booking {
     pub external_source: Option<String>,
     pub external_id: Option<String>,
     pub has_receipt: bool,
-    /// The part of `amount_cents` the statistics count, set only when the booking
-    /// is linked to a KitchenOwl expense: my share of it, scaled to this booking.
-    /// `amount_cents` stays what moved, because a listing shows the bank; this is
-    /// how a statistic that comes out lower than the rows behind it explains itself.
+    /// What the statistics count instead of `amount_cents`, set only when a rule
+    /// of `v_counted_booking` applies (`counted_basis` says which): for a booking
+    /// linked to a KitchenOwl expense, my share of it, scaled to this booking; for
+    /// a household settlement, the settlement net of the others' shares of my
+    /// linked purchases since the previous one. `amount_cents` stays what moved,
+    /// because a listing shows the bank; this is how a statistic that differs from
+    /// the rows behind it explains itself. Always positive, like `amount_cents`.
     pub counted_amount_cents: Option<i64>,
+    /// The direction `counted_amount_cents` is counted in. Equal to `kind` except
+    /// for a settlement whose linked shares outweigh it: income 20,00 against
+    /// 60,00 of others' shares counts as an expense of 40,00.
+    pub counted_kind: Option<BookingKind>,
+    /// Why the booking counts differently, set together with
+    /// `counted_amount_cents`.
+    pub counted_basis: Option<CountedBasis>,
     pub status: String,
     pub origin: String,
 }

@@ -54,7 +54,7 @@ const BOOKING_PAGE = {
       amountCents: 6_500, netCents: 6_500, comment: 'tanken', taxRelevant: false,
       categoryId: 'c1', categoryName: 'Auto & Parken', categoryType: 'Variable Kosten',
       categorySource: 'rule', shared: false, externalSource: null, externalId: null,
-      hasReceipt: false, countedAmountCents: null, status: 'confirmed', origin: 'manual' },
+      hasReceipt: false, countedAmountCents: null, countedKind: null, countedBasis: null, status: 'confirmed', origin: 'manual' },
   ],
   total: 3, page: 0, pageSize: 50,
   sumIncomeCents: 0, sumExpenseCents: 21_800, sumNetCents: 21_800, uncategorizedCount: 0,

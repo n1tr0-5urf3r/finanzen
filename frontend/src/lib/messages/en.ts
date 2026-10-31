@@ -96,6 +96,11 @@ export const en: Messages = {
   'bookings.countedShare': 'your share: {amount}',
   'bookings.countedShareTitle':
     'Linked to KitchenOwl: all statistics count only your share of the expense, the balance the full amount.',
+  'bookings.countedSettlement': 'counted: {amount}',
+  'bookings.countedSettlementAsExpense': 'counted as expense: {amount}',
+  'bookings.countedSettlementAsIncome': 'counted as income: {amount}',
+  'bookings.countedSettlementTitle':
+    'Household settlement: your purchases linked to KitchenOwl since the previous settlement already count only at your share. What this settlement squares for the others’ shares of them is netted out here; the balance takes the full amount.',
   'bookings.page': 'Page {page} of {pages}',
   'bookings.newest': 'Newest first',
   'bookings.oldest': 'Oldest first',

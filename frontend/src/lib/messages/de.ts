@@ -110,6 +110,11 @@ export const de = {
   'bookings.countedShare': 'dein Anteil: {amount}',
   'bookings.countedShareTitle':
     'Mit KitchenOwl verknüpft: Alle Auswertungen zählen nur deinen Anteil an der Ausgabe, der Kontostand den vollen Betrag.',
+  'bookings.countedSettlement': 'gezählt: {amount}',
+  'bookings.countedSettlementAsExpense': 'gezählt als Ausgabe: {amount}',
+  'bookings.countedSettlementAsIncome': 'gezählt als Einnahme: {amount}',
+  'bookings.countedSettlementTitle':
+    'Haushaltsausgleich: Deine mit KitchenOwl verknüpften Einkäufe seit dem letzten Ausgleich zählen schon nur mit deinem Anteil. Was dieser Ausgleich für die Anteile der anderen daran ausgleicht, ist hier verrechnet; der Kontostand nimmt den vollen Betrag.',
   'bookings.page': 'Seite {page} von {pages}',
   'bookings.newest': 'Neueste zuerst',
   'bookings.oldest': 'Älteste zuerst',

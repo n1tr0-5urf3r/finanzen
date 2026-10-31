@@ -11,13 +11,20 @@ use crate::{
 };
 
 /// The net per category is a statistic, so it is read through `v_ledger` like every
-/// other one: confirmed bookings only, and a KitchenOwl-linked booking at my share.
+/// other one: confirmed bookings only, a KitchenOwl-linked booking at my share and a
+/// household settlement net of the linked shares.
+///
+/// One grouped pass over the ledger, joined, rather than two correlated subqueries
+/// per category: `v_ledger` is no longer a plain table scan, and the correlated
+/// form multiplied its estimated cost by every category twice, far enough past
+/// Postgres's JIT threshold that compiling the plan took seconds.
 const SELECT_CATEGORIES: &str = "\
     SELECT c.id, c.name, t.code AS type_code, t.label AS type_label, c.sort_order, c.archived, \
-           (SELECT count(*) FROM v_ledger b WHERE b.category_id = c.id)::bigint AS booking_count, \
-           (SELECT COALESCE(SUM(b.net_cents), 0) FROM v_ledger b \
-             WHERE b.category_id = c.id)::bigint AS net_cents \
-      FROM categories c JOIN category_types t ON t.id = c.type_id";
+           COALESCE(agg.n, 0)::bigint AS booking_count, \
+           COALESCE(agg.net, 0)::bigint AS net_cents \
+      FROM categories c JOIN category_types t ON t.id = c.type_id \
+      LEFT JOIN (SELECT category_id, count(*) AS n, SUM(net_cents) AS net \
+                   FROM v_ledger GROUP BY category_id) agg ON agg.category_id = c.id";
 
 fn row_to_category(r: &sqlx::postgres::PgRow) -> Category {
     Category {

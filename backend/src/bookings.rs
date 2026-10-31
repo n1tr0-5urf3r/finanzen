@@ -15,7 +15,7 @@ use crate::{
     locale::month_name_de,
     models::{
         Booking, BookingInput, BookingKind, BookingPage, CategorySource, ConfirmBookingInput,
-        SearchComment, SearchResult, SearchYearSummary,
+        CountedBasis, SearchComment, SearchResult, SearchYearSummary,
     },
 };
 
@@ -26,11 +26,11 @@ pub(crate) const SELECT_BOOKING: &str = "\
            t.label AS category_type, b.category_source, b.shared, b.external_source, \
            b.external_id, b.status, b.origin, \
            EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt, \
-           (SELECT s.counted_amount_cents FROM v_ko_booking_share s \
-             WHERE s.booking_id = b.id) AS counted_amount_cents \
+           cb.counted_amount_cents, cb.counted_kind, cb.basis AS counted_basis \
       FROM bookings b \
       LEFT JOIN categories c ON c.id = b.category_id \
-      LEFT JOIN category_types t ON t.id = c.type_id";
+      LEFT JOIN category_types t ON t.id = c.type_id \
+      LEFT JOIN v_counted_booking cb ON cb.booking_id = b.id";
 
 pub(crate) fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
     let month: i16 = r.get("period_month");
@@ -57,6 +57,12 @@ pub(crate) fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
         external_id: r.get("external_id"),
         has_receipt: r.get("has_receipt"),
         counted_amount_cents: r.get("counted_amount_cents"),
+        counted_kind: r
+            .get::<Option<String>, _>("counted_kind")
+            .and_then(|k| BookingKind::parse(&k)),
+        counted_basis: r
+            .get::<Option<String>, _>("counted_basis")
+            .and_then(|k| CountedBasis::parse(&k)),
         status: r.get("status"),
         origin: r.get("origin"),
     }

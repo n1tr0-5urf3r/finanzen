@@ -4070,7 +4070,29 @@
               "null"
             ],
             "format": "int64",
-            "description": "The part of `amount_cents` the statistics count, set only when the booking\nis linked to a KitchenOwl expense: my share of it, scaled to this booking.\n`amount_cents` stays what moved, because a listing shows the bank; this is\nhow a statistic that comes out lower than the rows behind it explains itself."
+            "description": "What the statistics count instead of `amount_cents`, set only when a rule\nof `v_counted_booking` applies (`counted_basis` says which): for a booking\nlinked to a KitchenOwl expense, my share of it, scaled to this booking; for\na household settlement, the settlement net of the others' shares of my\nlinked purchases since the previous one. `amount_cents` stays what moved,\nbecause a listing shows the bank; this is how a statistic that differs from\nthe rows behind it explains itself. Always positive, like `amount_cents`."
+          },
+          "countedBasis": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CountedBasis",
+                "description": "Why the booking counts differently, set together with\n`counted_amount_cents`."
+              }
+            ]
+          },
+          "countedKind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookingKind",
+                "description": "The direction `counted_amount_cents` is counted in. Equal to `kind` except\nfor a settlement whose linked shares outweigh it: income 20,00 against\n60,00 of others' shares counts as an expense of 40,00."
+              }
+            ]
           },
           "counterparty": {
             "type": [
@@ -4848,6 +4870,14 @@
             "description": "Confirming is also where an estimate's real amount is entered, because that\nis the only reason the draft existed."
           }
         }
+      },
+      "CountedBasis": {
+        "type": "string",
+        "description": "Which rule makes the statistics count a booking at something other than its\nbank amount. Both are defined in SQL, in `v_counted_booking` (migration 0023).",
+        "enum": [
+          "koShare",
+          "koSettlement"
+        ]
       },
       "CreateUserRequest": {
         "type": "object",

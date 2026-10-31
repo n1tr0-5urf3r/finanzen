@@ -3132,3 +3132,491 @@ async fn a_pushed_booking_counts_my_share_before_and_after_it_is_mirrored() {
     assert_eq!(d["expenseCents"], 633);
     assert_eq!(d["closingBalanceCents"], -1900);
 }
+
+// ------------------------------------- a settlement, net of linked shares
+
+impl TestApp {
+    /// A booking in any period, booked on `day` of it.
+    async fn booking_at(
+        &self,
+        (year, month, day): (i32, u32, u32),
+        kind: &str,
+        comment: &str,
+        amount: i64,
+        category_id: Option<&str>,
+    ) -> String {
+        let (status, body) = self
+            .send(
+                "POST",
+                "/bookings",
+                Some(json!({
+                    "year": year, "month": month,
+                    "bookedOn": format!("{year:04}-{month:02}-{day:02}"),
+                    "kind": kind, "amountCents": amount, "comment": comment,
+                    "categoryId": category_id
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        body["id"].as_str().expect("booking id").to_string()
+    }
+
+    /// The category the user's hand-entered settlements live in, and `settle.rs`
+    /// books into.
+    async fn settlement_category(&self) -> String {
+        let (status, created) = self
+            .send(
+                "POST",
+                "/categories",
+                Some(json!({"name": "Haushaltsausgleich", "typeCode": "variabel"})),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{created}");
+        created["id"].as_str().expect("category id").to_string()
+    }
+
+    /// The listing's view of one booking in `year`.
+    async fn listed_in(&self, year: i32, booking_id: &str) -> Value {
+        let (_, page) = self
+            .send("GET", &format!("/bookings?year={year}&pageSize=500"), None)
+            .await;
+        page["items"]
+            .as_array()
+            .expect("items")
+            .iter()
+            .find(|b| b["id"] == booking_id)
+            .cloned()
+            .unwrap_or_else(|| panic!("booking {booking_id} not listed: {page}"))
+    }
+
+    async fn year_row(&self, year: i32) -> Value {
+        let (_, years) = self.send("GET", "/years", None).await;
+        years
+            .as_array()
+            .expect("years")
+            .iter()
+            .find(|y| y["year"] == year)
+            .cloned()
+            .unwrap_or_else(|| panic!("no year {year}: {years}"))
+    }
+
+    /// Removes the link of the mirrored expense with this KitchenOwl id.
+    async fn unlink_expense(&self, external_id: i64) {
+        let (_, page) = self.send("GET", "/kitchenowl/expenses", None).await;
+        let ko_id = page["items"]
+            .as_array()
+            .expect("expenses")
+            .iter()
+            .find(|e| e["externalId"] == external_id)
+            .and_then(|e| e["id"].as_str())
+            .unwrap_or_else(|| panic!("no expense {external_id}: {page}"))
+            .to_string();
+        let (status, body) = self
+            .send(
+                "DELETE",
+                &format!("/kitchenowl/expenses/{ko_id}/link"),
+                None,
+            )
+            .await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    }
+}
+
+/// A shared purchase in KitchenOwl: `euros` paid by me, my weight one in three.
+fn shared_purchase(id: i64, name: &str, euros: f64, date: i64) -> Value {
+    expense(id, name, euros, date, None, 1, &[(1, 1), (2, 2)])
+}
+
+/// 90,00 paid for three and linked: 30,00 counts. The flatmates hand back the
+/// other 60,00, booked by hand in `Haushaltsausgleich` the way the user has done
+/// for years. That 60,00 is the part the statistics already left out, so the
+/// settlement counts 0 — every statistic says 30,00 of cost, as it did before the
+/// share rule (90,00 − 60,00), and the account says what really moved.
+#[tokio::test]
+async fn a_settlement_repaying_linked_shares_counts_nothing_twice() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![shared_purchase(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let shared = app
+        .booking_at((2026, 5, 4), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let settlement = app
+        .booking_at(
+            (2026, 6, 2),
+            "income",
+            "Ausgleich Juni",
+            6000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.sync().await;
+    app.link_expense(1, &shared).await;
+
+    let listed = app.listed(&settlement).await;
+    assert_eq!(listed["amountCents"], 6000, "the bank amount stays");
+    assert_eq!(listed["countedAmountCents"], 0, "{listed}");
+    assert_eq!(listed["countedKind"], "income");
+    assert_eq!(listed["countedBasis"], "koSettlement");
+    assert_eq!(app.listed(&shared).await["countedBasis"], "koShare");
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["balanceCents"], -3000);
+    assert_eq!(
+        d["closingBalanceCents"], -3000,
+        "-90,00 + 60,00 in the bank"
+    );
+
+    let (_, monthly) = app.send("GET", "/overview/months?year=2026", None).await;
+    assert_eq!(monthly["months"][4]["expenseCents"], 3000);
+    assert_eq!(monthly["months"][5]["incomeCents"], 0, "{monthly}");
+    assert_eq!(monthly["months"][5]["expenseCents"], 0);
+    assert_eq!(monthly["total"]["expenseCents"], 3000);
+    assert_eq!(monthly["total"]["incomeCents"], 0);
+
+    let (_, analysis) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    assert_eq!(analysis["totalNetCents"], 3000, "{analysis}");
+    let rows = analysis["rows"].as_array().unwrap();
+    let row = |id: &str| {
+        rows.iter()
+            .find(|r| r["categoryId"] == id)
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    assert_eq!(row(&food)["netCents"], 3000);
+    let settled = row(&ausgleich);
+    if !settled.is_null() {
+        assert_eq!(settled["netCents"], 0, "{settled}");
+        assert_eq!(settled["incomeCents"], 0);
+    }
+
+    let (_, over) = app.send("GET", "/analysis/over-years", None).await;
+    assert_eq!(over["expensePerYearCents"], json!([3000]), "{over}");
+    assert_eq!(over["incomePerYearCents"], json!([0]));
+
+    let y = app.year_row(2026).await;
+    assert_eq!(y["expenseCents"], 3000, "{y}");
+    assert_eq!(y["incomeCents"], 0);
+    assert_eq!(y["closingBalanceCents"], -3000);
+}
+
+/// Income 20,00 against 60,00 of others' shares: net, the flatmates paid 40,00 for
+/// me, so the settlement counts as an EXPENSE of 40,00 — on the expense side of
+/// every split by kind, not as negative income.
+#[tokio::test]
+async fn a_settlement_outweighed_by_linked_shares_counts_as_the_other_kind() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![shared_purchase(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let shared = app
+        .booking_at((2026, 5, 4), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let settlement = app
+        .booking_at(
+            (2026, 6, 2),
+            "income",
+            "Ausgleich Juni",
+            2000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.sync().await;
+    app.link_expense(1, &shared).await;
+
+    let listed = app.listed(&settlement).await;
+    assert_eq!(
+        listed["kind"], "income",
+        "the booking is what the bank says"
+    );
+    assert_eq!(listed["countedKind"], "expense", "{listed}");
+    assert_eq!(listed["countedAmountCents"], 4000);
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 7000, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["balanceCents"], -7000);
+    assert_eq!(
+        d["closingBalanceCents"], -7000,
+        "-90,00 + 20,00 in the bank"
+    );
+
+    let (_, monthly) = app.send("GET", "/overview/months?year=2026", None).await;
+    assert_eq!(monthly["months"][5]["expenseCents"], 4000, "{monthly}");
+    assert_eq!(monthly["months"][5]["incomeCents"], 0);
+    assert_eq!(monthly["total"]["expenseCents"], 7000);
+    assert_eq!(monthly["total"]["incomeCents"], 0);
+
+    let (_, analysis) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    let row = analysis["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["categoryId"] == ausgleich.as_str())
+        .cloned()
+        .expect("settlement row");
+    assert_eq!(row["expenseCents"], 4000, "{row}");
+    assert_eq!(row["incomeCents"], 0);
+    assert_eq!(row["netCents"], 4000);
+
+    let (_, series) = app
+        .send(
+            "GET",
+            &format!("/analysis/series?year=2026&categoryId={ausgleich}"),
+            None,
+        )
+        .await;
+    assert_eq!(series["expenseCents"], 4000, "{series}");
+    assert_eq!(series["incomeCents"], 0);
+
+    let (_, over) = app.send("GET", "/analysis/over-years", None).await;
+    assert_eq!(over["expensePerYearCents"], json!([7000]), "{over}");
+    assert_eq!(over["incomePerYearCents"], json!([0]));
+
+    let y = app.year_row(2026).await;
+    assert_eq!(y["expenseCents"], 7000, "{y}");
+    assert_eq!(y["incomeCents"], 0);
+    assert_eq!(y["balanceCents"], -7000);
+}
+
+/// Each settlement nets the linked shares since the previous one — by period, so a
+/// purchase later in a settlement's own month is part of it, as `settle.rs` dates
+/// its bookings on the 1st — and a linked purchase after the last settlement is an
+/// open receivable, not income: it stays at my share.
+#[tokio::test]
+async fn each_settlement_nets_only_the_linked_shares_since_the_previous_one() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        shared_purchase(1, "Wocheneinkauf", 90.0, on(2026, 5, 4)),
+        shared_purchase(2, "Drogerie", 45.0, on(2026, 8, 20)),
+        shared_purchase(3, "Getränke", 90.0, on(2026, 9, 10)),
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let may = app
+        .booking_at((2026, 5, 4), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let june = app
+        .booking_at(
+            (2026, 6, 2),
+            "income",
+            "Ausgleich Juni",
+            6000,
+            Some(&ausgleich),
+        )
+        .await;
+    // Booked on the 20th, settled under August on the 1st: still August's.
+    let august_purchase = app
+        .booking_at((2026, 8, 20), "expense", "dm", 4500, Some(&food))
+        .await;
+    let august = app
+        .booking_at(
+            (2026, 8, 1),
+            "income",
+            "Ausgleich August",
+            3000,
+            Some(&ausgleich),
+        )
+        .await;
+    let september = app
+        .booking_at((2026, 9, 10), "expense", "Getränke", 9000, Some(&food))
+        .await;
+    app.sync().await;
+    app.link_expense(1, &may).await;
+    app.link_expense(2, &august_purchase).await;
+    app.link_expense(3, &september).await;
+
+    // Overlapping windows would give August 60,00 + 30,00 and turn it into an
+    // expense of 60,00; a missing one would leave June at 60,00 of income.
+    assert_eq!(app.listed(&june).await["countedAmountCents"], 0);
+    assert_eq!(app.listed(&june).await["countedKind"], "income");
+    assert_eq!(app.listed(&august).await["countedAmountCents"], 0);
+    assert_eq!(app.listed(&august).await["countedKind"], "income");
+    assert_eq!(
+        app.listed(&september).await["countedAmountCents"],
+        3000,
+        "after the last settlement: my share, nothing more"
+    );
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 3000 + 1500 + 3000, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["closingBalanceCents"], -9000 + 6000 - 4500 + 3000 - 9000);
+
+    let (_, monthly) = app.send("GET", "/overview/months?year=2026", None).await;
+    assert_eq!(monthly["months"][5]["incomeCents"], 0, "{monthly}");
+    assert_eq!(monthly["months"][7]["expenseCents"], 1500);
+    assert_eq!(monthly["months"][7]["incomeCents"], 0);
+    assert_eq!(monthly["months"][8]["expenseCents"], 3000);
+}
+
+/// Unlinking the purchase puts both bookings back: the purchase at 90,00 and the
+/// settlement at the 60,00 of income the bank shows.
+#[tokio::test]
+async fn unlinking_restores_the_settlements_bank_amount() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![shared_purchase(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let shared = app
+        .booking_at((2026, 5, 4), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let settlement = app
+        .booking_at(
+            (2026, 6, 2),
+            "income",
+            "Ausgleich Juni",
+            6000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.sync().await;
+    app.link_expense(1, &shared).await;
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["incomeCents"], 0, "{d}");
+
+    app.unlink_expense(1).await;
+
+    let listed = app.listed(&settlement).await;
+    assert_eq!(
+        listed["countedAmountCents"], 6000,
+        "still a settlement, with nothing left to net: {listed}"
+    );
+    assert_eq!(listed["countedKind"], "income");
+    assert_eq!(app.listed(&shared).await["countedAmountCents"], Value::Null);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 9000, "{d}");
+    assert_eq!(d["incomeCents"], 6000);
+    assert_eq!(d["balanceCents"], -3000);
+    let y = app.year_row(2026).await;
+    assert_eq!(y["incomeCents"], 6000);
+    assert_eq!(y["expenseCents"], 9000);
+}
+
+/// A purchase in December, settled in January: the receivable is open over New
+/// Year, so 2026 counts my share and 2027's settlement counts nothing. The chain
+/// between the years runs on what the account did — -90,00, then +60,00.
+#[tokio::test]
+async fn settling_linked_shares_leaves_every_balance_on_the_bank_amounts() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![shared_purchase(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 12, 20),
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let ausgleich = app.settlement_category().await;
+    let shared = app
+        .booking_at((2026, 12, 20), "expense", "Kaufland", 9000, Some(&food))
+        .await;
+    let settlement = app
+        .booking_at(
+            (2027, 1, 5),
+            "income",
+            "Ausgleich Januar",
+            6000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.sync().await;
+    app.link_expense(1, &shared).await;
+    assert_eq!(
+        app.listed_in(2027, &settlement).await["countedAmountCents"],
+        0
+    );
+
+    let y2026 = app.year_row(2026).await;
+    assert_eq!(y2026["expenseCents"], 3000, "{y2026}");
+    assert_eq!(y2026["closingBalanceCents"], -9000);
+    let y2027 = app.year_row(2027).await;
+    assert_eq!(y2027["incomeCents"], 0, "{y2027}");
+    assert_eq!(y2027["openingBalanceCents"], -9000);
+    assert_eq!(y2027["closingBalanceCents"], -3000);
+    assert_eq!(y2027["carryoverGapCents"], Value::Null);
+
+    // The dashboard starts from the year's stored opening (0 for a derived year)
+    // and moves it by what the account did: +60,00, not the 0 the statistics count.
+    let (_, d) = app.send("GET", "/dashboard?year=2027", None).await;
+    assert_eq!(d["incomeCents"], 0, "{d}");
+    assert_eq!(d["balanceCents"], 0);
+    let opening = d["openingBalanceCents"].as_i64().expect("opening");
+    assert_eq!(d["closingBalanceCents"], opening + 6000);
+
+    let (_, forecast) = app.send("GET", "/analysis/forecast?year=2027", None).await;
+    assert_eq!(forecast["months"][0]["netCents"], 0, "{forecast}");
+    assert_eq!(
+        forecast["months"][0]["closingBalanceCents"],
+        opening + 6000,
+        "the running balance is money in the account"
+    );
+}
+
+/// The settlement this app books itself is recognised by its source, even where
+/// `Haushaltsausgleich` does not exist and it landed elsewhere. The household owes
+/// me 149,17; my linked 300,00 purchase carries 200,00 of others' shares, so net
+/// the flatmates paid 50,83 for me and the settlement counts as that expense.
+#[tokio::test]
+async fn a_booked_settlement_is_netted_whatever_its_category() {
+    let mock = MockServer::start().await;
+    mock.owe_the_user();
+    let app = app!(Some(mock.url.clone()));
+    let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
+    let year = view["period"]["year"].as_i64().expect("year") as i32;
+    let month = view["period"]["month"].as_i64().expect("month") as u32;
+    mock.seed(vec![shared_purchase(
+        1,
+        "Großeinkauf",
+        300.0,
+        on(year, month, 1),
+    )]);
+    app.sync().await;
+    let (_, view) = app.send("GET", "/kitchenowl/settlement", None).await;
+    assert_eq!(view["categoryIsFallback"], true, "{view}");
+    let food = app.category_id("Lebensmittel").await;
+    let shared = app
+        .booking_at((year, month, 1), "expense", "Kaufland", 30000, Some(&food))
+        .await;
+    app.link_expense(1, &shared).await;
+
+    let (status, booked) = app.send("POST", "/kitchenowl/settlement", None).await;
+    assert_eq!(status, StatusCode::CREATED, "{booked}");
+    assert_eq!(booked["booking"]["kind"], "income");
+    assert_eq!(booked["booking"]["amountCents"], 14917);
+    assert_eq!(booked["booking"]["countedKind"], "expense", "{booked}");
+    assert_eq!(booked["booking"]["countedAmountCents"], 20000 - 14917);
+    assert_eq!(booked["booking"]["countedBasis"], "koSettlement");
+
+    let (_, d) = app
+        .send("GET", &format!("/dashboard?year={year}"), None)
+        .await;
+    assert_eq!(d["expenseCents"], 10000 + 5083, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["closingBalanceCents"], -30000 + 14917);
+}

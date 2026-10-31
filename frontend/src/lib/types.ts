@@ -6,6 +6,8 @@ export interface ApiErrorBody {
 
 export type BookingKind = 'income' | 'expense' | 'transfer';
 export type CategorySource = 'unresolved' | 'rule' | 'manual' | 'imported';
+/** Why the statistics count a booking at something other than its bank amount. */
+export type CountedBasis = 'koShare' | 'koSettlement';
 export type CategoryTypeCode = 'einkommen' | 'fixkosten' | 'variabel' | 'sparen' | 'sonstiges';
 
 export interface User {
@@ -47,11 +49,19 @@ export interface Booking {
   externalId: string | null;
   hasReceipt: boolean;
   /**
-   * What the statistics count of `amountCents`, set only for a booking linked to a
-   * KitchenOwl expense: my share, scaled to this booking. `amountCents` stays the
-   * bank amount.
+   * What the statistics count instead of `amountCents`, always positive. For a
+   * booking linked to a KitchenOwl expense: my share, scaled to this booking. For a
+   * household settlement: the settlement net of the others' shares of my linked
+   * purchases since the previous one. `amountCents` stays the bank amount.
    */
   countedAmountCents: number | null;
+  /**
+   * The direction `countedAmountCents` counts in — `kind`, except for a settlement
+   * the linked shares outweigh (income 20,00 against 60,00 counts as an expense of
+   * 40,00).
+   */
+  countedKind: BookingKind | null;
+  countedBasis: CountedBasis | null;
   status: string;
   origin: string;
 }

@@ -6,10 +6,11 @@
 //!
 //! What it does change is how the booking is COUNTED: every personal statistic
 //! reads `v_ledger`, which puts a linked booking in at my share of the expense
-//! (migration 0022, `v_ko_booking_share`). The bank amount, the account balances
-//! and the booking listing are untouched, and removing the link puts the booking
-//! back at its full amount — the view derives it from this column pair, so there
-//! is nothing to undo.
+//! (migration 0022, `v_ko_booking_share`), and the next household settlement net
+//! of the others' share of it (migration 0023, see `settle.rs`). The bank amount,
+//! the account balances and the booking listing are untouched, and removing the
+//! link puts both bookings back — the views derive it from this column pair, so
+//! there is nothing to undo.
 //!
 //! `bookings.external_source` / `external_id` is the single source of truth: it
 //! carries the partial unique index that makes a second link to the same expense

@@ -9,20 +9,43 @@ import { useMaskAmount } from '../../lib/privacy';
 import type { Booking } from '../../lib/types';
 
 /**
- * "dein Anteil: 30,00 €" under a booking linked to a KitchenOwl expense.
+ * What the statistics count of a booking, under it, when that is not the bank amount.
  *
- * The row shows what the bank moved and every statistic counts only my share, so
- * without this a monthly total comes out lower than the rows behind it and nothing
- * on screen says why. Nothing is shown when the share is the whole amount — there
- * is no difference to explain.
+ * "dein Anteil: 30,00 €" under a booking linked to a KitchenOwl expense: the row
+ * shows what the bank moved and every statistic counts only my share, so without
+ * this a monthly total comes out lower than the rows behind it and nothing on
+ * screen says why.
+ *
+ * "gezählt: 0,00 €" under a household settlement, which counts net of the others'
+ * shares of my linked purchases — and "gezählt als Ausgabe: 40,00 €" when those
+ * shares outweigh it and it lands on the other side of the totals.
+ *
+ * Nothing is shown when the counted figure is the booking itself — there is no
+ * difference to explain.
  */
 export function CountedShare({ booking: b }: { booking: Booking }) {
   const t = useT();
   const mask = useMaskAmount();
-  if (b.countedAmountCents == null || b.countedAmountCents === b.amountCents) return null;
+  if (b.countedAmountCents == null) return null;
+  const kind = b.countedKind ?? b.kind;
+  if (b.countedAmountCents === b.amountCents && kind === b.kind) return null;
+  const amount = mask(formatEuro(b.countedAmountCents));
+  if (b.countedBasis === 'koSettlement') {
+    const label =
+      kind === b.kind
+        ? t('bookings.countedSettlement', { amount })
+        : kind === 'expense'
+          ? t('bookings.countedSettlementAsExpense', { amount })
+          : t('bookings.countedSettlementAsIncome', { amount });
+    return (
+      <span className="booking-row__share" title={t('bookings.countedSettlementTitle')}>
+        {label}
+      </span>
+    );
+  }
   return (
     <span className="booking-row__share" title={t('bookings.countedShareTitle')}>
-      {t('bookings.countedShare', { amount: mask(formatEuro(b.countedAmountCents)) })}
+      {t('bookings.countedShare', { amount })}
     </span>
   );
 }
