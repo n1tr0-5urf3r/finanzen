@@ -9451,6 +9451,13 @@
               "null"
             ],
             "description": "Remember what this payee is called, for every future statement."
+          },
+          "taxRelevant": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Mark the booking this line becomes as tax-relevant. Set here, while the\nreceipt is in mind, rather than by finding the booking again afterwards."
           }
         }
       },
@@ -9511,7 +9518,8 @@
           "comment",
           "decision",
           "createRule",
-          "rememberPayee"
+          "rememberPayee",
+          "taxRelevant"
         ],
         "properties": {
           "amountCents": {
@@ -9616,6 +9624,10 @@
               "null"
             ],
             "format": "float"
+          },
+          "taxRelevant": {
+            "type": "boolean",
+            "description": "Booked as tax-relevant, as the booking's own \"Steuer\" column would mark it."
           }
         }
       },

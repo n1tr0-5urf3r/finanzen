@@ -1086,6 +1086,8 @@ export interface StatementRow {
   /** Remember what this payee is called, for every future statement. Off by
       default: PayPal is always the same payee and a different purchase. */
   rememberPayee: boolean;
+  /** Booked as tax-relevant. */
+  taxRelevant: boolean;
   duplicateBookingId: string | null;
   duplicateComment: string | null;
   duplicateBookedOn: string | null;

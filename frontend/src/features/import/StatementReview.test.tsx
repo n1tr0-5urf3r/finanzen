@@ -37,6 +37,7 @@ function row(over: Partial<StatementRow>): StatementRow {
     decision: 'pending',
     createRule: false,
     rememberPayee: false,
+    taxRelevant: false,
     duplicateBookingId: null,
     duplicateComment: null,
     duplicateBookedOn: null,
@@ -236,6 +237,24 @@ describe('the bank statement review', () => {
       const patches = api.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'PATCH');
       const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
       expect(bodies.some((b) => b.rememberPayee === true)).toBe(true);
+    });
+  });
+
+  /** A receipt is in mind while the line is reviewed, so the flag is set there. */
+  it('marks a line as tax-relevant', async () => {
+    const user = userEvent.setup();
+    renderReview();
+    await screen.findByText('VISA SUPERMARKT SAGT DANKE');
+
+    const tax = screen.getAllByLabelText('Steuerrelevant')[0] as HTMLInputElement;
+    expect(tax.checked).toBe(false);
+
+    await user.click(tax);
+
+    await waitFor(() => {
+      const patches = api.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'PATCH');
+      const bodies = patches.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+      expect(bodies).toContainEqual({ taxRelevant: true });
     });
   });
 

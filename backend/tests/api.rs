@@ -3453,6 +3453,51 @@ async fn accepting_a_statement_line_keeps_the_category_the_user_picked() {
     );
 }
 
+/// A line marked tax-relevant in the review is booked tax-relevant, and only that
+/// line: the flag belongs to the line, not to the payee or the statement.
+#[tokio::test]
+async fn a_statement_line_marked_tax_relevant_is_booked_tax_relevant() {
+    let mut app = app!();
+    app.setup_admin().await;
+
+    let (import, rows) = app
+        .stage_statement(&statement(&[
+            "17.09.2026;17.09.2026;Buchhandlung Muster;Lastschrift;Fachbuch;700,00;EUR;-39,90;EUR",
+            "18.09.2026;18.09.2026;Baeckerei Korn;Lastschrift;Brot;660,10;EUR;-4,20;EUR",
+        ]))
+        .await;
+    assert_eq!(rows[0]["taxRelevant"].as_bool(), Some(false));
+
+    let view = app
+        .review(&import, &rows[0], json!({"taxRelevant": true}))
+        .await;
+    assert_eq!(view["taxRelevant"].as_bool(), Some(true));
+    // Accept re-sends the comment and nothing else; the flag must survive it.
+    for line in &rows {
+        let comment = line["comment"].clone();
+        let view = app
+            .review(
+                &import,
+                line,
+                json!({"comment": comment, "decision": "accepted"}),
+            )
+            .await;
+        let marked = line["id"] == rows[0]["id"];
+        assert_eq!(view["taxRelevant"].as_bool(), Some(marked));
+    }
+
+    app.send("POST", &format!("/imports/{import}/commit"), None)
+        .await;
+    let (_, bookings) = app.send("GET", "/bookings?year=2026", None).await;
+    let items = bookings["items"].as_array().expect("items");
+    let tax: Vec<_> = items
+        .iter()
+        .filter(|b| b["taxRelevant"].as_bool() == Some(true))
+        .map(|b| b["amountCents"].as_i64())
+        .collect();
+    assert_eq!(tax, vec![rows[0]["amountCents"].as_i64()]);
+}
+
 /// …and the feature that caused it still works: renaming a line to a comment a
 /// rule knows picks that rule's category by itself.
 #[tokio::test]

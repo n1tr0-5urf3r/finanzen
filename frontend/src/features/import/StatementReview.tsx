@@ -327,6 +327,7 @@ function StatementLine({
         )}
         {row.decision === 'accepted' && <StatusPill tone="good">{t('statement.willBook')}</StatusPill>}
         {row.decision === 'rejected' && <StatusPill tone="neutral">{t('statement.wontBook')}</StatusPill>}
+        {row.taxRelevant && <StatusPill tone="info">{t('bookings.taxRelevant')}</StatusPill>}
         {row.koPush && (
           <StatusPill tone="info">
             {t('statement.koStaged', { name: row.koPush.name ?? row.comment })}
@@ -418,6 +419,17 @@ function StatementLine({
       {!readOnly && (
         <footer className="statement__foot">
           <div className="statement__remember">
+            {/* Not a memory like the two beside it but a property of the booking —
+                it sits with them because the footer is where a line's switches
+                are, and marking it here beats finding the booking again later. */}
+            <label className="statement__rule">
+              <input
+                type="checkbox"
+                checked={row.taxRelevant}
+                onChange={(e) => onChange({ taxRelevant: e.target.checked })}
+              />
+              {t('bookings.taxRelevant')}
+            </label>
             <label className="statement__rule">
               <input
                 type="checkbox"

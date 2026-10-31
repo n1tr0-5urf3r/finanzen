@@ -1123,6 +1123,8 @@ pub struct StatementRowView {
     pub decision: String,
     pub create_rule: bool,
     pub remember_payee: bool,
+    /// Booked as tax-relevant, as the booking's own "Steuer" column would mark it.
+    pub tax_relevant: bool,
     /// The booking this line looks like it already is.
     pub duplicate_booking_id: Option<Uuid>,
     pub duplicate_comment: Option<String>,
@@ -1156,6 +1158,9 @@ pub struct StatementRowInput {
     pub create_rule: Option<bool>,
     /// Remember what this payee is called, for every future statement.
     pub remember_payee: Option<bool>,
+    /// Mark the booking this line becomes as tax-relevant. Set here, while the
+    /// receipt is in mind, rather than by finding the booking again afterwards.
+    pub tax_relevant: Option<bool>,
     /// "No category", said explicitly. `categoryId: null` cannot say it, because
     /// an omitted field is null too and must leave the category alone.
     #[serde(default)]
@@ -1378,6 +1383,7 @@ async fn stage_statement(
 const STATEMENT_ROW_SELECT: &str = "\
     SELECT ir.id, ir.source_ref, ir.booked_on, ir.kind, ir.amount_cents, ir.comment, \
            ir.counterparty, ir.purpose, ir.decision, ir.create_rule, ir.remember_payee, \
+           ir.tax_relevant, \
            CASE WHEN ir.no_category THEN NULL \
                 WHEN ir.decided_category_id IS NOT NULL THEN 'manual' \
                 WHEN ir.suggestion_kind = 'exact' THEN 'rule' \
@@ -1408,6 +1414,7 @@ fn row_to_statement_view(r: &sqlx::postgres::PgRow) -> StatementRowView {
         decision: r.get("decision"),
         create_rule: r.get("create_rule"),
         remember_payee: r.get("remember_payee"),
+        tax_relevant: r.get("tax_relevant"),
         duplicate_booking_id: r.get("duplicate_booking_id"),
         duplicate_comment: r.get("dup_comment"),
         duplicate_booked_on: r.get("dup_booked_on"),
@@ -1574,7 +1581,8 @@ pub async fn review_statement_row(
              kind = COALESCE($5, kind), \
              decision = COALESCE($6, decision), \
              create_rule = COALESCE($7, create_rule), \
-             remember_payee = COALESCE($13, remember_payee) \
+             remember_payee = COALESCE($13, remember_payee), \
+             tax_relevant = COALESCE($14, tax_relevant) \
            WHERE batch_id = $1 AND id = $2",
     )
     .bind(id)
@@ -1590,6 +1598,7 @@ pub async fn review_statement_row(
     .bind(suggestion.1)
     .bind(suggestion.2)
     .bind(body.remember_payee)
+    .bind(body.tax_relevant)
     .execute(ctx.tenant.conn())
     .await?;
 
