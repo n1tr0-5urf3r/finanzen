@@ -2733,3 +2733,402 @@ async fn a_staged_push_can_be_withdrawn_before_the_commit() {
     let (_, list) = app.send("GET", "/kitchenowl/push", None).await;
     assert_eq!(list.as_array().unwrap().len(), 0);
 }
+
+// ------------------------------------------- my share of a linked booking
+
+impl TestApp {
+    /// A May 2026 booking with the given kind, amount and optional category.
+    async fn booking_in(
+        &self,
+        kind: &str,
+        comment: &str,
+        amount: i64,
+        category_id: Option<&str>,
+        tax_relevant: bool,
+    ) -> String {
+        let (status, body) = self
+            .send(
+                "POST",
+                "/bookings",
+                Some(json!({
+                    "year": 2026, "month": 5, "bookedOn": "2026-05-04",
+                    "kind": kind, "amountCents": amount, "comment": comment,
+                    "categoryId": category_id, "taxRelevant": tax_relevant
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        body["id"].as_str().expect("booking id").to_string()
+    }
+
+    /// Links a booking to the mirrored expense with this KitchenOwl id, through the
+    /// suggestion the pull opened for it — the way the UI does it.
+    async fn link_expense(&self, external_id: i64, booking_id: &str) {
+        let (_, drafts) = self
+            .send(
+                "GET",
+                "/kitchenowl/drafts?status=open,likely_duplicate,possible_duplicate,ignored_by_default&pageSize=200",
+                None,
+            )
+            .await;
+        let draft = drafts["items"]
+            .as_array()
+            .expect("drafts")
+            .iter()
+            .find(|d| d["expense"]["externalId"] == external_id)
+            .unwrap_or_else(|| panic!("no draft for expense {external_id}: {drafts}"));
+        let draft_id = draft["id"].as_str().expect("draft id");
+        let (status, body) = self
+            .send(
+                "POST",
+                &format!("/kitchenowl/drafts/{draft_id}/link"),
+                Some(json!({"bookingId": booking_id})),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+
+    async fn category_id(&self, name: &str) -> String {
+        let (_, categories) = self.send("GET", "/categories", None).await;
+        categories
+            .as_array()
+            .expect("categories")
+            .iter()
+            .find(|c| c["name"] == name)
+            .and_then(|c| c["id"].as_str())
+            .unwrap_or_else(|| panic!("no category {name}"))
+            .to_string()
+    }
+
+    /// The listing's view of one booking.
+    async fn listed(&self, booking_id: &str) -> Value {
+        let (_, page) = self
+            .send("GET", "/bookings?year=2026&pageSize=500", None)
+            .await;
+        page["items"]
+            .as_array()
+            .expect("items")
+            .iter()
+            .find(|b| b["id"] == booking_id)
+            .cloned()
+            .unwrap_or_else(|| panic!("booking {booking_id} not listed: {page}"))
+    }
+}
+
+/// 90,00 paid at the supermarket for a household of three, my weight one in three:
+/// every statistic counts 30,00, the bank side of the app still says 90,00, and
+/// removing the link puts the 90,00 back.
+///
+/// "Every statistic" is checked one endpoint at a time on purpose. The rule lives in
+/// one view, and the failure this guards against is a report that quietly reads the
+/// bookings table instead of it.
+#[tokio::test]
+async fn a_linked_booking_counts_only_my_share_in_every_statistic() {
+    let mock = MockServer::start().await;
+    mock.seed(vec![expense(
+        1,
+        "Wocheneinkauf",
+        90.0,
+        on(2026, 5, 4),
+        Some((1, "Wocheneinkauf")),
+        1,
+        &[(1, 1), (2, 2)],
+    )]);
+    let app = app!(Some(mock.url.clone()));
+    let food = app.category_id("Lebensmittel").await;
+    let shared = app
+        .booking_in("expense", "Kaufland", 9000, Some(&food), true)
+        .await;
+    // An unlinked purchase in the same category, which counts in full throughout.
+    app.booking_in("expense", "Bäcker", 1000, Some(&food), false)
+        .await;
+    app.sync().await;
+    app.link_expense(1, &shared).await;
+
+    // The booking keeps its bank amount and says what it counts at.
+    let listed = app.listed(&shared).await;
+    assert_eq!(listed["amountCents"], 9000);
+    assert_eq!(listed["countedAmountCents"], 3000);
+    let (_, page) = app.send("GET", "/bookings?year=2026", None).await;
+    assert_eq!(
+        page["sumExpenseCents"], 10000,
+        "the listing sums the rows it shows"
+    );
+
+    // Dashboard: the flows count the share, the closing balance is the bank's.
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 4000, "{d}");
+    assert_eq!(d["balanceCents"], -4000);
+    assert_eq!(d["topCategories"][0]["netCents"], 4000);
+    assert_eq!(
+        d["closingBalanceCents"], -10000,
+        "the full 90,00 left the account"
+    );
+
+    let (_, monthly) = app.send("GET", "/overview/months?year=2026", None).await;
+    assert_eq!(monthly["months"][4]["expenseCents"], 4000);
+    assert_eq!(monthly["months"][4]["variableCostsNetCents"], 4000);
+    assert_eq!(monthly["total"]["expenseCents"], 4000);
+
+    let (_, analysis) = app
+        .send("GET", "/analysis/categories?year=2026", None)
+        .await;
+    let row = analysis["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["categoryId"] == food.as_str())
+        .expect("food row");
+    assert_eq!(row["netCents"], 4000);
+    assert_eq!(row["expenseCents"], 4000);
+
+    let (_, categories) = app.send("GET", "/categories", None).await;
+    let listed_food = categories
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == food.as_str())
+        .unwrap();
+    assert_eq!(listed_food["netCents"], 4000);
+    let (_, types) = app.send("GET", "/category-types", None).await;
+    let variabel = types
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["typeCode"] == "variabel")
+        .unwrap();
+    assert_eq!(variabel["netCents"], 4000);
+
+    let (_, series) = app
+        .send(
+            "GET",
+            &format!("/analysis/series?year=2026&categoryId={food}"),
+            None,
+        )
+        .await;
+    assert_eq!(series["expenseCents"], 4000, "{series}");
+
+    let (_, compare) = app.send("GET", "/analysis/compare?year=2026", None).await;
+    assert_eq!(compare["current"]["expenseCents"], 4000, "{compare}");
+    let (_, trailing) = app
+        .send("GET", "/analysis/trailing?year=2026&month=5", None)
+        .await;
+    assert_eq!(trailing["expenseCents"], 4000);
+    let (_, over) = app.send("GET", "/analysis/over-years", None).await;
+    assert_eq!(over["expensePerYearCents"], json!([4000]), "{over}");
+
+    let (_, forecast) = app.send("GET", "/analysis/forecast?year=2026", None).await;
+    assert_eq!(forecast["months"][4]["netCents"], 4000, "{forecast}");
+    assert_eq!(forecast["actualBalanceCents"], -4000);
+    assert_eq!(
+        forecast["months"][4]["closingBalanceCents"], -10000,
+        "the running balance is money in the account"
+    );
+
+    let (_, tax) = app.send("GET", "/tax?year=2026", None).await;
+    assert_eq!(tax["totalExpenseCents"], 3000, "{tax}");
+    assert_eq!(tax["entries"][0]["expenseCents"], 3000);
+
+    let (_, years) = app.send("GET", "/years", None).await;
+    let y2026 = years
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|y| y["year"] == 2026)
+        .unwrap();
+    assert_eq!(y2026["expenseCents"], 4000);
+    assert_eq!(y2026["balanceCents"], -4000);
+    assert_eq!(
+        y2026["closingBalanceCents"], -10000,
+        "the chain between years carries the bank balance"
+    );
+
+    // Unlinking gives the booking back its full weight, everywhere.
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    let ko_id = page["items"][0]["id"].as_str().unwrap();
+    let (status, _) = app
+        .send(
+            "DELETE",
+            &format!("/kitchenowl/expenses/{ko_id}/link"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(app.listed(&shared).await["countedAmountCents"], Value::Null);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 10000);
+    assert_eq!(d["closingBalanceCents"], -10000);
+    let (_, tax) = app.send("GET", "/tax?year=2026", None).await;
+    assert_eq!(tax["totalExpenseCents"], 9000);
+    let (_, over) = app.send("GET", "/analysis/over-years", None).await;
+    assert_eq!(over["expensePerYearCents"], json!([10000]));
+}
+
+/// The edges of the rule, each of which has a plausible wrong answer.
+#[tokio::test]
+async fn the_counted_share_handles_zero_rounding_refunds_and_excluded_expenses() {
+    let mut excluded = expense(
+        4,
+        "Putzmittel",
+        9.0,
+        on(2026, 5, 4),
+        None,
+        1,
+        &[(1, 1), (2, 2)],
+    );
+    excluded["exclude_from_statistics"] = json!(true);
+    let household = vec![
+        // Paid for the others only: my share is nothing.
+        expense(1, "Geschenk", 20.0, on(2026, 5, 4), None, 1, &[(2, 1)]),
+        // Half of 10,00, applied to a booking of 10,01: 500,5 cents.
+        expense(
+            2,
+            "Drogerie",
+            10.0,
+            on(2026, 5, 4),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        // A zero-amount entry has no fraction to give.
+        expense(
+            3,
+            "Platzhalter",
+            0.0,
+            on(2026, 5, 4),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+        excluded,
+        // A refund: KitchenOwl carries it negative, the booking as income.
+        expense(
+            5,
+            "Pfand",
+            -30.0,
+            on(2026, 5, 4),
+            None,
+            1,
+            &[(1, 1), (2, 1)],
+        ),
+    ];
+    let mock = MockServer::start().await;
+    mock.seed(household.clone());
+    let app = app!(Some(mock.url.clone()));
+    let gift = app
+        .booking_in("expense", "Geschenk", 2000, None, false)
+        .await;
+    let drug = app.booking_in("expense", "dm", 1001, None, false).await;
+    let zero = app
+        .booking_in("expense", "Platzhalter", 700, None, false)
+        .await;
+    let clean = app
+        .booking_in("expense", "Putzmittel", 900, None, false)
+        .await;
+    let refund = app.booking_in("income", "Pfand", 3000, None, false).await;
+    app.sync().await;
+    for (external_id, booking) in [
+        (1, &gift),
+        (2, &drug),
+        (3, &zero),
+        (4, &clean),
+        (5, &refund),
+    ] {
+        app.link_expense(external_id, booking).await;
+    }
+
+    assert_eq!(app.listed(&gift).await["countedAmountCents"], 0);
+    assert_eq!(
+        app.listed(&drug).await["countedAmountCents"],
+        501,
+        "proportional to the booking, half away from zero"
+    );
+    assert_eq!(
+        app.listed(&zero).await["countedAmountCents"],
+        700,
+        "no fraction, so the booking counts in full"
+    );
+    assert_eq!(
+        app.listed(&clean).await["countedAmountCents"],
+        300,
+        "excluded from KitchenOwl's charts is still shared"
+    );
+    assert_eq!(
+        app.listed(&refund).await["countedAmountCents"],
+        1500,
+        "the refund is shared too, and keeps its direction"
+    );
+
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 501 + 700 + 300, "{d}");
+    assert_eq!(d["incomeCents"], 1500);
+    assert_eq!(d["closingBalanceCents"], 3000 - (2000 + 1001 + 700 + 900));
+
+    // An expense deleted upstream is archived and keeps its link — and its share.
+    mock.seed(household.into_iter().filter(|e| e["id"] != 2).collect());
+    let (status, sync) = app.sync().await;
+    assert_eq!(status, StatusCode::OK, "{sync}");
+    assert_eq!(sync["expenses"]["archivedCount"], 1, "{sync}");
+    assert_eq!(app.listed(&drug).await["countedAmountCents"], 501);
+}
+
+/// A pushed booking is linked the moment KitchenOwl answers, before any pull has
+/// mirrored the expense. In that window the share comes from what was sent; after
+/// the pull, from the mirror — and the two agree. A push still waiting is not a
+/// link and counts in full.
+#[tokio::test]
+async fn a_pushed_booking_counts_my_share_before_and_after_it_is_mirrored() {
+    let mock = MockServer::start().await;
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let booking_id = app.booking("Umzugskisten", 1900, 3).await;
+
+    mock.inner().offline = true;
+    let (status, _) = app
+        .send(
+            "POST",
+            &format!("/bookings/{booking_id}/kitchenowl"),
+            Some(json!({"paidById": 1,
+                        "paidFor": [{"memberId": 1, "factor": 1},
+                                    {"memberId": 2, "factor": 2}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    wait_for(&app, |v| v["state"] == "failed").await;
+    assert_eq!(
+        app.listed(&booking_id).await["countedAmountCents"],
+        Value::Null,
+        "not in KitchenOwl yet, so not shared yet"
+    );
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 1900);
+
+    mock.inner().offline = false;
+    let (status, _) = app
+        .send(
+            "POST",
+            &format!("/kitchenowl/push/{booking_id}/retry"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    wait_for(&app, |v| v["state"] == "pushed").await;
+
+    // Pushed, not mirrored: 19,00 by weights 1:2 is 6,33 for me (the odd cent goes
+    // to the larger remainder, which is the other member's).
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(page["items"].as_array().unwrap().len(), 0, "{page}");
+    assert_eq!(app.listed(&booking_id).await["countedAmountCents"], 633);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 633);
+
+    // Mirrored: the same figure, now from KitchenOwl's own record.
+    app.sync().await;
+    let (_, page) = app.send("GET", "/kitchenowl/expenses", None).await;
+    assert_eq!(page["items"][0]["ownShareCents"], 633);
+    assert_eq!(page["items"][0]["linkedBookingId"], booking_id);
+    assert_eq!(app.listed(&booking_id).await["countedAmountCents"], 633);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 633);
+    assert_eq!(d["closingBalanceCents"], -1900);
+}

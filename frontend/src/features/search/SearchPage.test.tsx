@@ -35,6 +35,7 @@ const booking = (over: Record<string, unknown>) => ({
   externalSource: null,
   externalId: null,
   hasReceipt: false,
+  countedAmountCents: null,
   status: 'confirmed',
   origin: 'manual',
   ...over,

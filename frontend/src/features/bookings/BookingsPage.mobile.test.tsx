@@ -21,7 +21,7 @@ const PAGE = {
       kind: 'expense', amountCents: 4235, netCents: 4235, comment: 'Kaufland',
       taxRelevant: false, categoryId: 'c1', categoryName: 'Lebensmittel',
       categoryType: 'Variable Kosten', categorySource: 'rule', shared: false,
-      externalSource: null, externalId: null, hasReceipt: false,
+      externalSource: null, externalId: null, hasReceipt: false, countedAmountCents: null,
       status: 'confirmed', origin: 'legacy_month_only',
     },
     {
@@ -29,7 +29,7 @@ const PAGE = {
       kind: 'expense', amountCents: 999, netCents: 999, comment: 'Hofladen Brinkmann',
       taxRelevant: false, categoryId: null, categoryName: null,
       categoryType: null, categorySource: 'unresolved', shared: false,
-      externalSource: null, externalId: null, hasReceipt: false,
+      externalSource: null, externalId: null, hasReceipt: false, countedAmountCents: null,
       status: 'confirmed', origin: 'legacy_month_only',
     },
   ],

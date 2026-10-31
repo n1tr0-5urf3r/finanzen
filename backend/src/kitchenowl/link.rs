@@ -1,9 +1,15 @@
 //! The optional, reversible link between a booking and a mirrored expense.
 //!
-//! Confirming a link **does not create a booking** and does not change a single
-//! figure in either ledger. It records that these two rows describe the same
-//! purchase, so the next pull of that expense is a structural no-op and the UI can
-//! stop offering it.
+//! Confirming a link **does not create a booking** and changes no amount in either
+//! ledger. It records that these two rows describe the same purchase, so the next
+//! pull of that expense is a structural no-op and the UI can stop offering it.
+//!
+//! What it does change is how the booking is COUNTED: every personal statistic
+//! reads `v_ledger`, which puts a linked booking in at my share of the expense
+//! (migration 0022, `v_ko_booking_share`). The bank amount, the account balances
+//! and the booking listing are untouched, and removing the link puts the booking
+//! back at its full amount — the view derives it from this column pair, so there
+//! is nothing to undo.
 //!
 //! `bookings.external_source` / `external_id` is the single source of truth: it
 //! carries the partial unique index that makes a second link to the same expense
@@ -72,8 +78,9 @@ pub async fn settle_drafts(conn: &mut PgConnection) -> Result<u64> {
     Ok(affected)
 }
 
-/// Removes a link. Both rows survive, and so does every figure — that is what makes
-/// the link reversible in the sense the user was promised.
+/// Removes a link. Both rows survive, and so does every amount — that is what makes
+/// the link reversible in the sense the user was promised. The statistics go back
+/// to counting the booking in full, because that is all an unlinked booking says.
 pub async fn detach(conn: &mut PgConnection, ko_expense_id: Uuid) -> Result<bool> {
     let row = sqlx::query("SELECT external_id, linked_booking_id FROM ko_expenses WHERE id = $1")
         .bind(ko_expense_id)

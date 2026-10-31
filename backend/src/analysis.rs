@@ -78,10 +78,12 @@ pub(crate) async fn opening_balance(
     };
 
     // The previous year's close, so a configured opening that disagrees can be
-    // surfaced rather than silently diverging.
+    // surfaced rather than silently diverging. A close is money in the account, so
+    // it moves by the BANK amount: a KitchenOwl-linked purchase left the account in
+    // full even though the statistics count only my share of it.
     let previous_close: Option<i64> = sqlx::query_scalar(
         "SELECT (f.opening_cents + COALESCE( \
-                   (SELECT SUM(-l.net_cents) FROM v_ledger l \
+                   (SELECT SUM(-l.bank_net_cents) FROM v_ledger l \
                      WHERE l.period_year = f.year), 0))::bigint \
            FROM fiscal_years f WHERE f.year = $1::smallint",
     )
@@ -94,6 +96,24 @@ pub(crate) async fn opening_balance(
         _ => None,
     };
     Ok((opening, configured, gap))
+}
+
+/// What a year moved the account by: income minus expenses at the BANK amount.
+///
+/// The statistics count a KitchenOwl-linked purchase at my share of it, which is
+/// what it cost me; this is what it took out of the account, which is what a
+/// closing balance has to add up to. The two differ by exactly the shares the
+/// household owes back, and a closing balance built from the counted figure would
+/// drift away from the bank by that much every year.
+pub(crate) async fn cash_flow(conn: &mut PgConnection, year: i32) -> Result<i64> {
+    let flow: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(-bank_net_cents), 0)::bigint FROM v_ledger \
+          WHERE period_year = $1::smallint",
+    )
+    .bind(year)
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(flow)
 }
 
 fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow> {
@@ -123,8 +143,13 @@ fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow>
 /// timestamp: every row of one import commit carries the identical value, so it
 /// breaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,
 /// which made `Nr.` arbitrary within a month and reshuffled it on any re-import.
-/// `comment, amount_cents` restore determinism from the booking's own content; `id`
-/// stays last only to keep the sort total for genuinely identical rows.
+/// `comment` and the BANK amount restore determinism from the booking's own content
+/// — the bank amount rather than the counted one, so linking a booking to
+/// KitchenOwl changes the figure a line shows but never its number; `id` stays
+/// last only to keep the sort total for genuinely identical rows.
+///
+/// The amounts listed and summed are the counted ones: a tax-relevant purchase
+/// linked to a KitchenOwl expense appears at my share, which is what I bore.
 #[utoipa::path(
     get,
     path = "/api/v1/dashboard",
@@ -135,6 +160,7 @@ fn to_analysis_rows(rows: &[LedgerRow], months: i64) -> Vec<CategoryAnalysisRow>
 pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<Dashboard>> {
     let rows = load_ledger(ctx.tenant.conn(), q.year).await?;
     let (opening, _, gap) = opening_balance(ctx.tenant.conn(), q.year).await?;
+    let cash = cash_flow(ctx.tenant.conn(), q.year).await?;
 
     let totals = calc::totals(&rows);
     let rates = calc::savings_rates(&rows);
@@ -159,7 +185,7 @@ pub async fn dashboard(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<
         expense_cents: totals.expense_cents,
         balance_cents: totals.saldo_cents,
         opening_balance_cents: opening,
-        closing_balance_cents: opening + totals.saldo_cents,
+        closing_balance_cents: opening + cash,
         carryover_gap_cents: gap,
         average_expense_per_month_cents: calc::average_expense_per_month(&rows),
         fixed_costs_per_month_cents: calc::fixed_costs_per_month(&rows),
@@ -288,12 +314,13 @@ pub async fn categories(
 )]
 pub async fn tax(mut ctx: Ctx, Query(q): Query<YearQuery>) -> Result<Json<TaxReport>> {
     let rows = sqlx::query(
-        "SELECT b.id, b.period_month, b.comment, c.name AS category_name, b.kind, \
+        "SELECT b.id, b.period_month, b.comment, b.category_name, b.kind, \
                 b.amount_cents, \
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
-           FROM bookings b LEFT JOIN categories c ON c.id = b.category_id \
-          WHERE b.tax_relevant AND b.status = 'confirmed' AND b.period_year = $1::smallint \
-          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id",
+           FROM v_ledger b \
+          WHERE b.tax_relevant AND b.period_year = $1::smallint \
+          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, \
+                   b.bank_amount_cents, b.id",
     )
     .bind(q.year)
     .fetch_all(ctx.tenant.conn())

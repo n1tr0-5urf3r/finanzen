@@ -19,7 +19,7 @@ import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { YearPicker } from '../../components/YearPicker';
 import { qk } from '../../lib/queryKeys';
-import { BookingCard } from './BookingCard';
+import { BookingCard, CountedShare } from './BookingCard';
 import { BookingEditor } from './BookingEditor';
 import type { Booking, BookingPage, Category, KoStatus } from '../../lib/types';
 
@@ -313,9 +313,11 @@ export function BookingsPage() {
                       </td>
                       <td className="num">
                         {b.kind === 'income' ? <Money cents={b.amountCents} tone="income" /> : null}
+                        {b.kind === 'income' && <CountedShare booking={b} />}
                       </td>
                       <td className="num">
                         {b.kind === 'expense' ? <Money cents={b.amountCents} tone="expense" /> : null}
+                        {b.kind === 'expense' && <CountedShare booking={b} />}
                       </td>
                       <td className="num">
                         <FlowMoney netCents={b.netCents} />

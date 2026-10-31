@@ -154,12 +154,13 @@ struct TaxRow {
 
 async fn tax_rows(ctx: &mut Ctx, year: i32) -> Result<Vec<TaxRow>> {
     let rows = sqlx::query(
-        "SELECT b.period_month, b.booked_on, b.comment, c.name AS category_name, b.kind, \
+        "SELECT b.period_month, b.booked_on, b.comment, b.category_name, b.kind, \
                 b.amount_cents, \
                 EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
-           FROM bookings b LEFT JOIN categories c ON c.id = b.category_id \
-          WHERE b.tax_relevant AND b.status = 'confirmed' AND b.period_year = $1::smallint \
-          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, b.amount_cents, b.id",
+           FROM v_ledger b \
+          WHERE b.tax_relevant AND b.period_year = $1::smallint \
+          ORDER BY b.period_ord, b.booked_on NULLS LAST, b.created_at, b.comment, \
+                   b.bank_amount_cents, b.id",
     )
     .bind(year)
     .fetch_all(ctx.tenant.conn())

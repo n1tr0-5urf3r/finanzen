@@ -37,6 +37,7 @@ const BOOKING: Booking = {
   externalSource: null,
   externalId: null,
   hasReceipt: false,
+  countedAmountCents: null,
   status: 'confirmed',
   origin: 'manual',
 };

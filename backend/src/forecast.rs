@@ -180,11 +180,24 @@ async fn templates_due(conn: &mut PgConnection, period: i32) -> Result<Vec<(Stri
         .collect())
 }
 
-/// The months of `year` that actually hold bookings, as (month, net, count).
-async fn actual_months(conn: &mut PgConnection, year: i32) -> Result<Vec<(u8, i64, i64)>> {
+/// One month of `year` that actually holds bookings.
+struct ActualMonth {
+    month: u8,
+    /// As every statistic counts it: a KitchenOwl-linked booking at my share.
+    net: i64,
+    /// What the month took out of the account — the bank amounts. The running
+    /// balance moves by this, because it is a balance and has to agree with the
+    /// dashboard's closing figure for the months that have happened.
+    bank_net: i64,
+    count: i64,
+}
+
+/// The months of `year` that actually hold bookings.
+async fn actual_months(conn: &mut PgConnection, year: i32) -> Result<Vec<ActualMonth>> {
     let rows = sqlx::query(
         "SELECT l.period_month AS m, \
                 COALESCE(SUM(l.net_cents), 0)::bigint AS net, \
+                COALESCE(SUM(l.bank_net_cents), 0)::bigint AS bank_net, \
                 count(*)::bigint AS n \
            FROM v_ledger l WHERE l.period_year = $1::smallint \
           GROUP BY l.period_month ORDER BY l.period_month",
@@ -194,12 +207,11 @@ async fn actual_months(conn: &mut PgConnection, year: i32) -> Result<Vec<(u8, i6
     .await?;
     Ok(rows
         .iter()
-        .map(|r| {
-            (
-                r.get::<i16, _>("m") as u8,
-                r.get::<i64, _>("net"),
-                r.get::<i64, _>("n"),
-            )
+        .map(|r| ActualMonth {
+            month: r.get::<i16, _>("m") as u8,
+            net: r.get("net"),
+            bank_net: r.get("bank_net"),
+            count: r.get("n"),
         })
         .collect())
 }
@@ -225,7 +237,12 @@ pub struct ForecastMonth {
     /// The distinction that must survive into the UI.
     pub is_projected: bool,
     pub booking_count: i64,
-    /// Running balance at the end of this month, projections included.
+    /// Running balance at the end of this month, projections included. An actual
+    /// month moves it by the bank amounts, like the dashboard's closing balance; a
+    /// projected month by the projection, which is built from the counted history
+    /// (a KitchenOwl-linked purchase at my share) — once the household settles up,
+    /// my share is what a shared purchase takes out of the account, so that is the
+    /// better estimate of the months still to come.
     pub closing_balance_cents: i64,
 }
 
@@ -290,7 +307,7 @@ pub async fn forecast(mut ctx: Ctx, Query(q): Query<ForecastQuery>) -> Result<Js
     let (opening, _, _) = opening_balance(ctx.tenant.conn(), q.year).await?;
     let actuals = actual_months(ctx.tenant.conn(), q.year).await?;
 
-    let actual_through = actuals.last().map(|(m, _, _)| *m);
+    let actual_through = actuals.last().map(|a| a.month);
     let first_projected = actual_through.map_or(1, |m| m + 1);
 
     // History window: the six months with data ending at the last actual month. It
@@ -326,18 +343,18 @@ pub async fn forecast(mut ctx: Ctx, Query(q): Query<ForecastQuery>) -> Result<Js
         std::collections::BTreeMap::new();
 
     for month in 1..=12u8 {
-        if let Some((_, net, n)) = actuals.iter().find(|(m, _, _)| *m == month) {
-            running += -net;
-            actual_balance += -net;
+        if let Some(actual) = actuals.iter().find(|a| a.month == month) {
+            running += -actual.bank_net;
+            actual_balance += -actual.net;
             months.push(ForecastMonth {
                 month,
                 month_name: month_name_de(month).to_string(),
-                net_cents: *net,
+                net_cents: actual.net,
                 fixed_cents: 0,
                 variable_cents: 0,
                 spread_cents: 0,
                 is_projected: false,
-                booking_count: *n,
+                booking_count: actual.count,
                 closing_balance_cents: running,
             });
             continue;

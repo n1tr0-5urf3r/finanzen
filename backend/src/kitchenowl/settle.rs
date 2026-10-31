@@ -23,6 +23,15 @@
 //! same in reverse: they pay, nothing enters my ledger, I owe 10,00, and the expense
 //! I book when I hand it over is the only record that my food cost anything at all.
 //!
+//! **Since migration 0022 that argument holds only for UNLINKED purchases.** A
+//! booking linked to its KitchenOwl expense is counted at my share, so its
+//! overstatement is already gone from every statistic; the part of a settlement
+//! that repays the others' share of a linked purchase is then counted a second
+//! time. Purchases the others paid are unaffected (they never had a booking), and
+//! the account balances are unaffected (they use the bank amounts). Which way to
+//! resolve it — count the settlement net of linked shares, or not link purchases
+//! one settles — is the user's call, so it is stated here rather than guessed.
+//!
 //! `transfer` models money moving between the user's OWN accounts: `net_cents` is 0
 //! by generated column, so it moves neither the balance nor any category. This money
 //! is gone — it went to another person. The user's own ledger has said so for three

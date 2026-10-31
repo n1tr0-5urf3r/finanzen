@@ -46,6 +46,12 @@ export interface Booking {
   externalSource: string | null;
   externalId: string | null;
   hasReceipt: boolean;
+  /**
+   * What the statistics count of `amountCents`, set only for a booking linked to a
+   * KitchenOwl expense: my share, scaled to this booking. `amountCents` stays the
+   * bank amount.
+   */
+  countedAmountCents: number | null;
   status: string;
   origin: string;
 }

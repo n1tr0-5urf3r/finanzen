@@ -25,7 +25,9 @@ pub(crate) const SELECT_BOOKING: &str = "\
            b.category_id, c.name AS category_name, \
            t.label AS category_type, b.category_source, b.shared, b.external_source, \
            b.external_id, b.status, b.origin, \
-           EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt \
+           EXISTS (SELECT 1 FROM receipts r WHERE r.booking_id = b.id) AS has_receipt, \
+           (SELECT s.counted_amount_cents FROM v_ko_booking_share s \
+             WHERE s.booking_id = b.id) AS counted_amount_cents \
       FROM bookings b \
       LEFT JOIN categories c ON c.id = b.category_id \
       LEFT JOIN category_types t ON t.id = c.type_id";
@@ -54,6 +56,7 @@ pub(crate) fn row_to_booking(r: &sqlx::postgres::PgRow) -> Booking {
         external_source: r.get("external_source"),
         external_id: r.get("external_id"),
         has_receipt: r.get("has_receipt"),
+        counted_amount_cents: r.get("counted_amount_cents"),
         status: r.get("status"),
         origin: r.get("origin"),
     }

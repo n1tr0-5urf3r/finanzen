@@ -145,6 +145,11 @@ pub struct Booking {
     pub external_source: Option<String>,
     pub external_id: Option<String>,
     pub has_receipt: bool,
+    /// The part of `amount_cents` the statistics count, set only when the booking
+    /// is linked to a KitchenOwl expense: my share of it, scaled to this booking.
+    /// `amount_cents` stays what moved, because a listing shows the bank; this is
+    /// how a statistic that comes out lower than the rows behind it explains itself.
+    pub counted_amount_cents: Option<i64>,
     pub status: String,
     pub origin: String,
 }
@@ -299,8 +304,13 @@ pub struct Dashboard {
     pub year: i32,
     pub income_cents: i64,
     pub expense_cents: i64,
+    /// Income minus expenses as every statistic counts them: a booking linked to a
+    /// KitchenOwl expense at my share of it.
     pub balance_cents: i64,
     pub opening_balance_cents: i64,
+    /// Money in the account, so built from the BANK amounts. It differs from
+    /// `opening + balance` by the shares of KitchenOwl-linked purchases the
+    /// household owes back.
     pub closing_balance_cents: i64,
     /// Set when a configured opening disagrees with the previous year's close.
     pub carryover_gap_cents: Option<i64>,
@@ -674,9 +684,13 @@ pub struct Year {
     pub opening_source: String,
     pub locked: bool,
     pub booking_count: i64,
+    /// Counted as every statistic counts: a KitchenOwl-linked booking at my share.
     pub income_cents: i64,
     pub expense_cents: i64,
     pub balance_cents: i64,
+    /// The opening/closing chain is money in the account and moves by the BANK
+    /// amounts, so it can differ from `opening + balance` by the shares of
+    /// KitchenOwl-linked purchases the household owes back.
     pub closing_balance_cents: i64,
     pub carryover_gap_cents: Option<i64>,
 }

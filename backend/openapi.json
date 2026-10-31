@@ -1424,7 +1424,7 @@
           "analysis"
         ],
         "summary": "The tax report, whose running number ends up on a printed list handed to a tax\noffice — so the ordering has to be a function of the DATA, not of storage.",
-        "description": "`created_at` defaults to `now()`, which inside a transaction is the transaction's\ntimestamp: every row of one import commit carries the identical value, so it\nbreaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,\nwhich made `Nr.` arbitrary within a month and reshuffled it on any re-import.\n`comment, amount_cents` restore determinism from the booking's own content; `id`\nstays last only to keep the sort total for genuinely identical rows.",
+        "description": "`created_at` defaults to `now()`, which inside a transaction is the transaction's\ntimestamp: every row of one import commit carries the identical value, so it\nbreaks no ties at all. That left `b.id` — a random uuid — as the real tiebreaker,\nwhich made `Nr.` arbitrary within a month and reshuffled it on any re-import.\n`comment` and the BANK amount restore determinism from the booking's own content\n— the bank amount rather than the counted one, so linking a booking to\nKitchenOwl changes the figure a line shows but never its number; `id` stays\nlast only to keep the sort total for genuinely identical rows.\n\nThe amounts listed and summed are the counted ones: a tax-relevant purchase\nlinked to a KitchenOwl expense appears at my share, which is what I bore.",
         "operationId": "dashboard",
         "parameters": [
           {
@@ -4064,6 +4064,14 @@
           "comment": {
             "type": "string"
           },
+          "countedAmountCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The part of `amount_cents` the statistics count, set only when the booking\nis linked to a KitchenOwl expense: my share of it, scaled to this booking.\n`amount_cents` stays what moved, because a listing shows the bank; this is\nhow a statistic that comes out lower than the rows behind it explains itself."
+          },
           "counterparty": {
             "type": [
               "string",
@@ -4895,7 +4903,8 @@
           },
           "balanceCents": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Income minus expenses as every statistic counts them: a booking linked to a\nKitchenOwl expense at my share of it."
           },
           "bookingCount": {
             "type": "integer",
@@ -4917,7 +4926,8 @@
           },
           "closingBalanceCents": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Money in the account, so built from the BANK amounts. It differs from\n`opening + balance` by the shares of KitchenOwl-linked purchases the\nhousehold owes back."
           },
           "expenseCents": {
             "type": "integer",
@@ -5560,7 +5570,7 @@
           "closingBalanceCents": {
             "type": "integer",
             "format": "int64",
-            "description": "Running balance at the end of this month, projections included."
+            "description": "Running balance at the end of this month, projections included. An actual\nmonth moves it by the bank amounts, like the dashboard's closing balance; a\nprojected month by the projection, which is built from the counted history\n(a KitchenOwl-linked purchase at my share) — once the household settles up,\nmy share is what a shared purchase takes out of the account, so that is the\nbetter estimate of the months still to come."
           },
           "fixedCents": {
             "type": "integer",
@@ -9975,7 +9985,8 @@
           },
           "closingBalanceCents": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "The opening/closing chain is money in the account and moves by the BANK\namounts, so it can differ from `opening + balance` by the shares of\nKitchenOwl-linked purchases the household owes back."
           },
           "expenseCents": {
             "type": "integer",
@@ -9983,7 +9994,8 @@
           },
           "incomeCents": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Counted as every statistic counts: a KitchenOwl-linked booking at my share."
           },
           "locked": {
             "type": "boolean"

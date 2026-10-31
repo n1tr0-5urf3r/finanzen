@@ -10,7 +10,11 @@
 //! - The mirror is faithful and local. It is **never** a source of personal
 //!   bookings, and no response adds a KitchenOwl figure to a booking figure.
 //! - **A pull never writes a booking.** It writes `ko_*` rows and a review list.
-//! - Matching is an optional, reversible **link**. Confirming one moves no money.
+//! - Matching is an optional, reversible **link**. Confirming one moves no money
+//!   and writes no booking. It does decide how much of the booking the personal
+//!   statistics count — my share of the expense, through `v_ledger` (migration
+//!   0022) — which is the one way a KitchenOwl figure reaches a personal report:
+//!   as a fraction applied to a booking, never as an amount added to one.
 //! - The two ledgers will never reconcile, by design. There is no "unreconciled
 //!   difference" error state anywhere, because an unlinked expense is normal.
 //! - If KitchenOwl is unreachable the rest of the app keeps working and the failure

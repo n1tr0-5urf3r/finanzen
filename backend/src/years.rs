@@ -15,12 +15,14 @@ async fn load(ctx: &mut Ctx) -> Result<Vec<Year>> {
         "SELECT f.year, f.opening_cents, f.opening_source, f.tax_locked_at IS NOT NULL AS locked, \
                 COALESCE(agg.n, 0)::bigint AS booking_count, \
                 COALESCE(agg.inc, 0)::bigint AS income_cents, \
-                COALESCE(agg.exp, 0)::bigint AS expense_cents \
+                COALESCE(agg.exp, 0)::bigint AS expense_cents, \
+                COALESCE(agg.cash, 0)::bigint AS cash_cents \
            FROM fiscal_years f \
            LEFT JOIN ( \
              SELECT period_year, count(*) AS n, \
                     SUM(amount_cents) FILTER (WHERE kind = 'income')  AS inc, \
-                    SUM(amount_cents) FILTER (WHERE kind = 'expense') AS exp \
+                    SUM(amount_cents) FILTER (WHERE kind = 'expense') AS exp, \
+                    SUM(-bank_net_cents) AS cash \
                FROM v_ledger GROUP BY period_year \
            ) agg ON agg.period_year = f.year \
           ORDER BY f.year",
@@ -28,18 +30,20 @@ async fn load(ctx: &mut Ctx) -> Result<Vec<Year>> {
     .fetch_all(ctx.tenant.conn())
     .await?;
 
+    // The chain runs on what each year moved the ACCOUNT by — the bank amounts —
+    // because an opening is a bank balance and a carryover gap is a disagreement
+    // with one. Income, expenses and saldo are reported as every statistic counts
+    // them, a KitchenOwl-linked booking at my share; the two differ by exactly the
+    // shares the household owes back, and chaining the counted figure would open a
+    // phantom gap against a hand-entered opening every year.
     let raw: Vec<YearRaw> = rows
         .iter()
-        .map(|r| {
-            let income: i64 = r.get("income_cents");
-            let expense: i64 = r.get("expense_cents");
-            YearRaw {
-                year: r.get::<i16, _>("year") as i32,
-                opening_cents: r.get("opening_cents"),
-                opening_is_configured: r.get::<String, _>("opening_source") == "configured",
-                saldo_cents: income - expense,
-                booking_count: r.get("booking_count"),
-            }
+        .map(|r| YearRaw {
+            year: r.get::<i16, _>("year") as i32,
+            opening_cents: r.get("opening_cents"),
+            opening_is_configured: r.get::<String, _>("opening_source") == "configured",
+            saldo_cents: r.get("cash_cents"),
+            booking_count: r.get("booking_count"),
         })
         .collect();
 
@@ -55,7 +59,7 @@ async fn load(ctx: &mut Ctx) -> Result<Vec<Year>> {
             booking_count: c.booking_count,
             income_cents: r.get("income_cents"),
             expense_cents: r.get("expense_cents"),
-            balance_cents: c.saldo_cents,
+            balance_cents: r.get::<i64, _>("income_cents") - r.get::<i64, _>("expense_cents"),
             closing_balance_cents: c.closing_cents,
             carryover_gap_cents: c.chain_gap_cents,
         })

@@ -68,7 +68,9 @@ export const qk = {
   /**
    * KitchenOwl. Deliberately NOT under `derived`: those keys are invalidated
    * whenever a booking moves, and the mirror is a different ledger that a booking
-   * change cannot alter. The one exception is a link, which is handled explicitly.
+   * change cannot alter. The other direction does exist — a link decides how much
+   * of a booking the statistics count — and `invalidateAfterKitchenOwlChange`
+   * handles it explicitly.
    */
   kitchenowl: {
     root: ['kitchenowl'] as const,
@@ -142,22 +144,26 @@ export function invalidateAfterMaterialize(client: QueryClient, year: number) {
 }
 
 /**
- * A sync ran, or a link changed. Everything KitchenOwl is stale — and so are the
- * bookings, but only because a link writes `externalSource` onto one of them. No
- * figure moves, which is why the year aggregates are deliberately NOT invalidated:
- * confirming a link changes no total, and refetching them would suggest it might.
+ * A sync ran, a push landed, or a link changed. Everything KitchenOwl is stale, and
+ * so are the bookings, because a link writes `externalSource` onto one of them.
+ *
+ * So are the aggregates. Every statistic counts a linked booking at my share of
+ * its expense, so linking or unlinking moves the totals, and so can a sync — it may
+ * mirror a pushed expense or bring a changed split. Which years that touches is not
+ * known here, hence every year, the year chain and the funds.
  */
 export function invalidateAfterKitchenOwlChange(client: QueryClient) {
   client.invalidateQueries({ queryKey: qk.kitchenowl.root });
   client.invalidateQueries({ queryKey: qk.bookings.root });
+  client.invalidateQueries({ queryKey: qk.derived.root });
+  client.invalidateQueries({ queryKey: qk.years() });
+  client.invalidateQueries({ queryKey: qk.funds.root });
 }
 
 /**
- * A settlement was booked. Unlike a link, this one DOES create a booking, so the
- * year's aggregates are genuinely stale — the transfer count and the "excluded from
- * this analysis" line both move, even though no category and no balance does. This
- * is the one KitchenOwl action that earns a derived invalidation, which is why it
- * is separate from the helper above rather than folded into it.
+ * A settlement was booked. Unlike a link, this one creates a booking, so it goes
+ * through the booking invalidation for the year it landed in, which also covers
+ * the quick-add comment list and anything else a new booking makes stale.
  */
 export function invalidateAfterSettlement(client: QueryClient, year: number) {
   client.invalidateQueries({ queryKey: qk.kitchenowl.root });

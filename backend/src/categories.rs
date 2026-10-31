@@ -10,12 +10,13 @@ use crate::{
     models::{Category, CategoryInput, CategoryTypeSummary},
 };
 
+/// The net per category is a statistic, so it is read through `v_ledger` like every
+/// other one: confirmed bookings only, and a KitchenOwl-linked booking at my share.
 const SELECT_CATEGORIES: &str = "\
     SELECT c.id, c.name, t.code AS type_code, t.label AS type_label, c.sort_order, c.archived, \
-           (SELECT count(*) FROM bookings b WHERE b.category_id = c.id \
-             AND b.status = 'confirmed')::bigint AS booking_count, \
-           (SELECT COALESCE(SUM(b.net_cents), 0) FROM bookings b WHERE b.category_id = c.id \
-             AND b.status = 'confirmed')::bigint AS net_cents \
+           (SELECT count(*) FROM v_ledger b WHERE b.category_id = c.id)::bigint AS booking_count, \
+           (SELECT COALESCE(SUM(b.net_cents), 0) FROM v_ledger b \
+             WHERE b.category_id = c.id)::bigint AS net_cents \
       FROM categories c JOIN category_types t ON t.id = c.type_id";
 
 fn row_to_category(r: &sqlx::postgres::PgRow) -> Category {
@@ -61,7 +62,7 @@ pub async fn list_types(mut ctx: Ctx) -> Result<Json<Vec<CategoryTypeSummary>>> 
                 count(b.id)::bigint AS booking_count \
            FROM category_types t \
            LEFT JOIN categories c ON c.type_id = t.id \
-           LEFT JOIN bookings b ON b.category_id = c.id AND b.status = 'confirmed' \
+           LEFT JOIN v_ledger b ON b.category_id = c.id \
           GROUP BY t.code, t.label, t.sort_order ORDER BY t.sort_order",
     )
     .fetch_all(ctx.tenant.conn())

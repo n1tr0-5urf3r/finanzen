@@ -3,8 +3,29 @@ import { Link2, Users2 } from 'lucide-react';
 import { CategoryChip, DataLabel } from '../../components/DataLabel';
 import { Money } from '../../components/Money';
 import { StatusPill } from '../../components/ui';
+import { formatEuro } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { useMaskAmount } from '../../lib/privacy';
 import type { Booking } from '../../lib/types';
+
+/**
+ * "dein Anteil: 30,00 €" under a booking linked to a KitchenOwl expense.
+ *
+ * The row shows what the bank moved and every statistic counts only my share, so
+ * without this a monthly total comes out lower than the rows behind it and nothing
+ * on screen says why. Nothing is shown when the share is the whole amount — there
+ * is no difference to explain.
+ */
+export function CountedShare({ booking: b }: { booking: Booking }) {
+  const t = useT();
+  const mask = useMaskAmount();
+  if (b.countedAmountCents == null || b.countedAmountCents === b.amountCents) return null;
+  return (
+    <span className="booking-row__share" title={t('bookings.countedShareTitle')}>
+      {t('bookings.countedShare', { amount: mask(formatEuro(b.countedAmountCents)) })}
+    </span>
+  );
+}
 
 /**
  * One booking as a card.
@@ -77,6 +98,7 @@ export function BookingCard({
           <StatusPill tone="neutral">{t('bookings.kind.transfer')}</StatusPill>
         )}
         {b.taxRelevant && <StatusPill tone="danger">{t('bookings.tax')}</StatusPill>}
+        <CountedShare booking={b} />
       </div>
 
       {onPush && (
