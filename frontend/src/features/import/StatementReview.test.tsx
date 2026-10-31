@@ -155,6 +155,69 @@ describe('the bank statement review', () => {
   });
 
   /**
+   * The comment field saves when it loses focus, and pressing "Übernehmen" is
+   * what takes the focus away. That save used to disable every decide button
+   * between the press and the release, so the first click did nothing. Here the
+   * save is held open the way a real round-trip is, and the press and release are
+   * apart, as a hand makes them.
+   */
+  it('books the just-typed comment with one click while the field is still saving', async () => {
+    const user = userEvent.setup();
+    const patches: Record<string, unknown>[] = [];
+    api.mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        patches.push(body);
+        // The blur's save never answers within this test.
+        return 'decision' in body ? Promise.resolve(row({}) as never) : new Promise(() => {});
+      }
+      return Promise.resolve(PAGE as never);
+    });
+    renderReview();
+    await screen.findByText('VISA SUPERMARKT SAGT DANKE');
+
+    const comment = screen.getAllByLabelText('Kommentar')[0] as HTMLInputElement;
+    await user.clear(comment);
+    await user.type(comment, 'Wocheneinkauf');
+    const accept = screen.getAllByRole('button', { name: 'Übernehmen' })[0]!;
+
+    await user.pointer({ keys: '[MouseLeft>]', target: accept });
+    // The blur has saved the comment, and that save is still pending.
+    await waitFor(() => expect(patches).toEqual([{ comment: 'Wocheneinkauf' }]));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(accept).not.toBeDisabled();
+    await user.pointer({ keys: '[/MouseLeft]', target: accept });
+
+    await waitFor(() =>
+      expect(patches).toContainEqual({ comment: 'Wocheneinkauf', decision: 'accepted' }),
+    );
+  });
+
+  /** The same for the other fields on the card: their saves hold nothing back. */
+  it('accepts a line while its category change is still saving', async () => {
+    const user = userEvent.setup();
+    const patches: Record<string, unknown>[] = [];
+    api.mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        patches.push(body);
+        return 'decision' in body ? Promise.resolve(row({}) as never) : new Promise(() => {});
+      }
+      return Promise.resolve(PAGE as never);
+    });
+    renderReview();
+    await screen.findByText('VISA SUPERMARKT SAGT DANKE');
+
+    await user.selectOptions(screen.getAllByLabelText(/^Kategorie/)[0]!, 'auto');
+    await waitFor(() => expect(patches).toEqual([{ categoryId: 'auto' }]));
+    await user.click(screen.getAllByRole('button', { name: 'Übernehmen' })[0]!);
+
+    await waitFor(() =>
+      expect(patches).toContainEqual({ comment: 'Supermarkt Sagt Danke', decision: 'accepted' }),
+    );
+  });
+
+  /**
    * Two memories, and the second is off by default on purpose: PayPal is always
    * the same payee and a different purchase every time, so remembering it would
    * rename every future PayPal line to whatever the last one happened to be.

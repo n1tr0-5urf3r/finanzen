@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 
@@ -87,7 +87,9 @@ export function StatementReview({
     return saved;
   };
 
+  const patchKey = ['statement-row', batchId];
   const patch = useMutation({
+    mutationKey: patchKey,
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api<StatementRow>(`/imports/${batchId}/statement/${id}`, {
         method: 'PATCH',
@@ -96,6 +98,22 @@ export function StatementReview({
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: qk.imports.root });
     },
+  });
+
+  // The lines whose DECISION is on its way to the server — and only those. The
+  // decide buttons used to be disabled while any edit anywhere was in flight, and
+  // the comment field saves on blur: pressing "Übernehmen" blurred the field, the
+  // save disabled the button between mousedown and mouseup, and a disabled button
+  // gets no click. The first press did nothing. A field save is not a reason to
+  // hold back a decision — the decision carries the comment itself.
+  const deciding = useMutationState({
+    filters: {
+      mutationKey: patchKey,
+      status: 'pending',
+      predicate: (m) =>
+        'decision' in ((m.state.variables as { body?: object } | undefined)?.body ?? {}),
+    },
+    select: (m) => (m.state.variables as { id: string }).id,
   });
 
   // Committing belongs on this screen: it is the last step of the review, and the
@@ -214,7 +232,7 @@ export function StatementReview({
               row={row}
               categories={sorted}
               readOnly={applied}
-              busy={patch.isPending}
+              deciding={deciding.includes(row.id)}
               koReady={koReady}
               onChange={(body) => patch.mutate({ id: row.id, body })}
               onSave={(body) => saveRow(row.id, body)}
@@ -253,7 +271,7 @@ function StatementLine({
   row,
   categories,
   readOnly,
-  busy,
+  deciding,
   koReady,
   onChange,
   onSave,
@@ -261,7 +279,8 @@ function StatementLine({
   row: StatementRow;
   categories: Category[];
   readOnly: boolean;
-  busy: boolean;
+  /** This line's accept or reject is in flight; nothing else holds its buttons. */
+  deciding: boolean;
   koReady: boolean;
   onChange: (body: Record<string, unknown>) => void;
   onSave: (body: Record<string, unknown>) => Promise<unknown>;
@@ -383,15 +402,18 @@ function StatementLine({
         </div>
       </div>
 
-      {category && (
-        <p className="statement__chip">
-          <CategoryChip
-            name={category.name}
-            typeLabel={category.typeLabel}
-            fallback={t('bookings.sourceNone')}
-          />
-        </p>
-      )}
+      {/* Always there, "ohne Kategorie" included. A renamed comment is asked for a
+          category again when the field loses focus — which is the moment the
+          pointer is already on "Übernehmen". A chip that appeared only then
+          pushed the buttons down under the pointer, and the click that started
+          on the button ended beside it. */}
+      <p className="statement__chip">
+        <CategoryChip
+          name={category?.name}
+          typeLabel={category?.typeLabel}
+          fallback={t('bookings.sourceNone')}
+        />
+      </p>
 
       {!readOnly && (
         <footer className="statement__foot">
@@ -429,7 +451,7 @@ function StatementLine({
             )}
             <Button
               type="button"
-              busy={busy}
+              busy={deciding}
               onClick={() =>
                 onChange({
                   comment: comment.trim(),
@@ -442,7 +464,7 @@ function StatementLine({
             <Button
               type="button"
               variant="ghost"
-              busy={busy}
+              busy={deciding}
               onClick={() =>
                 onChange({ decision: row.decision === 'rejected' ? 'pending' : 'rejected' })
               }
