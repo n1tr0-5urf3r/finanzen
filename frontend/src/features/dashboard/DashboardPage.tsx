@@ -9,7 +9,8 @@ import { api } from '../../lib/api';
 import { formatEuro, formatPercent } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { qk } from '../../lib/queryKeys';
-import type { Dashboard } from '../../lib/types';
+import { withHousehold } from '../../lib/household';
+import type { Dashboard, MonthlyOverview } from '../../lib/types';
 import { KitchenOwlWidget } from '../kitchenowl/KitchenOwlWidget';
 import { useMaskAmount } from '../../lib/privacy';
 import { AnomalyNotes } from './AnomalyNotes';
@@ -29,6 +30,14 @@ export function DashboardPage() {
     queryKey: qk.derived.dashboard(year),
     queryFn: () => api<Dashboard>(`/dashboard?year=${year}`),
   });
+  // The month's balance comes from the monthly overview rather than a field of its
+  // own on /dashboard: one definition of a month's figures, shared with the
+  // Monate tab (and its cache). Household shares included, as the dashboard's are.
+  const months = useQuery({
+    queryKey: qk.derived.months(year, true),
+    queryFn: () => api<MonthlyOverview>(withHousehold(`/overview/months?year=${year}`, true)),
+  });
+  const month = months.data?.months.find((m) => m.month === anomalyMonth);
 
   if (query.isLoading) return <LoadingState />;
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />;
@@ -65,7 +74,7 @@ export function DashboardPage() {
           fact as if it were news. It is still computed, still in the API, and
           still shown in Einstellungen, which is where the opening balance is set
           and therefore the only place it is actionable. */}
-      <div className="grid grid--kpi" style={{ marginBottom: '1rem' }}>
+      <div className="grid grid--kpi grid--kpi-5" style={{ marginBottom: '1rem' }}>
         <Kpi label={t('dashboard.income')} scope="without">
           <Money cents={d.incomeCents} tone="income" />
         </Kpi>
@@ -75,7 +84,17 @@ export function DashboardPage() {
         <Kpi label={t('dashboard.balance')} scope="without">
           <FlowMoney flowCents={d.balanceCents} />
         </Kpi>
-        {/* Deliberately adjacent to the balance, and deliberately a different
+        {/* The same figure for one month: this one in the current year, December
+            in a past one, as the anomaly notes below choose it. */}
+        <Kpi
+          label={t('dashboard.monthBalance', {
+            month: month?.monthName ?? t('dashboard.monthBalanceFallback'),
+          })}
+          scope="without"
+        >
+          {month ? <FlowMoney flowCents={month.balanceCents} /> : '—'}
+        </Kpi>
+        {/* Deliberately next to the balances, and deliberately a different
             scope — that contrast is what ScopeNote exists to explain. */}
         <Kpi label={t('dashboard.closingBalance')} scope="with" tone="accent">
           <Money cents={d.closingBalanceCents} />

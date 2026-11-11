@@ -72,6 +72,8 @@ export const de = {
   'dashboard.income': 'Einnahmen',
   'dashboard.expense': 'Ausgaben',
   'dashboard.balance': 'Bilanz',
+  'dashboard.monthBalance': 'Bilanz {month}',
+  'dashboard.monthBalanceFallback': 'Monat',
   'dashboard.savingsDeposit': 'Sparrate / Monat',
   'dashboard.savingsDepositHint': 'Was tatsächlich auf die Sparkonten ging — Netto der Kategorien vom Typ Sparen, also abzüglich Entnahmen.',
   'dashboard.savingsDepositYear': '{total} im Jahr · {percent} vom Einkommen',

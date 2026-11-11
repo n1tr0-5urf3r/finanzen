@@ -99,6 +99,15 @@ const FORECAST = {
   ],
 };
 
+// Only the fields the dashboard reads; a past year, so December is the month.
+const MONTHS = {
+  year: 2026,
+  months: [
+    { month: 11, monthName: 'November', balanceCents: 50_000 },
+    { month: 12, monthName: 'Dezember', balanceCents: -12_345 },
+  ],
+};
+
 const NO_ANOMALIES: AnomalyReport = {
   year: 2026,
   month: 9,
@@ -113,6 +122,7 @@ let anomalies: AnomalyReport = NO_ANOMALIES;
 
 function route(path: string) {
   if (path.startsWith('/dashboard')) return DASHBOARD;
+  if (path.startsWith('/overview/months')) return MONTHS;
   if (path.startsWith('/analysis/forecast')) return FORECAST;
   if (path.startsWith('/analysis/anomalies')) return anomalies;
   return { items: [] };
@@ -136,6 +146,25 @@ function renderPage() {
 }
 
 describe('the dashboard', () => {
+  /**
+   * The year's balance answers "how is the year going"; the month's answers "how is
+   * this month going", which the year's figure hides until December. For a past
+   * year there is no current month, so it shows December, as the anomaly notes do.
+   */
+  it("shows the month's balance beside the year's", async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2027-02-10T12:00:00') });
+    try {
+      const { container } = renderPage();
+      await screen.findByText('Bilanz Dezember');
+      const tile = [...container.querySelectorAll('.kpi')].find((k) =>
+        k.textContent?.includes('Bilanz Dezember'),
+      ) as HTMLElement;
+      expect(tile.textContent).toContain('123,45');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /**
    * Three savings figures exist and they are not equals. The DEPOSIT is a decision
    * — it is what left the account for Sparen & Anlage and the only one checkable
