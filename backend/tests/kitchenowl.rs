@@ -3861,3 +3861,90 @@ async fn no_share_is_added_for_a_linked_expense_or_without_me() {
     let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
     assert_eq!(d["expenseCents"], 1000, "the linked booking alone: {d}");
 }
+
+/// The bank transfer of a settlement linked to KitchenOwl's own record of it — the
+/// "Money transfer" entry, paid by me for Ada and kept out of KitchenOwl's
+/// statistics — is a settlement like the hand-filed ones: it closes its window.
+/// Counted as a linked purchase instead, it netted nothing and closed nothing, and
+/// the NEXT settlement carried Ada's purchases from both windows: here 20,00 paid
+/// against 50,00 of shares, an income of 30,00 out of nowhere.
+#[tokio::test]
+async fn a_transfer_linked_to_a_kitchenowl_payback_closes_its_window() {
+    let mut payback = expense(
+        3,
+        "Money transfer",
+        30.0,
+        on(2026, 6, 2),
+        None,
+        1,
+        &[(2, 1)],
+    );
+    payback["exclude_from_statistics"] = json!(true);
+    let mock = MockServer::start().await;
+    mock.seed(vec![
+        ada_paid(
+            1,
+            "Wocheneinkauf",
+            90.0,
+            on(2026, 5, 4),
+            Some((1, "Wocheneinkauf")),
+        ),
+        ada_paid(
+            2,
+            "Wocheneinkauf",
+            60.0,
+            on(2026, 9, 4),
+            Some((1, "Wocheneinkauf")),
+        ),
+        payback,
+    ]);
+    let app = app!(Some(mock.url.clone()));
+    app.sync().await;
+    let food = app.category_id("Lebensmittel").await;
+    app.map_category(1, Some(&food)).await;
+    let ausgleich = app.settlement_category().await;
+    let june = app
+        .booking_at(
+            (2026, 6, 2),
+            "expense",
+            "Ausgleich Juni",
+            3000,
+            Some(&ausgleich),
+        )
+        .await;
+    let october = app
+        .booking_at(
+            (2026, 10, 2),
+            "expense",
+            "Ausgleich Oktober",
+            2000,
+            Some(&ausgleich),
+        )
+        .await;
+    app.link_expense(3, &june).await;
+
+    let listed = app.listed(&june).await;
+    assert_eq!(listed["countedBasis"], "koSettlement", "{listed}");
+    assert_eq!(listed["countedAmountCents"], 0);
+    let listed = app.listed(&october).await;
+    assert_eq!(listed["countedBasis"], "koSettlement", "{listed}");
+    assert_eq!(
+        listed["countedAmountCents"], 0,
+        "only September's 20,00 is its window"
+    );
+
+    let settled = app
+        .category_row("/analysis/categories?year=2026", Some(&ausgleich))
+        .await;
+    assert_eq!(settled["netCents"], 0, "{settled}");
+    assert_eq!(settled["incomeCents"], 0);
+    let (_, d) = app.send("GET", "/dashboard?year=2026", None).await;
+    assert_eq!(d["expenseCents"], 5000, "{d}");
+    assert_eq!(d["incomeCents"], 0);
+    assert_eq!(d["closingBalanceCents"], -5000);
+
+    // Switched off, each settlement counts what left the account.
+    let path = "/analysis/categories?year=2026&household=false";
+    let settled = app.category_row(path, Some(&ausgleich)).await;
+    assert_eq!(settled["expenseCents"], 5000, "{settled}");
+}
