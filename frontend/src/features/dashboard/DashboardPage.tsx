@@ -33,11 +33,23 @@ export function DashboardPage() {
   // The month's balance comes from the monthly overview rather than a field of its
   // own on /dashboard: one definition of a month's figures, shared with the
   // Monate tab (and its cache). Household shares included, as the dashboard's are.
+  // The month before is in the previous year's overview when this one is January.
+  const prevYear = anomalyMonth === 1 ? year - 1 : year;
+  const prevMonth = anomalyMonth === 1 ? 12 : anomalyMonth - 1;
   const months = useQuery({
     queryKey: qk.derived.months(year, true),
     queryFn: () => api<MonthlyOverview>(withHousehold(`/overview/months?year=${year}`, true)),
   });
+  const prevMonths = useQuery({
+    queryKey: qk.derived.months(prevYear, true),
+    queryFn: () =>
+      api<MonthlyOverview>(withHousehold(`/overview/months?year=${prevYear}`, true)),
+    enabled: prevYear !== year,
+  });
   const month = months.data?.months.find((m) => m.month === anomalyMonth);
+  const previous = (prevYear === year ? months : prevMonths).data?.months.find(
+    (m) => m.month === prevMonth,
+  );
 
   if (query.isLoading) return <LoadingState />;
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />;
@@ -74,7 +86,7 @@ export function DashboardPage() {
           fact as if it were news. It is still computed, still in the API, and
           still shown in Einstellungen, which is where the opening balance is set
           and therefore the only place it is actionable. */}
-      <div className="grid grid--kpi grid--kpi-5" style={{ marginBottom: '1rem' }}>
+      <div className="grid grid--kpi grid--kpi-3" style={{ marginBottom: '1rem' }}>
         <Kpi label={t('dashboard.income')} scope="without">
           <Money cents={d.incomeCents} tone="income" />
         </Kpi>
@@ -84,8 +96,17 @@ export function DashboardPage() {
         <Kpi label={t('dashboard.balance')} scope="without">
           <FlowMoney flowCents={d.balanceCents} />
         </Kpi>
-        {/* The same figure for one month: this one in the current year, December
-            in a past one, as the anomaly notes below choose it. */}
+        {/* The same figure for the month before and for this one: this one in the
+            current year, December in a past one, as the anomaly notes below
+            choose it. */}
+        <Kpi
+          label={t('dashboard.monthBalance', {
+            month: previous?.monthName ?? t('dashboard.previousMonthFallback'),
+          })}
+          scope="without"
+        >
+          {previous ? <FlowMoney flowCents={previous.balanceCents} /> : '—'}
+        </Kpi>
         <Kpi
           label={t('dashboard.monthBalance', {
             month: month?.monthName ?? t('dashboard.monthBalanceFallback'),

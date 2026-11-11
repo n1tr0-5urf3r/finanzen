@@ -64,6 +64,7 @@ export const en: Messages = {
   'dashboard.balance': 'Balance',
   'dashboard.monthBalance': 'Balance {month}',
   'dashboard.monthBalanceFallback': 'month',
+  'dashboard.previousMonthFallback': 'previous month',
   'dashboard.savingsDeposit': 'Savings / month',
   'dashboard.savingsDepositHint': 'What actually went into the savings accounts — net of the Sparen categories, so withdrawals are deducted.',
   'dashboard.savingsDepositYear': '{total} for the year · {percent} of income',

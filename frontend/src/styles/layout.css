@@ -52,7 +52,8 @@
 .grid--kpi { grid-template-columns: 1fr; }
 @media (min-width: 520px)  { .grid--kpi { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1120px) { .grid--kpi { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1120px) { .grid--kpi-5 { grid-template-columns: repeat(5, 1fr); } }
+/* Six tiles: two rows of three rather than one row of four and a stray pair. */
+@media (min-width: 1120px) { .grid--kpi-3 { grid-template-columns: repeat(3, 1fr); } }
 
 .centered-page {
   min-height: 100svh; display: grid; place-items: center; padding: var(--page-pad);

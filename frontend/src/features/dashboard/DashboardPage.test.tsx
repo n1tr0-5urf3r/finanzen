@@ -99,14 +99,25 @@ const FORECAST = {
   ],
 };
 
-// Only the fields the dashboard reads; a past year, so December is the month.
+// Only the fields the dashboard reads.
 const MONTHS = {
   year: 2026,
   months: [
+    { month: 1, monthName: 'Januar', balanceCents: 7_000 },
     { month: 11, monthName: 'November', balanceCents: 50_000 },
     { month: 12, monthName: 'Dezember', balanceCents: -12_345 },
   ],
 };
+const MONTHS_2025 = {
+  year: 2025,
+  months: [{ month: 12, monthName: 'Dezember', balanceCents: 31_400 }],
+};
+
+function tile(container: HTMLElement, label: string) {
+  return [...container.querySelectorAll('.kpi')].find((k) =>
+    k.querySelector('.kpi__label')?.textContent === label,
+  ) as HTMLElement;
+}
 
 const NO_ANOMALIES: AnomalyReport = {
   year: 2026,
@@ -122,6 +133,7 @@ let anomalies: AnomalyReport = NO_ANOMALIES;
 
 function route(path: string) {
   if (path.startsWith('/dashboard')) return DASHBOARD;
+  if (path.startsWith('/overview/months?year=2025')) return MONTHS_2025;
   if (path.startsWith('/overview/months')) return MONTHS;
   if (path.startsWith('/analysis/forecast')) return FORECAST;
   if (path.startsWith('/analysis/anomalies')) return anomalies;
@@ -147,19 +159,32 @@ function renderPage() {
 
 describe('the dashboard', () => {
   /**
-   * The year's balance answers "how is the year going"; the month's answers "how is
-   * this month going", which the year's figure hides until December. For a past
-   * year there is no current month, so it shows December, as the anomaly notes do.
+   * The year's balance answers "how is the year going"; the months' answer "how is
+   * this month going, and how did the last one end", which the year's figure hides
+   * until December. For a past year there is no current month, so it shows
+   * December, as the anomaly notes do, and November before it.
    */
-  it("shows the month's balance beside the year's", async () => {
+  it("shows this month's and last month's balance beside the year's", async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2027-02-10T12:00:00') });
     try {
       const { container } = renderPage();
       await screen.findByText('Bilanz Dezember');
-      const tile = [...container.querySelectorAll('.kpi')].find((k) =>
-        k.textContent?.includes('Bilanz Dezember'),
-      ) as HTMLElement;
-      expect(tile.textContent).toContain('123,45');
+      expect(tile(container, 'Bilanz Dezember').textContent).toContain('123,45');
+      expect(tile(container, 'Bilanz November').textContent).toContain('500,00');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** In January the month before is December of the previous year. */
+  it("takes January's previous month from the year before", async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-01-15T12:00:00') });
+    try {
+      const { container } = renderPage();
+      await screen.findByText('Bilanz Januar');
+      await screen.findByText('Bilanz Dezember');
+      expect(tile(container, 'Bilanz Januar').textContent).toContain('70,00');
+      expect(tile(container, 'Bilanz Dezember').textContent).toContain('314,00');
     } finally {
       vi.useRealTimers();
     }
